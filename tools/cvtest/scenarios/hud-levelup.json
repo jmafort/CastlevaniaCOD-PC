@@ -1,0 +1,71 @@
+{
+  "name": "hud-levelup",
+  "after": "newgame.json",
+  "note": "The HUD at the screen's corners (hud_edges) through a level up mid fight, locked on to an armoured knight of room 5.12. The game keeps its message box flag up for seconds after a level up while the fight goes on, and the whole HUD went back to the 4:3 middle until it was down (a player's report: 'the hud will change from 16:9 to 4:3 mid battle using Lock On'). Now the HUD's pieces keep their moves while a box is up (widescreen.cpp). wide.hud is the HUD sheet's widest draw, the health bar's frame.",
+  "steps": [
+    {
+      "press": "0:warp=5.12,10f:wait:20f",
+      "note": "the armoured knights"
+    },
+    {
+      "until": "room == 12 and player.active and not loading and not cutscene",
+      "timeout": 30,
+      "poll_by": [
+        [
+          "cutscene",
+          "0:start,45f:wait"
+        ],
+        [
+          "menu",
+          "0:b,30f:wait"
+        ]
+      ]
+    },
+    {
+      "press": "0f:wait:30f",
+      "shot": "knights",
+      "expect": [
+        "len(enemies) > 0",
+        "not modal",
+        "wide.hud.ago < 3",
+        "wide.hud.move < 0"
+      ]
+    },
+    {
+      "press": "0f:black:5f,5f:wait:10f",
+      "shot": "locked",
+      "note": "Lock-On ON/OFF is Black"
+    },
+    {
+      "until": "modal and player.hp_max > 100",
+      "poll": "0:heal,0:fight:1000",
+      "timeout": 120,
+      "shot": "levelled",
+      "note": "fought until Hector's level up (two knights): its flag up, the health bar still at the corner",
+      "expect": [
+        "wide.hud.ago < 3",
+        "wide.hud.x[1] - wide.hud.x[0] > 150",
+        "wide.hud.move < 0"
+      ]
+    },
+    {
+      "press": "0:fight:1000",
+      "shot": "levelled-fight",
+      "note": "the fight goes on under the flag",
+      "expect": [
+        "modal",
+        "wide.hud.ago < 3",
+        "wide.hud.move < 0"
+      ]
+    },
+    {
+      "until": "not modal",
+      "poll": "60f:wait",
+      "timeout": 20,
+      "shot": "flag-down",
+      "expect": [
+        "wide.hud.move < 0"
+      ]
+    }
+  ]
+}

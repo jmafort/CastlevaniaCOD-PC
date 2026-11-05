@@ -408,7 +408,10 @@ public:
         if (e.stage == Stage::Failed) return std::make_shared<gpu::Replacement>();  // empty: drawn as it was
         if (e.stage != Stage::Ready) return nullptr;
         e.stage = Stage::Idle;  // the renderer keeps it now; loaded again should it drop it
-        LOG_FIRST(40, "texpack: %s at %ux%u", files_[size_t(id - 1)].filename().string().c_str(), e.pixels->width, e.pixels->height);
+        // CV_TEXPACK_TRACE: every picture handed over, not only the first ones
+        static const bool trace = std::getenv("CV_TEXPACK_TRACE") != nullptr;
+        if (trace) LOGR("texpack: %s at %ux%u", files_[size_t(id - 1)].filename().string().c_str(), e.pixels->width, e.pixels->height);
+        else LOG_FIRST(40, "texpack: %s at %ux%u", files_[size_t(id - 1)].filename().string().c_str(), e.pixels->width, e.pixels->height);
         return std::move(e.pixels);
     }
 

@@ -183,6 +183,9 @@ def tests():
         scenario("qol"),
         scenario("lockon", quick=True),
         scenario("lockon", *eu, test="lockon-eu"),
+        # in a game of its own: Hector's level up comes from the knights only at his first level (a session's game may
+        # have him at his second)
+        scenario("hud-levelup"),
         scenario("shadow", quick=True),
         scenario("texpack", needs=["textures"]),
         scenario("texpack", "--set", "texture_pack=false", test="texpack-off"),

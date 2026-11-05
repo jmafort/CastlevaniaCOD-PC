@@ -26,8 +26,10 @@
 // HUD in the frame are the world's 2D effects (glows, sparks), drawn at the points they light, which stay; so does any
 // 2D draw placed at a point of the world (its vertices carry the point's depth, w, where the HUD's have 1), whatever
 // its texture: the lock-on marker is drawn from the HUD's sheet over the enemy locked on, and went to the screen's edge
-// with the HUD once the enemy was off the middle. Nothing moves while the pause menu or a message box is up, or in a
-// story scene.
+// with the HUD once the enemy was off the middle. Nothing moves while the pause menu is up, or in a story scene. While
+// a message box is up (the save point's, an item's, a hint, a level up's) the HUD's pieces keep the moves they had
+// before it, and the rest stays as the game placed it: the game keeps the level up's flag up for seconds as a fight
+// goes on, and the whole HUD went back to the 4:3 middle until it was down.
 //
 // The pause menu across the screen (menu_spread): its pages are a left column (Hector's stats, a list), a middle one
 // (the page buttons and their cursor) and a right one (status, equipment), all in the 4:3 middle, under a title bar
@@ -107,9 +109,10 @@ std::atomic<bool> g_wide_trace_frame{false};
 
 namespace {
 
-// for tests (telemetry.cpp: "wide"), as last drawn: the lock-on marker (the HUD's sheet at a point of the world) and
-// the HUD (its sheet's last draw of a frame, the health bar's), each on the console frame, its move across in clip
-// space and the frame it was drawn in
+// for tests (telemetry.cpp: "wide"): the lock-on marker as last drawn (the HUD's sheet at a point of the world) and
+// the HUD as the last whole frame that drew it had it (its sheet's widest draw, the health bar's frame: read halfway
+// through a frame, the bar may not be drawn yet), each on the console frame, its move across in clip space and the
+// frame it was drawn in
 struct Seen2D {
     uint64_t frame = 0;
     float x0 = 0, x1 = 0, move = 0;
@@ -318,7 +321,8 @@ public:
             hud_ = false;
             ui_ = false;
             menu_ = PauseMenuUp();
-            card_free_ = g_hud_edges && !menu_ && !ModalUp();
+            modal_ = ModalUp();
+            card_free_ = g_hud_edges && !menu_ && !modal_;
             trace_now_ = g_wide_trace_frame.exchange(false) || (kTrace && frame_ % kTrace == 0);
             if (trace_now_) LOGR("wide %llu: the frame's draws (menu %d, modal %d, scene %08x)", (unsigned long long)frame_,
                                  int(menu_), int(ModalUp()), SceneWord());
@@ -330,10 +334,13 @@ public:
             card_before_ = card_now_;
             card_before_seen_ = card_now_seen_;
             card_now_seen_ = false;
-            hud_free_ = card_free_ && !(SceneWord() & 0x20000);
+            // with a message box up too: the HUD's pieces keep their moves (HudPieces), the box stays
+            hud_free_ = g_hud_edges && !menu_ && !(SceneWord() & 0x20000);
             HudPieces();
             {
                 std::lock_guard lock(g_seen_m);
+                if (hud_seen_.frame) g_hud = hud_seen_;
+                g_frame = frame_;
                 g_sky_fogged = sky_fogged_;
                 g_sky_held = sky_held_;
                 g_sky_cards = sky_cards_;
@@ -506,9 +513,13 @@ public:
         if (Backdrop(vsc) || SkyCard()) ext[0] = ext[1] = ext[3] = ext[4] = 0;  // not drawn: every vertex at the centre
         else if (back_buffer_ && d_.world && d_.mesh && vsc) SeeWorld(vsc, ext[0]);
         if (back_buffer_ && d_.name == kHud[0] && !d_.x.Empty()) {
-            std::lock_guard lock(g_seen_m);
-            (d_.at_point ? g_marker : g_hud) = {frame_, d_.x.lo, d_.x.hi, ext[3]};
-            g_frame = frame_;
+            if (d_.at_point) {
+                std::lock_guard lock(g_seen_m);
+                g_marker = {frame_, d_.x.lo, d_.x.hi, ext[3]};
+                g_frame = frame_;
+            } else if (hud_seen_.frame != frame_ || d_.x.hi - d_.x.lo >= hud_seen_.x1 - hud_seen_.x0) {
+                hud_seen_ = {frame_, d_.x.lo, d_.x.hi, ext[3]};
+            }
         }
         // CV_WIDE_TRACE=<n>: every draw of a frame in n, the target it goes into ("device": the back buffer)
         if (trace_now_ && d_.world)
@@ -758,10 +769,14 @@ private:
         }
         for (Rect& p : pieces_) p.shift = p.named ? Side(p) : 0.0f;
         rects_.clear();
+        // a message box up: the pieces the HUD had before it, as they moved (the box and what comes with it are not
+        // among them, and stay)
+        if (modal_) pieces_ = known_;
+        else known_ = pieces_;
     }
 
     // a HUD draw's move: as the piece of the frame before it is in, else as a draw of this frame it touches, else a
-    // quad of the HUD's own textures by itself (a piece's first frame)
+    // quad of the HUD's own textures by itself (a piece's first frame), but not with a message box up
     float HudShift(Rect r, bool quad) {
         gw_ = d_.gw;
         r.shift = 0;
@@ -777,7 +792,7 @@ private:
                 r.shift = rects_[i].shift;
                 found = true;
             }
-        if (!found && r.named && quad) r.shift = Side(r);
+        if (!found && r.named && quad && !modal_) r.shift = Side(r);
         if (rects_.size() < 256) rects_.push_back(r);
         return r.shift;
     }
@@ -1121,6 +1136,7 @@ private:
     bool hud_free_ = false;  // the HUD may go to the edges this frame
     bool card_free_ = false;  // an area's name card may
     bool menu_ = false;       // the pause menu is up this frame
+    bool modal_ = false;      // a message box is up this frame (ModalUp)
     std::vector<MenuRect> menu_rects_, menu_before_;  // the pause menu's draws, this frame's and the frame before's
     std::vector<Rect> menu_back_;  // this frame's backdrop: its edge pieces, the large pieces against them
     float menu_move_[2] = {};      // from the frame before: the moves left and right, in console pixels
@@ -1128,6 +1144,8 @@ private:
     float menu_gw_ = 640;
     bool ui_ = false;        // the frame's UI has begun, for HDR (UiStart)
     std::vector<Rect> rects_, pieces_;  // this frame's HUD draws; the pieces of the frame before's
+    std::vector<Rect> known_;           // the HUD's pieces as the last frame without a message box had them
+    Seen2D hud_seen_;                   // this frame's widest draw of the HUD's sheet so far, for tests
     // an area's name card, its crest, title and line drawn apart: all of it this frame, and the frame before's, which
     // goes to a side as one
     Rect card_now_{}, card_before_{};

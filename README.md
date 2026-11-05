@@ -771,14 +771,17 @@ Changes this game needed beyond the generated config:
   Windows. It has not been tried on a Linux PC's own graphics drivers yet.
 - Linux has no frame generation yet: the Linux build of AMD's FidelityFX SDK has none, and the port's Linux DLSS is
   its anti-aliasing and upscaling only. Its anti-aliasing and upscaling by AMD FSR 3 are new (1.8.6): tested in WSL on
-  an NVIDIA card through Mesa's dozen, not yet on a Linux PC's own graphics drivers. Each frame waits for the GPU once
-  more with it than with the TAA.
+  an NVIDIA card through Mesa's dozen, not yet on a Linux PC's own graphics drivers.
 - NVIDIA DLSS on Linux is new (1.8.7) and not yet tested on NVIDIA's own Linux driver: in WSL, where the card is
   Mesa's dozen, its download, the game's link to it and the switch to AMD FSR were tested, and DLSS itself ran there
   through NVIDIA's NGX, but not in the game. If it does not run, `logs/castlevania.log` says why (and NVIDIA's own
   logs are in `logs/ngx`); `XBE_DLSS_LOG=1` adds NVIDIA's lines to the game's log.
 - HDR on Linux is new (1.8.5): its picture was tested in WSL, where the desktop has no HDR, but not yet shown on a
   Linux desktop in HDR.
+- A player saw water and sky textures not looping as they should. It has not been seen here yet: the courtyard's
+  fountain and the rampart's sky scroll on, with the HD texture pack and without it. Which room, and a picture or a
+  clip, would help (in an [issue](https://github.com/jmafort/CastlevaniaCOD-PC/issues), or on the port's Reddit
+  thread).
 - Nothing in a release is code-signed (the port's programs, nor the Clang and LLD of the LLVM project). Windows 11's
   Smart App Control, where it is on, may block such programs; that is untested.
 
