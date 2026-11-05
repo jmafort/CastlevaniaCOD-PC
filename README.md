@@ -222,7 +222,7 @@ matched, and on the textures the PS2 packs lack, under [HD Texture Packs](#hd-te
 
 A pack with material maps (Calm-Consideration41's v4 has them, in its `materials` folder) gives its pictures light and
 depth: the launcher's Textures page has **Material maps** (on by default) and **Surface depth** (Off, Low, High: how
-deep the height maps look, on the settings menu's Graphics page too).
+deep the height maps look, on the settings menu's Graphics page too; off by default).
 
 ## HD Movies
 
@@ -300,9 +300,9 @@ and the buttons held as it closes do not reach the game. By Calm-Consideration41
   stay as they are.
 - **No Overscan Streaks** - The rows a TV's overscan used to hide at the top and bottom of the picture no longer
   smear; the frame fills the screen.
-- **HDR** - On a display with HDR on in Windows, or in a Linux desktop (Wayland: KDE Plasma 6, GNOME 48 or later, a
-  Steam Deck's gamescope), fire, magic, light and the other brightest parts of the picture shine brighter than the
-  rest, up to the peak brightness set; the scene brightness sets the rest. On Linux the game sends HDR10 and tells the
+- **HDR** - Off by default. On a display with HDR on in Windows, or in a Linux desktop (Wayland: KDE Plasma 6, GNOME
+  48 or later, a Steam Deck's gamescope), fire, magic, light and the other brightest parts of the picture shine
+  brighter than the rest, up to the peak brightness set; the scene brightness sets the rest. On Linux the game sends HDR10 and tells the
   desktop its peak and scene brightness; the desktop does not tell the display's own peak, so 1000 nits stands for it
   until one is set. By Calm-Consideration41 (on Linux, this fork's).
 
@@ -341,21 +341,21 @@ background first); the size pictures load at applies from the next start.
   too, their pictures repeating across them as on the PS2 (before 1.8.0 they were read stretched, which showed as
   smears and the strips' edges). Some skies also have glow cards that the game's own view never shows, which pushed
   out showed as faint squares over the moon and the clouds; with the view pushed out they are not drawn (1.8.4).
-- **Anti-Aliasing** - Smooth, steady edges on the 3D, gathered over the frames: AMD FSR on any graphics card, NVIDIA
-  DLSS on a GeForce RTX (from the game's next start once chosen), their files downloaded by the launcher's Graphics
-  page from AMD and NVIDIA (the game loads them only signed by AMD or NVIDIA, the launcher checks their SHA-256). On
-  Linux AMD FSR 3 on Vulkan, built into the game from AMD's FidelityFX SDK (an unofficial Linux build of its 1.1.4,
-  patched by this port), on any graphics card; where it can't run, this port's own TAA in its place
-  (`XBE_TAA=1` chooses that). And NVIDIA DLSS on Vulkan through NGX, which NVIDIA's own Linux driver brings, on a
-  GeForce RTX: the launcher's Graphics page downloads NVIDIA's DLSS SDK files from NVIDIA (about 60 MB, each checked
-  against its SHA-256), and the game links itself to them on your PC with its compiler folder's clang, as it builds its
-  code, so this port's download carries nothing of NVIDIA's. On another driver (Mesa's NVK, or an AMD or Intel card)
-  AMD FSR takes DLSS's place. The HUD and menus stay sharp. By Calm-Consideration41 (on Linux, this fork's).
+- **Anti-Aliasing** - Off by default. Smooth, steady edges on the 3D, gathered over the frames: AMD FSR on any
+  graphics card, NVIDIA DLSS on a GeForce RTX (from the game's next start once chosen), their files downloaded by the
+  launcher's Graphics page from AMD and NVIDIA (the game loads them only signed by AMD or NVIDIA, the launcher checks
+  their SHA-256). On Linux AMD FSR 3 on Vulkan, built into the game from AMD's FidelityFX SDK (an unofficial Linux
+  build of its 1.1.4, patched by this port), on any graphics card; where it can't run, this port's own TAA in its
+  place (`XBE_TAA=1` chooses that). And NVIDIA DLSS on Vulkan through NGX, which NVIDIA's own Linux driver brings, on
+  a GeForce RTX: the launcher's Graphics page downloads NVIDIA's DLSS SDK files from NVIDIA (about 60 MB, each checked
+  against its SHA-256), and the game links itself to them on your PC with its compiler folder's clang, as it builds
+  its code, so this port's download carries nothing of NVIDIA's. On another driver (Mesa's NVK, or an AMD or Intel
+  card) AMD FSR takes DLSS's place. The HUD and menus stay sharp. By Calm-Consideration41 (on Linux, this fork's).
 - **Upscaling** - The 3D drawn below the screen's resolution and rebuilt to it by the anti-aliasing: Quality (two
   thirds across), Balanced or Performance (half), for a higher frame rate on a slower graphics card or a handheld.
 - **Sharpening** - FSR's and the TAA's, 0 to 100% (30% by default).
-- **Ambient Occlusion** - Soft shadow where surfaces meet, Low or High, from the 3D's depth: with anti-aliasing it is
-  smoothed over the frames too. By Calm-Consideration41.
+- **Ambient Occlusion** - Off by default. Soft shadow where surfaces meet, Low or High, from the 3D's depth: with
+  anti-aliasing it is smoothed over the frames too. By Calm-Consideration41.
 - **Frame Generation** (Windows) - A frame made between each two the game draws, AMD FSR 3 on any graphics card or
   NVIDIA DLSS on a GeForce RTX 40 or 50, from the next start: about twice the frames reach the screen while the game
   keeps its 60. On a screen whose refresh is not a multiple of 120 Hz (60, 144, 165) its frames go without v-sync,

@@ -1,7 +1,7 @@
 {
   "name": "ao",
   "after": "newgame.json",
-  "note": "Ambient occlusion with no anti-aliasing (the SDK's OcclusionAlone): at High in the courtyard, the stone darkened where it meets (its corners, the carvings' hollows), held still from frame to frame (a second shot a moment later the same above and beside Hector, once the area's name card a warp shows has gone), switched off while playing (lighter, as without it) and to Low, then High again as at first.",
+  "note": "Ambient occlusion with no anti-aliasing (the SDK's OcclusionAlone): at High in the courtyard, the stone darkened where it meets (its corners, the carvings' hollows), held still from frame to frame (a second shot a moment later the same on the ground at the lower left, which it darkens and where nothing else moves: above, the courtyard's mist and clouds drift, with it or without it), switched off while playing (lighter, as without it: the stone at the left, where the mist does not reach) and to Low, then High again as at first.",
   "steps": [
     {
       "press": "0:set=antialiasing=0,0:set=ambient_occlusion=2,0f:wait:240f",
@@ -56,16 +56,16 @@
           1.0,
           1.0
         ],
-        "upper": [
+        "still": [
           "ao-high",
+          0.0,
           0.55,
-          0.15,
-          1.0,
-          0.65
+          0.4,
+          0.95
         ]
       },
       "expect": [
-        "screen.differs.upper < 1.2"
+        "screen.differs.still < 0.3"
       ]
     },
     {
@@ -123,7 +123,7 @@
       },
       "expect": [
         "screen.luma.all > shots['ao-high'].luma.all + 1",
-        "screen.luma.right > shots['ao-high'].luma.right + 1.5"
+        "screen.luma.left > shots['ao-high'].luma.left + 1.2"
       ]
     },
     {
@@ -228,17 +228,17 @@
           1.0,
           1.0
         ],
-        "upper": [
+        "still": [
           "ao-high",
+          0.0,
           0.55,
-          0.15,
-          1.0,
-          0.65
+          0.4,
+          0.95
         ]
       },
       "expect": [
         "abs(screen.luma.all - shots['ao-high'].luma.all) < 0.5",
-        "screen.differs.upper < 1.2"
+        "screen.differs.still < 0.3"
       ]
     }
   ]

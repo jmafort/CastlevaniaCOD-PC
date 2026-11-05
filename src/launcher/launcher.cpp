@@ -1191,7 +1191,7 @@ struct Settings {
     uint32_t render_percent = 100;
     uint32_t aniso = 0;
     bool vsync = true;
-    bool hdr = true;                    // HDR output on a display in Windows HDR mode (the SDK's)
+    bool hdr = false;                   // HDR output on a display in Windows HDR mode (the SDK's)
     uint32_t hdr_peak_nits = 0;         // 0 the display's own peak
     uint32_t hdr_scene_nits = 200;
     uint32_t frame_generation = 0;      // 0 off, 1 AMD FSR 3, 2 NVIDIA DLSS (the SDK's, from the next start)
@@ -1218,11 +1218,12 @@ struct Settings {
     bool menu_spread = true;            // widescreen: the pause menu's columns toward the sides (widescreen.cpp)
     bool hd_movies = true;              // a movie pack's HD movies (movies.cpp)
     uint32_t movie_view = 1;            // 0 the game's 4:3 frame, 1 fit, 2 fill (movies.cpp)
-    uint32_t antialiasing = 1;          // 0 off, 1 AMD FSR, 2 NVIDIA DLSS (menu.cpp, the SDK's renderer)
+    // the picture's enhancements are off until the player turns them on: the game as the Xbox showed it
+    uint32_t antialiasing = 0;          // 0 off, 1 AMD FSR, 2 NVIDIA DLSS (menu.cpp, the SDK's renderer)
     uint32_t upscaling = 0;             // 0 native, 1 quality, 2 balanced, 3 performance
     uint32_t sharpening = 30;           // percent, AMD FSR's
-    uint32_t ambient_occlusion = 1;     // 0 off, 1 low, 2 high
-    uint32_t surface_depth = 2;         // 0 off, 1 low, 2 high: a pack's material maps seen into (parallax)
+    uint32_t ambient_occlusion = 0;     // 0 off, 1 low, 2 high
+    uint32_t surface_depth = 0;         // 0 off, 1 low, 2 high: a pack's material maps seen into (parallax)
     std::string gpu;                    // the graphics card by its name, empty the fastest (the SDK's)
     std::string release;                // the release played, by its executable's name, when there are more (the SDK's)
     toml::table rest;
@@ -2818,8 +2819,8 @@ private:
             Cursor(dl, {p.x + tw - S(38) + S(6) * hv, p.y + th * 0.5f}, S(18), 0.3f + 0.7f * hv);
         }
         ImGui::Dummy({0, S(8)});
-        // anti-aliasing is on by default but its vendor's files are not in the download: without them it and
-        // upscaling do nothing, so say so where everyone looks
+        // anti-aliasing turned on, but its vendor's files are not in the download: without them it and upscaling do
+        // nothing, so say so where everyone looks
         if (settings_.antialiasing && NeedsFiles(AntiAliasVendor()) && !HaveFrameGen(ExeDir(), AntiAliasVendor())) {
             Status(kIconWarn, kAmber, F("Anti-aliasing ({}) needs its files: download them on the Graphics page.",
                                         {AntiAliasName(AntiAliasVendor())}));
@@ -3019,12 +3020,12 @@ private:
                                {PresetName(kOriginal), PresetName(kLow), PresetName(kMedium), PresetName(kHigh),
                                 PresetName(kUltra)}))
                 SetPreset(settings_, preset);
-            const char* note = preset == kOriginal ? T("The game as the Xbox showed it: no smoothing, no added shadow.")
+            const char* note = preset == kOriginal ? T("The game as the Xbox showed it: no smoothing, no added shadow. The default.")
                                : preset == kLow    ? T("For handhelds and older graphics: the 3D at half resolution, "
                                                        "smoothed and rebuilt to full size.")
                                : preset == kMedium ? T("For handhelds and laptops: balanced upscaling and soft shadow. It "
                                                        "held 60 FPS on a Legion Go 2 in testing.")
-                               : preset == kHigh   ? T("Full resolution, smooth edges and soft shadow. The default.")
+                               : preset == kHigh   ? T("Full resolution, smooth edges and soft shadow.")
                                : preset == kUltra  ? T("As High, with deeper shadow in corners and crevices.")
                                                    : T("Your own mix of the settings below.");
             ControlNote(kMuted, note);

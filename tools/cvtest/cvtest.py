@@ -1443,8 +1443,8 @@ HOME_POS = (-5000, -4900)
 GAME_DEFAULTS = {"render_percent": 100, "anisotropic_filtering": 0, "vsync": True, "fps_cap": 60, "widescreen": True,
                  "fps_counter": False, "lament_save": False, "ps2_stick": True, "invert_camera_x": False,
                  "invert_camera_y": False, "fov": 100, "draw_distance": 100, "fog_distance": 100, "hud_edges": True,
-                 "widescreen_aspect": 169, "menu_spread": True, "hd_movies": True, "movie_view": 1, "surface_depth": 2,
-                 "antialiasing": 1, "upscaling": 0, "sharpening": 30, "ambient_occlusion": 1, "sprint": 0,
+                 "widescreen_aspect": 169, "menu_spread": True, "hd_movies": True, "movie_view": 1, "surface_depth": 0,
+                 "antialiasing": 0, "upscaling": 0, "sharpening": 30, "ambient_occlusion": 0, "sprint": 0,
                  "button_layout": 0}
 # settings a session's parts have the same, from the game's start: those it reads only then (keyboard.cpp's live set=
 # refuses texture_pack_size), and texture_pack, live in the game, whose off tests are of a game started without the

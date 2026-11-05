@@ -41,15 +41,15 @@ uint32_t g_draw_distance = 100;  // percent of the game's far plane (game/view.c
 uint32_t g_fog_distance = 100;   // percent of the game's fog distance, 0 for none (game/view.cpp)
 bool g_hud_edges = true;         // widescreen: the HUD at the screen's corners rather than the 4:3 middle (widescreen.cpp)
 // surfaces with an HD texture pack's material maps seen into: 0 off, 1 low, 2 high (the SDK's gpu::g_surface_depth)
-uint32_t g_surface_depth = 2;
+uint32_t g_surface_depth = 0;
 // the frame's 3D anti-aliased before its UI: 0 off, 1 AMD FSR, 2 NVIDIA DLSS (the SDK's gpu::g_antialias)
-uint32_t g_antialias = 1;
+uint32_t g_antialias = 0;
 // and drawn below the frame's size, made up to it: 0 native, 1 quality, 2 balanced, 3 performance (gpu::g_upscale)
 uint32_t g_upscale = 0;
 // AMD FSR's sharpening after it, percent (gpu::g_aa_sharpness)
 uint32_t g_sharpening = 30;
 // the 3D darkened where surfaces meet: 0 off, 1 low, 2 high (gpu::g_ambient_occlusion)
-uint32_t g_ambient_occlusion = 1;
+uint32_t g_ambient_occlusion = 0;
 extern bool g_menu_spread;       // widescreen.cpp: the pause menu's columns toward the screen's sides
 extern bool g_hd_movies;         // movies.cpp: a movie pack's HD movies drawn
 extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture whole as large as it goes, 2 filled
@@ -612,11 +612,11 @@ void Defaults() {
     g_hd_movies = true;
     g_texture_pack = true;
     g_movie_view = 1;
-    g_surface_depth = 2;
-    g_antialias = 1;
+    g_surface_depth = 0;
+    g_antialias = 0;
     g_upscale = 0;
     g_sharpening = 30;
-    g_ambient_occlusion = 1;
+    g_ambient_occlusion = 0;
     app::ApplyDisplay();
 }
 
