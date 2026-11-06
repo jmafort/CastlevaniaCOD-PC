@@ -3239,7 +3239,9 @@ public:
         auto_gpu_ = Automatic();
         modes_ = Resolutions();
         LoadArt();
-        updater_.Check(settings_.update_check);
+        // CV_NO_UPDATE_CHECK: tests that open the launcher again and again leave GitHub alone (its API answers 60
+        // requests an hour from an address without an account)
+        updater_.Check(settings_.update_check && !std::getenv("CV_NO_UPDATE_CHECK"));
     }
 
     // the page shown, by the sidebar's order: --page on the command line, for screenshots of a page

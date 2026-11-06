@@ -114,7 +114,10 @@ class Launcher:
         self.state = pkg / "launcher-state.json"
         self.state.unlink(missing_ok=True)
         # behind the other windows, never taking the focus (cvtest's XBE_BACKGROUND): clicks are the launcher's own
-        env = dict(env, CV_LAUNCHER_STATE=str(self.state), XBE_BACKGROUND="1", **(more_env or {}))
+        # CV_NO_UPDATE_CHECK: the launcher opened again and again would use up GitHub's 60 requests an hour (the
+        # update test asks it for real)
+        env = dict(env, CV_LAUNCHER_STATE=str(self.state), XBE_BACKGROUND="1", CV_NO_UPDATE_CHECK="1",
+                   **(more_env or {}))
         if LINUX:
             env["DISPLAY"] = cvtest.display()
         self.proc = subprocess.Popen([str(pkg / ("CastlevaniaLauncher" + EXE)), *args], cwd=pkg, env=env,
@@ -213,7 +216,7 @@ def game_follows(pkg, env, start, chosen, expect):
     log says it plays its release's disc; ended there, at the first start's building of the game code"""
     set_settings(pkg, release=chosen)
     shutil.rmtree(pkg / "logs", ignore_errors=True)
-    env = dict(env, XBE_BACKGROUND="1")  # behind the other windows, never taking the focus
+    env = dict(env, XBE_BACKGROUND="1", CV_NO_UPDATE_CHECK="1")  # behind the other windows, never taking the focus
     if LINUX:
         env = dict(env, DISPLAY=cvtest.display())
     proc = subprocess.Popen([str(pkg / (start + EXE))], cwd=pkg, env=env, stdout=subprocess.DEVNULL,
