@@ -574,6 +574,26 @@ Windows 10 and 11. Playing needs no internet connection, the first start neither
   besides your game.
 - The C++ runtime (`libstdc++.so.6` of GCC 12 or later) and `libz.so.1`, which every desktop Linux has.
 
+### Linux Compared to Windows
+Windows has much better graphics support than Linux. Linux has been tested far less: in WSL only (Mesa's dozen over
+Windows' own graphics drivers), never yet on a Linux PC's own drivers. Linux gets the port's fixes and its other
+features (the game, widescreen and the HUD at the corners, texture packs with their material maps, HD movies, ambient
+occlusion, the controls, the launcher and its updates), but not the graphics extras that are hard to bring to it.
+
+Not on Linux:
+- **Ray tracing**: the traced ambient occlusion and bounce lighting, water reflections, characters' shadows, the sky's
+  light and light shafts, and NVIDIA DLSS Ray Reconstruction. The Linux build draws through vkd3d, which has no
+  DirectX ray tracing.
+- **Frame generation**, by AMD FSR 3 or NVIDIA DLSS (and NVIDIA Reflex with it).
+- **Shaders prepared ahead**: on Windows the launcher makes the game's pipelines for your graphics card before its
+  first start. On Linux the game makes each as it first needs it, which can stutter the first time a room or an effect
+  shows.
+
+On Linux, but less tested:
+- **AMD FSR 3** anti-aliasing and upscaling: tested in WSL only.
+- **NVIDIA DLSS** anti-aliasing and upscaling: it needs NVIDIA's own driver, and has not been tried on it yet.
+- **HDR**: not yet shown on a Linux desktop in HDR.
+
 ### To Build
 On a fresh Windows, install:
 
@@ -892,10 +912,9 @@ Changes this game needed beyond the generated config:
   Mesa's dozen (Vulkan on Windows' Direct3D 12), on X11 and Wayland: both releases install, build their game code and
   play the new game, widescreen and room tests at 60 frames per second on the RTX 3060, with the same pictures as on
   Windows. It has not been tried on a Linux PC's own graphics drivers yet.
-- Linux has no frame generation yet: the Linux build of AMD's FidelityFX SDK has none, and the port's Linux DLSS is
-  its anti-aliasing and upscaling only. Its anti-aliasing and upscaling by AMD FSR 3 are new (1.8.6): tested in WSL on
-  an NVIDIA card through Mesa's dozen, not yet on a Linux PC's own graphics drivers.
-- Ray tracing is Windows' alone: the Linux build draws through vkd3d, which has no DirectX ray tracing.
+- Windows has much better graphics support than Linux: ray tracing, frame generation and the shaders prepared ahead
+  are Windows' alone, and Linux's AMD FSR 3 (1.8.6) was tested in WSL only (see
+  [Linux Compared to Windows](#linux-compared-to-windows)).
 - NVIDIA DLSS on Linux is new (1.8.7) and not yet tested on NVIDIA's own Linux driver: in WSL, where the card is
   Mesa's dozen, its download, the game's link to it and the switch to AMD FSR were tested, and DLSS itself ran there
   through NVIDIA's NGX, but not in the game. If it does not run, `logs/castlevania.log` says why (and NVIDIA's own

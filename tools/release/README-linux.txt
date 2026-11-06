@@ -12,7 +12,22 @@ WHAT YOU NEED
   Intel HD 4200, from 2012-2013 on, or newer); a processor with SSE4.2 (Intel from 2008, AMD from
   2011 on); about 0.6 GB of disk besides your game. Nothing else to install: Direct3D 12 on
   Vulkan (vkd3d) is in the lib folder, and the compiler the first start uses is in this folder.
-  No internet connection is needed.
+  No internet connection is needed to play (the launcher looks for a newer release on GitHub
+  when it opens; its Game page turns that off).
+
+LINUX AND WINDOWS
+  Windows has much better graphics support than Linux. Linux has been tested far less (in WSL
+  only, never yet on a Linux PC's own graphics drivers), and some graphics are Windows' alone:
+  Linux gets the port's fixes and its other features, but not the graphics extras that are hard
+  to bring to it. Not on Linux:
+    - ray tracing (traced ambient occlusion and lighting, reflections, characters' shadows, light
+      shafts, NVIDIA DLSS Ray Reconstruction): Linux draws through vkd3d, which has no DirectX
+      ray tracing
+    - frame generation (AMD FSR 3 or NVIDIA DLSS)
+    - shaders prepared ahead by the launcher: the game makes each as it first needs it, which
+      can stutter the first time a room or an effect shows
+  On Linux, but less tested: AMD FSR 3 and NVIDIA DLSS anti-aliasing and upscaling (DLSS needs
+  NVIDIA's own driver, not yet tried on it), and HDR (not yet shown on a Linux desktop in HDR).
 
 GETTING STARTED
   1. Extract this folder anywhere you can write to (your home folder is fine).
@@ -32,9 +47,11 @@ Game page sets which). It has an executable of its own, CastlevaniaEU, which Cas
 by itself when your copy is the European one: just run ./Castlevania as above.
 
 ./CastlevaniaLauncher has every setting (display, widescreen, render scale, controls) and checks
-your game files. In game, F10 or clicking both sticks in (L3 + R3) opens the settings. The
-launcher's language (English, German, Spanish, French, Italian, Brazilian Portuguese or Russian)
-is chosen at the bottom of its sidebar.
+your game files. Its home page offers a newer release of the port when there is one: one click
+puts the new program files in place, and your saves, settings and textures stay as they are.
+In game, F10 or clicking both sticks in (L3 + R3) opens the settings. The launcher's language
+(English, German, Spanish, French, Italian, Brazilian Portuguese or Russian) is chosen at the
+bottom of its sidebar.
 
 The field of view, the draw distance and the fog (Graphics), the HUD in the screen's corners in
 widescreen, the PS2's stick response, the inverted camera and the rumble on both motors (Controls)
