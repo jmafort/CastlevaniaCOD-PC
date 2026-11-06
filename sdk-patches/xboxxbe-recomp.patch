@@ -2039,7 +2039,7 @@ index c82ae36..3e8f743 100644
  
  }  // namespace gpu
 diff --git a/runtime/gpu/d3d12.cpp b/runtime/gpu/d3d12.cpp
-index fe65837..71d80a3 100644
+index fe65837..536bbbb 100644
 --- a/runtime/gpu/d3d12.cpp
 +++ b/runtime/gpu/d3d12.cpp
 @@ -15,25 +15,43 @@
@@ -5755,7 +5755,7 @@ index fe65837..71d80a3 100644
      if (src_t->fmt != dst_t->fmt) {
          // formats differ: drawn across
          CopyByDraw(*src_t, src_t->res.Get(), src_t->state, *dst_t, l);
-@@ -3149,102 +5745,2944 @@ void D3D12Backend::Copy(const Surface& src, const Surface& dst, uint32_t count,
+@@ -3149,102 +5745,2949 @@ void D3D12Backend::Copy(const Surface& src, const Surface& dst, uint32_t count,
      }
  }
  
@@ -7583,7 +7583,12 @@ index fe65837..71d80a3 100644
 +void D3D12Backend::AmbientOcclusion(Target& t, uint32_t rw, uint32_t rh, const FrameView& view, bool rx, bool still) {
 +    uint32_t q = g_ambient_occlusion.load(std::memory_order_relaxed);
 +    if (!q) return;
-+    (void)view;
++    // the view given (ambient occlusion alone, with no anti-aliasing, takes it here: anti-aliasing's pass took it
++    // before), else the last one found
++    if (view.valid) {
++        ao_view_ = view;
++        ao_view_ok_ = true;
++    }
 +    if (!ao_view_ok_ || ao_view_.near_w <= 0 || ao_view_.far_w <= ao_view_.near_w || ao_view_.fov_y <= 0) return;
 +    const AoQuality& aq = q >= 2 ? kAoHigh : kAoLow;
 +    if (!ao_ || ao_w_ != t.w || ao_h_ != t.h) {
@@ -8778,7 +8783,7 @@ index fe65837..71d80a3 100644
      ImGui::NewFrame();
      if (app::kGame.ui) app::kGame.ui(fps_);
      ImGui::Render();
-@@ -3253,19 +8691,308 @@ void D3D12Backend::RenderUi() {
+@@ -3253,19 +8696,308 @@ void D3D12Backend::RenderUi() {
      ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cl_.Get());
  }
  
@@ -9088,7 +9093,7 @@ index fe65837..71d80a3 100644
  void D3D12Backend::ReleaseOldTextures() {
      constexpr uint64_t kSweepEvery = 60;    // presents between sweeps
      constexpr size_t kTexturesKept = 2048;  // no sweep below this many
-@@ -3275,6 +9002,10 @@ void D3D12Backend::ReleaseOldTextures() {
+@@ -3275,6 +9007,10 @@ void D3D12Backend::ReleaseOldTextures() {
      for (auto it = textures_.begin(); it != textures_.end();) {
          if (it->second.frame + kIdleFrames < presents_) {
              CurrentFrame().garbage.push_back(it->second.res);
@@ -9099,7 +9104,7 @@ index fe65837..71d80a3 100644
              it = textures_.erase(it);
          } else {
              ++it;
-@@ -3291,10 +9022,20 @@ void D3D12Backend::ResetFrame() {
+@@ -3291,10 +9027,20 @@ void D3D12Backend::ResetFrame() {
      }
      f.alloc->Reset();
      f.garbage.clear();
@@ -9120,7 +9125,7 @@ index fe65837..71d80a3 100644
  }
  
  void D3D12Backend::CountFps() {
-@@ -3305,6 +9046,32 @@ void D3D12Backend::CountFps() {
+@@ -3305,6 +9051,32 @@ void D3D12Backend::CountFps() {
          fps_ = fps_n_ / el;
          fps_n_ = 0;
          fps_t_ = now;
@@ -9153,7 +9158,7 @@ index fe65837..71d80a3 100644
      }
  }
  
-@@ -3312,17 +9079,45 @@ void LogPerf() {
+@@ -3312,17 +9084,45 @@ void LogPerf() {
      static PerfClock::time_point perf_start = PerfClock::now();
      static uint64_t perf_frames = 0;
      perf_frames++;
@@ -9203,7 +9208,7 @@ index fe65837..71d80a3 100644
               "resource %.2f fence %.2f flush %.2f copy %.2f, next frame %.2f) | read-backs waited for: %.1f lock, "
               "%.1f NOOVERWRITE",
               g_perf_capture_ns.exchange(0) / n / 1e6, g_perf_wait_ns.exchange(0) / n / 1e6,
-@@ -3331,25 +9126,175 @@ void LogPerf() {
+@@ -3331,25 +9131,175 @@ void LogPerf() {
               g_perf_wait_kind_ns[3].exchange(0) / n / 1e6, g_perf_wait_kind_ns[4].exchange(0) / n / 1e6,
               g_perf_wait_kind_ns[5].exchange(0) / n / 1e6, g_perf_sync_block.exchange(0) / n,
               g_perf_sync_late.exchange(0) / n);
@@ -9384,7 +9389,7 @@ index fe65837..71d80a3 100644
      }
      ResizeSwap();
      Target* t = EnsureTarget(front, false);
-@@ -3360,14 +9305,47 @@ void D3D12Backend::Present(const Surface& front) {
+@@ -3360,14 +9310,47 @@ void D3D12Backend::Present(const Surface& front) {
  
      uint32_t bi = swap_->GetCurrentBackBufferIndex();
      DrawFrame(t, bi);
@@ -9433,7 +9438,7 @@ index fe65837..71d80a3 100644
      presents_++;
      presents_seen_.store(presents_);
      frame_++;
-@@ -3375,6 +9353,7 @@ void D3D12Backend::Present(const Surface& front) {
+@@ -3375,6 +9358,7 @@ void D3D12Backend::Present(const Surface& front) {
      ResetFrame();
      CountFps();
      if (diag::Perf()) LogPerf();
@@ -9441,7 +9446,7 @@ index fe65837..71d80a3 100644
      ApplySettings();
  }
  
-@@ -3386,13 +9365,54 @@ void D3D12Backend::WaitGpuFrame(uint64_t n) {
+@@ -3386,13 +9370,54 @@ void D3D12Backend::WaitGpuFrame(uint64_t n) {
  
  void D3D12Backend::ApplySettings() {
      if (texturedumper::Update()) ReleasePackTextures();
@@ -9498,7 +9503,7 @@ index fe65837..71d80a3 100644
          if (ext_) ext_->Reset(*this);
          bound_rt_ = bound_ds_ = nullptr;
      }
-@@ -3400,6 +9420,7 @@ void D3D12Backend::ApplySettings() {
+@@ -3400,6 +9425,7 @@ void D3D12Backend::ApplySettings() {
  
  // the target resolved, then shrunk with o when it is not guest sized BGRA; res null on failure
  D3D12Backend::CopySource D3D12Backend::PrepareCopySource(Target& t, const ShrinkOptions& o) {
@@ -9506,7 +9511,7 @@ index fe65837..71d80a3 100644
      Resolve(t);
      CopySource out{t.res.Get(), nullptr};
      if (t.w != t.gw || t.h != t.gh || t.fmt != kBgra) {
-@@ -3676,6 +9697,7 @@ void D3D12Backend::CapStep(const Surface& rt) {
+@@ -3676,6 +9702,7 @@ void D3D12Backend::CapStep(const Surface& rt) {
  }
  
  void D3D12Backend::Capture(Target& t, const char* tag, float mul) {
@@ -9514,7 +9519,7 @@ index fe65837..71d80a3 100644
      if (!cap_) return;
      char name[32];
      snprintf(name, sizeof(name), "%04u_%s_%08X", cap_i_, tag, t.data);
-@@ -3689,6 +9711,19 @@ void D3D12Backend::SetGamma(const uint8_t* ramp) {
+@@ -3689,6 +9716,19 @@ void D3D12Backend::SetGamma(const uint8_t* ramp) {
  
  }  // namespace
  
