@@ -142,7 +142,9 @@ def scenario(name, *args, test=None, quick=False, needs=(), before=None, env=Non
 SESSIONS = {
     "usa": ["newgame", "texpack", "texpack-live", "fps", "fps-uncapped", "stick", "widescreen", "route", "moai-off", "moai-on", "bot",
             "buttons-xbox", "buttons-live", "shadow", "warp", "rooms", "keyboard", "menu"],
-    "wide": ["filters-pack", "qol", "ao", "wide-1610", "lockon"],
+    # ao plays in a game of its own: its regions are a new game's view of the courtyard (a session's warp back leaves
+    # Hector by the fountain, its water scrolling where ao looks for still ground)
+    "wide": ["filters-pack", "qol", "wide-1610", "lockon"],
     "eu": ["newgame-eu", "widescreen-eu", "rooms-eu"],
     "pack-off": ["filters-nopack", "texpack-off", "texpack-live-on"],
 }
