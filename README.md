@@ -104,9 +104,9 @@ On top of Pazzi7054's port:
   program files in place (the exes, the launcher, the compiler folder, the notes) and restarts the launcher. Your
   saves (`hdd`), `castlevania.toml`, textures, movies and game files are never touched; the files replaced are kept
   in `update\previous` until the next update. The game builds its code again on its first start after an update.
-  The launcher looks at the latest release's page on GitHub, not at GitHub's API (which answers an address 60
-  requests an hour), and checks the download against the release's `SHA256SUMS.txt`; when GitHub is busy it says so
-  and asks to try again in a few minutes. The check is a switch on the Game page (`update_check`, on by default). The
+  The launcher asks GitHub's API once each time it opens (GitHub answers an address 60 requests an hour) and checks
+  the download against the size and SHA-256 GitHub gives; when GitHub turns the request away it says GitHub is busy
+  and to try again in a few minutes. The check is a switch on the Game page (`update_check`, on by default). The
   release a folder holds is `version.txt` beside the launcher, which `release.bat` and `tools/linux/release.sh` write
   into the packages; a build folder without one is never offered an update. On Linux the launcher downloads with
   `curl` (or `wget`) and unpacks with `tar`, as desktop Linux has them.
