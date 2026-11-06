@@ -89,6 +89,7 @@ his wall). After a test fails the next plays a fresh game. `--alone` plays every
 | The European release by Castlevania | `discs`, `install-eu` | its disc handed to CastlevaniaEU, which plays it |
 | Another release refused | `discs` | another release's xbe (a fan translation's): the message box says so; no copy: it asks for the game |
 | The release as a player installs it | `install-usa`, `install-eu` | the package alone (no game files in it, every program and library loading from it or the system, glibc 2.35 at most on Linux), the first start building the game code, a new game played |
+| Updates from the launcher | `update` | an install marked older offered the newest release on GitHub (this system's package), which `--update-apply` downloads, checks against GitHub's size and SHA-256 and puts in place: `version.txt` its tag, the launcher before kept in `update/previous`, the player's settings, saves and textures as they were |
 | NVIDIA DLSS in the Linux release | `install-dlss` (*Linux*) | the installed launcher downloading NVIDIA's DLSS SDK files from NVIDIA (each checked against its SHA-256), the game linking its bridge to them with the package's own clang and ld.lld, then `dlss-linux`'s checks |
 
 ## Checked by hand

@@ -21,6 +21,7 @@
 #include <shellapi.h>
 #include <urlmon.h>
 #include <wincodec.h>
+#include <wininet.h>
 #include <wrl/client.h>
 #else
 // Linux: an SDL window drawn with OpenGL, the graphics cards Vulkan's, pictures stb's (the SDK's linux/)
@@ -52,6 +53,7 @@ extern char** environ;
 #include <fstream>
 #include <cwchar>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -67,6 +69,7 @@ extern char** environ;
 #include <toml++/toml.hpp>
 
 #include "app/app.h"
+#include "app/window_icon.h"
 #include "kernel/disc.h"
 #include "../common/crest.h"
 #include "../common/marks.h"
@@ -310,6 +313,9 @@ struct Gpu {
     std::string name;
     bool d3d12 = false;
     bool software = false;  // Windows' own renderer on the CPU, no graphics driver installed
+    // the card and its driver as the game's pipeline cache names them (vendor:device:driver version), which its
+    // shaders were last prepared for when cache/shaders/pipelines.stamp says so
+    std::string identity;
 };
 
 #ifdef _WIN32
@@ -325,6 +331,13 @@ Gpu Describe(IDXGIAdapter1* a, bool d3d12) {
     if (a && SUCCEEDED(a->GetDesc1(&d))) {
         g.name = Utf8(d.Description);
         g.software = (d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) != 0;
+        // as the SDK's runtime/gpu/d3d12.cpp writes it (DeviceIdentity)
+        LARGE_INTEGER umd{};
+        a->CheckInterfaceSupport(__uuidof(IDXGIDevice), &umd);
+        char id[96];
+        std::snprintf(id, sizeof(id), "%04x:%04x:%u.%u.%u.%u", d.VendorId, d.DeviceId, unsigned(umd.HighPart >> 16),
+                      unsigned(umd.HighPart & 0xFFFF), unsigned(umd.LowPart >> 16), unsigned(umd.LowPart & 0xFFFF));
+        g.identity = id;
     }
     return g;
 }
@@ -375,6 +388,41 @@ DisplayHdr PrimaryHdr() {
         }
     }
     return last;
+}
+
+// Whether a graphics card traces rays as the game's renderer does (runtime/gpu/raytrace.cpp): DXR 1.1 and shader
+// model 6.5. Asked once a card, by its name (empty: the fastest). CV_NO_RAYS=1 pretends none does
+bool TracesRays(const std::string& name) {
+    static std::vector<std::pair<std::string, bool>> known;
+    for (auto& k : known)
+        if (k.first == name) return k.second;
+    bool yes = false;
+    Microsoft::WRL::ComPtr<IDXGIFactory1> factory;
+    Microsoft::WRL::ComPtr<IDXGIFactory6> f6;
+    Microsoft::WRL::ComPtr<IDXGIAdapter1> a;
+    if (!GetEnvironmentVariableW(L"CV_NO_RAYS", nullptr, 0) && SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+        factory.As(&f6);
+        for (UINT i = 0;; i++) {
+            HRESULT hr = f6 ? f6->EnumAdapterByGpuPreference(i, DXGI_GPU_PREFERENCE_HIGH_PERFORMANCE, IID_PPV_ARGS(&a))
+                            : factory->EnumAdapters1(i, &a);
+            if (FAILED(hr)) break;
+            Gpu g = Describe(a.Get(), true);
+            if (g.software || (!name.empty() && g.name != name)) continue;
+            Microsoft::WRL::ComPtr<ID3D12Device> dev;
+            if (SUCCEEDED(D3D12CreateDevice(a.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&dev)))) {
+                D3D12_FEATURE_DATA_D3D12_OPTIONS5 o5{};
+                D3D12_FEATURE_DATA_SHADER_MODEL sm{D3D_SHADER_MODEL_6_5};
+                yes = SUCCEEDED(dev->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS5, &o5, sizeof(o5))) &&
+                      o5.RaytracingTier >= D3D12_RAYTRACING_TIER_1_1 &&
+                      SUCCEEDED(dev->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL, &sm, sizeof(sm))) &&
+                      sm.HighestShaderModel >= D3D_SHADER_MODEL_6_5;
+                break;
+            }
+            if (!name.empty()) break;
+        }
+    }
+    known.push_back({name, yes});
+    return yes;
 }
 
 // what the game takes with no card named: the fastest, else the default adapter
@@ -483,6 +531,9 @@ Gpu Automatic() {
     if (!best) return {};
     return VulkanCards::Describe(best, v.Runs(best));
 }
+
+// Linux's build has no ray tracing (its shaders are made by the Windows SDK's dxc): no card traces rays here
+bool TracesRays(const std::string&) { return false; }
 
 #endif
 
@@ -718,19 +769,112 @@ uint32_t GameLanguageFor(const std::string& launcher) {
     return 1;
 }
 
+// The game's shaders prepared for this PC's graphics card before it starts (the SDK's runtime/gpu/pipeline_cache.h):
+// every pipeline the game draws with is listed (the release's pipelines.list, and the player's own in cache/shaders),
+// and made for a card and driver once; the stamp beside them says which. On a first run, another card or a new
+// driver, Play runs the game with --prepare-shaders first, which makes them all on every core and ends, so no room's
+// first frame waits for one (each took 10-25 ms, a hitch). Its progress is in cache/shaders/prepare.txt
+#ifdef _WIN32
+struct Prepare {
+    std::atomic<bool> running{false};
+    std::atomic<uint32_t> done{0}, total{0};
+    std::atomic<bool> skip{false};
+    std::thread worker;
+
+    static fs::path CacheDir() {
+        if (const wchar_t* v = _wgetenv(L"XBE_SHADER_CACHE"); v && *v) return v;
+        return ExeDir() / "cache" / "shaders";
+    }
+    // whether the card's pipelines need making: the stamp missing or for another card, driver or release list
+    static bool Needed(const Gpu& gpu) {
+        if (gpu.identity.empty() || GetEnvironmentVariableW(L"CV_NO_PREPARE", nullptr, 0)) return false;
+        std::error_code ec;
+        fs::path shipped = ExeDir() / "pipelines.list", own = CacheDir() / "pipelines.list";
+        bool any = fs::exists(shipped, ec) || fs::exists(own, ec);
+        if (!any) return false;  // nothing listed yet: the game lists them as it draws
+        uint64_t n = fs::file_size(shipped, ec);
+        std::string want = gpu.identity + "\nlist " + std::to_string(ec ? 0 : n) + "\n", have;
+        if (FILE* f = _wfopen((CacheDir() / "pipelines.stamp").c_str(), L"rb")) {
+            char buf[256];
+            size_t got = std::fread(buf, 1, sizeof(buf), f);
+            have.assign(buf, got);
+            std::fclose(f);
+        }
+        return have != want;
+    }
+
+    void Start(const fs::path& exe) {
+        if (running) return;
+        if (worker.joinable()) worker.join();
+        running = true;
+        skip = false;
+        done = total = 0;
+        worker = std::thread([this, exe] {
+            std::wstring cmd = L"\"" + exe.wstring() + L"\" --prepare-shaders";
+            STARTUPINFOW si{sizeof(si)};
+            PROCESS_INFORMATION pi{};
+            if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS,
+                                nullptr, exe.parent_path().c_str(), &si, &pi)) {
+                running = false;
+                return;
+            }
+            CloseHandle(pi.hThread);
+            fs::path progress = CacheDir() / "prepare.txt";
+            for (;;) {
+                DWORD w = WaitForSingleObject(pi.hProcess, 100);
+                if (FILE* f = _wfopen(progress.c_str(), L"rb")) {
+                    unsigned d = 0, t = 0;
+                    if (std::fscanf(f, "%u %u", &d, &t) == 2) {
+                        done = d;
+                        total = t;
+                    }
+                    std::fclose(f);
+                }
+                if (w == WAIT_OBJECT_0) break;
+                // skipped: the game makes the rest as it runs (in the background, before most are drawn)
+                if (skip) {
+                    TerminateProcess(pi.hProcess, 1);
+                    WaitForSingleObject(pi.hProcess, 2000);
+                    break;
+                }
+            }
+            CloseHandle(pi.hProcess);
+            running = false;
+        });
+    }
+    float Fraction() const { return total ? std::min(1.0f, float(done) / float(total)) : 0.0f; }
+    ~Prepare() {
+        skip = true;
+        if (worker.joinable()) worker.join();
+    }
+};
+#else
+// Linux: no step of its own (the SDK's pipeline library is D3D12's on Windows); the game makes its pipelines as it runs
+struct Prepare {
+    std::atomic<bool> running{false};
+    std::atomic<uint32_t> done{0}, total{0};
+    std::atomic<bool> skip{false};
+    static bool Needed(const Gpu&) { return false; }
+    void Start(const fs::path&) {}
+    float Fraction() const { return 0.0f; }
+};
+#endif
+
 // Frame generation's libraries (the SDK's runtime/gpu/framegen.h), which this game's download does not carry: the
 // player's own copy, downloaded from the vendor's official GitHub release into the game's folder with their licences.
 // AMD FSR 3: its signed DLLs beside the game, the loader, frame generation and the upscaler (the game's
-// anti-aliasing). NVIDIA DLSS: Streamline's release, its DLSS-G and DLSS files in streamline\ (frame generation, and
-// the game's anti-aliasing and upscaling).
+// anti-aliasing). NVIDIA DLSS: Streamline's release, its DLSS-G, DLSS and DLSS-RR files in streamline\ (frame
+// generation, the game's anti-aliasing and upscaling, and its Ray Reconstruction with ray tracing on).
 constexpr const wchar_t* kFsrRaw = L"https://raw.githubusercontent.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/v2.3.0/Kits/FidelityFX/";
 constexpr const char* kFsrLicence = "https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK/blob/v2.3.0/Kits/FidelityFX/docs/license.md";
 constexpr const wchar_t* kDlssZip = L"https://github.com/NVIDIA-RTX/Streamline/releases/download/v2.14.1/streamline-sdk-v2.14.1.zip";
 constexpr const char* kDlssLicence = "https://github.com/NVIDIA-RTX/Streamline/blob/v2.14.1/license.txt";
 const wchar_t* const kFsrFiles[] = {L"amd_fidelityfx_loader_dx12.dll", L"amd_fidelityfx_framegeneration_dx12.dll",
                                     L"amd_fidelityfx_upscaler_dx12.dll"};
-const wchar_t* const kDlssFiles[] = {L"sl.interposer.dll", L"sl.common.dll", L"sl.dlss_g.dll", L"sl.reflex.dll",
-                                     L"sl.pcl.dll",       L"nvngx_dlssg.dll", L"sl.dlss.dll",   L"nvngx_dlss.dll"};
+// the last two DLSS Ray Reconstruction's (ray tracing's light denoised by DLSS)
+const wchar_t* const kDlssFiles[] = {L"sl.interposer.dll", L"sl.common.dll",   L"sl.dlss_g.dll", L"sl.reflex.dll",
+                                     L"sl.pcl.dll",       L"nvngx_dlssg.dll", L"sl.dlss.dll",   L"nvngx_dlss.dll",
+                                     L"sl.dlss_d.dll",    L"nvngx_dlssd.dll"};
 
 #ifndef _WIN32
 // Linux: NVIDIA DLSS's files from NVIDIA's DLSS SDK on GitHub, which the game builds its bridge to NVIDIA's NGX from on
@@ -811,6 +955,251 @@ bool DlssCard(const std::string& name) {
 // any GeForce RTX (or NVIDIA RTX workstation card): DLSS anti-aliasing's
 bool RtxCard(const std::string& name) {
     return name.find("NVIDIA") != std::string::npos && name.find("RTX") != std::string::npos;
+}
+
+// The port's own updates (Updater, below): the newest release of the port on GitHub, looked up when the launcher
+// starts and offered on the Home page when it is not the one here. The release here is version.txt beside the
+// launcher, which release.bat writes into the package (the tag without its v: 1.4.0-qol10); a build without one is
+// a developer's and is never offered an update. An update replaces the program files alone (the exes, the launcher,
+// the compiler folder, the docs): the saves (hdd), castlevania.toml, the textures and the game files are never touched
+constexpr const char* kUpdateRepo = "jmafort/CastlevaniaCOD-PC";
+constexpr const char* kUpdateApi = "https://api.github.com/repos/jmafort/CastlevaniaCOD-PC/releases?per_page=10";
+constexpr const char* kUpdateReleases = "https://github.com/jmafort/CastlevaniaCOD-PC/releases";
+constexpr const char* kVersionFile = "version.txt";
+
+// a release of the port as GitHub lists it
+struct PortRelease {
+    std::string tag;     // without its v
+    std::string name;    // the release's title
+    std::string date;    // published, YYYY-MM-DD
+    std::string published;  // and the whole time, for the order
+    std::string page;    // its page on GitHub
+    std::string url;     // the package's download
+    std::string asset;   // the package's file name
+    std::string sha256;  // its digest as GitHub gives it (empty: none)
+    uint64_t size = 0;
+};
+
+// the release here (version.txt beside the launcher), empty for a developer's build
+std::string OwnRelease() {
+    std::ifstream f(ExeDir() / kVersionFile);
+    std::string v;
+    if (!f || !std::getline(f, v)) return {};
+    while (!v.empty() && (v.back() == '\r' || v.back() == ' ' || v.back() == '\t')) v.pop_back();
+    while (!v.empty() && (v.front() == ' ' || v.front() == '\t')) v.erase(v.begin());
+    if (!v.empty() && (v[0] == 'v' || v[0] == 'V')) v.erase(v.begin());
+    return v;
+}
+
+// GitHub's JSON, read for the few fields the update needs rather than parsed whole: a key's value in an object (a
+// string without its quotes and with \" \\ \/ \n undone, a number or true/false as written; empty when not there),
+// and an array's objects one by one, by their brackets, strings skipped
+namespace json {
+
+std::string Value(std::string_view obj, std::string_view key) {
+    std::string quoted = "\"" + std::string(key) + "\"";
+    size_t at = 0;
+    while ((at = obj.find(quoted, at)) != std::string_view::npos) {
+        size_t p = at + quoted.size();
+        while (p < obj.size() && (obj[p] == ' ' || obj[p] == '\t' || obj[p] == '\n' || obj[p] == '\r')) p++;
+        if (p >= obj.size() || obj[p] != ':') {  // the key as a value, somewhere else
+            at = p;
+            continue;
+        }
+        p++;
+        while (p < obj.size() && (obj[p] == ' ' || obj[p] == '\t' || obj[p] == '\n' || obj[p] == '\r')) p++;
+        if (p >= obj.size()) return {};
+        if (obj[p] == '"') {
+            std::string out;
+            for (p++; p < obj.size() && obj[p] != '"'; p++) {
+                if (obj[p] == '\\' && p + 1 < obj.size()) {
+                    char e = obj[++p];
+                    out += e == 'n' ? '\n' : e == 't' ? '\t' : e == 'r' ? '\r' : e;  // \u is left as it is
+                } else {
+                    out += obj[p];
+                }
+            }
+            return out;
+        }
+        size_t e = p;
+        while (e < obj.size() && obj[e] != ',' && obj[e] != '}' && obj[e] != ']' && obj[e] != ' ' && obj[e] != '\n')
+            e++;
+        return std::string(obj.substr(p, e - p));
+    }
+    return {};
+}
+
+// the objects of the array that starts at obj[from] (its [), each with its brackets; the nested ones are inside them
+std::vector<std::string_view> Objects(std::string_view obj, size_t from) {
+    std::vector<std::string_view> out;
+    if (from >= obj.size() || obj[from] != '[') return out;
+    int depth = 0;
+    size_t start = 0;
+    bool in_string = false;
+    for (size_t i = from + 1; i < obj.size(); i++) {
+        char c = obj[i];
+        if (in_string) {
+            if (c == '\\') i++;
+            else if (c == '"') in_string = false;
+            continue;
+        }
+        if (c == '"') in_string = true;
+        else if (c == '{' || c == '[') {
+            if (depth++ == 0) start = i;
+        } else if (c == '}' || c == ']') {
+            if (depth == 0) break;  // the array's own ]
+            if (--depth == 0) out.push_back(obj.substr(start, i + 1 - start));
+        }
+    }
+    return out;
+}
+
+// the array a key holds, as its objects
+std::vector<std::string_view> Array(std::string_view obj, std::string_view key) {
+    std::string quoted = "\"" + std::string(key) + "\"";
+    size_t at = obj.find(quoted);
+    if (at == std::string_view::npos) return {};
+    size_t p = obj.find('[', at);
+    return p == std::string_view::npos ? std::vector<std::string_view>{} : Objects(obj, p);
+}
+
+}  // namespace json
+
+// this system's package among a release's files: Windows' zip, or Linux's archive
+bool OwnPackage(const std::string& name) {
+    if (name.compare(0, 17, "CastlevaniaCOD-PC") != 0) return false;
+#ifdef _WIN32
+    return name.size() > 4 && name.compare(name.size() - 4, 4, ".zip") == 0 && name.find("linux") == std::string::npos;
+#else
+    constexpr std::string_view kEnd = "-linux.tar.xz";
+    return name.size() > kEnd.size() && name.compare(name.size() - kEnd.size(), kEnd.size(), kEnd) == 0;
+#endif
+}
+
+// the newest release of the port in GitHub's list, by when it was published (the list's own order is by the commit
+// each was tagged on, which a release made from an older commit falls behind in): a draft or a prerelease left out
+// (the port publishes none), and only one that has this system's package. False when none
+bool NewestRelease(const std::string& list, PortRelease& out) {
+    bool found = false;
+    for (std::string_view r : json::Objects(list, list.find('['))) {
+        if (json::Value(r, "draft") == "true" || json::Value(r, "prerelease") == "true") continue;
+        PortRelease rel;
+        rel.tag = json::Value(r, "tag_name");
+        if (!rel.tag.empty() && (rel.tag[0] == 'v' || rel.tag[0] == 'V')) rel.tag.erase(rel.tag.begin());
+        if (rel.tag.empty()) continue;
+        rel.name = json::Value(r, "name");
+        std::string published = json::Value(r, "published_at");  // ISO 8601, UTC: its order is the text's
+        rel.date = published.substr(0, 10);
+        rel.page = json::Value(r, "html_url");
+        for (std::string_view a : json::Array(r, "assets")) {
+            std::string name = json::Value(a, "name");
+            if (!OwnPackage(name)) continue;
+            rel.asset = name;
+            rel.url = json::Value(a, "browser_download_url");
+            rel.size = std::strtoull(json::Value(a, "size").c_str(), nullptr, 10);
+            std::string digest = json::Value(a, "digest");  // "sha256:<hex>"
+            if (digest.compare(0, 7, "sha256:") == 0) rel.sha256 = digest.substr(7);
+            break;
+        }
+        if (rel.url.empty()) continue;
+        if (!found || published > out.published) {
+            out = rel;
+            out.published = published;
+            found = true;
+        }
+    }
+    return found;
+}
+
+// what an update leaves alone: the player's own places and files, by their first folder or name under the game's
+// folder (the package has the assets and textures folders' notes only, which a player's folders need not take)
+bool UpdateKeeps(const fs::path& rel) {
+    static const char* const kKeep[] = {"assets", "textures", "hdd", "logs", "streamline", "licences",
+                                        "castlevania.toml", "update", "backup"};
+    std::string first = rel.begin()->string();
+    for (char& c : first) c = char(std::tolower(uint8_t(c)));
+    for (const char* k : kKeep)
+        if (first == k) return true;
+    return false;
+}
+
+// an update's files (the package unpacked in from) into the game's folder, each by two renames: the file here into
+// previous (a file in use, the launcher that runs and the libraries it loaded, may be renamed though not written), then
+// the unpacked one into its place (on the same volume: a rename). Nothing is copied over anything, so nothing is left
+// half written; on a failure what was moved aside is put back. Then the assets and textures folders' notes where those
+// folders are not there yet, and version.txt for the release it now is (a package from before release.bat and
+// release.sh wrote one has none). 0, or the failing step's error code
+int PutInPlace(const fs::path& from, const fs::path& game, const fs::path& previous, const std::string& tag) {
+    std::error_code ec;
+    fs::remove_all(previous, ec);
+    fs::create_directories(previous, ec);
+    std::vector<fs::path> moved;  // what went into previous, to put back on a failure
+    int failed = 0;
+    for (auto& e : fs::recursive_directory_iterator(from, ec)) {
+        if (!e.is_regular_file(ec)) continue;
+        fs::path rel = fs::relative(e.path(), from, ec);
+        if (ec || UpdateKeeps(rel)) continue;
+        // the compiler's work folder (not in a package): the recompiled objects stay, and the game's next start
+        // builds again only what the new executable changes
+        if (rel.begin()->string() == "compiler" && std::next(rel.begin()) != rel.end() &&
+            std::next(rel.begin())->string() == "work")
+            continue;
+        fs::path target = game / rel;
+        if (fs::exists(target, ec)) {
+            fs::create_directories((previous / rel).parent_path(), ec);
+            fs::rename(target, previous / rel, ec);
+            if (ec) {
+                failed = ec.value() ? ec.value() : 1;
+                break;
+            }
+            moved.push_back(rel);
+        }
+        fs::create_directories(target.parent_path(), ec);
+        fs::rename(e.path(), target, ec);
+        if (ec) {
+            failed = ec.value() ? ec.value() : 1;
+            break;
+        }
+    }
+    if (failed) {
+        // back as it was: what was moved aside returns over whatever took its place
+        for (const fs::path& rel : moved) {
+            fs::remove(game / rel, ec);
+            fs::rename(previous / rel, game / rel, ec);
+        }
+        return failed;
+    }
+    for (const char* d : {"assets", "textures"})
+        if (!fs::exists(game / d, ec) && fs::exists(from / d, ec)) fs::copy(from / d, game / d, fs::copy_options::recursive, ec);
+    std::ofstream v(game / kVersionFile);
+    v << tag << "\n";
+    return 0;
+}
+
+// the package's folder once unpacked: its one folder, else its root; empty when it is not the port's (its launcher
+// and USA executable not in it)
+fs::path PackageFolder(const fs::path& unpacked) {
+    std::error_code ec;
+    int folders = 0, files = 0;
+    fs::path only, from = unpacked;
+    for (auto& e : fs::directory_iterator(unpacked, ec)) {
+        if (e.is_directory(ec)) {
+            folders++;
+            only = e.path();
+        } else {
+            files++;
+        }
+    }
+    if (folders == 1 && files == 0) from = only;
+#ifdef _WIN32
+    const char* launcher = "CastlevaniaLauncher.exe";
+    const char* usa = "Castlevania.exe";
+#else
+    const char* launcher = "CastlevaniaLauncher";
+    const char* usa = "Castlevania";
+#endif
+    if (!fs::exists(from / launcher, ec) || !fs::exists(from / usa, ec)) return {};
+    return from;
 }
 
 #ifdef _WIN32
@@ -1003,6 +1392,177 @@ struct FrameGenDownload {
     }
 };
 
+// The port's own update (kUpdateRepo): Check looks up the newest release in the background and Apply brings it in,
+// each a thread of its own; the Home page draws the state. Apply: the package downloaded into update\ (a .part until
+// whole, then checked against the size and SHA-256 GitHub gives), unpacked there by Windows' tar, the exes and the
+// launcher here moved aside into update\previous (a running exe may be renamed, not written: so the launcher updates
+// itself), then the package's files copied over this folder but for the player's (UpdateKeeps) and the compiler's
+// work folder (not in the package: the recompiled objects stay, and the game's next start builds again only what the
+// new executable changes). Then the new launcher is started and this one closes
+struct Updater {
+    enum class State { Idle, Off, Developer, Checking, Unreachable, UpToDate, Available, Downloading, Installing, Restart, Failed };
+    std::atomic<State> state{State::Idle};
+    std::atomic<float> progress{0};
+    PortRelease latest;  // the newest release, from Check (read by the frame once state says so)
+    std::string own;    // the release here
+    std::string error;  // Failed's reason, a number
+    bool game_open = false;  // Failed as the game was running
+    std::thread worker;
+
+    bool Busy() const {
+        State s = state;
+        return s == State::Checking || s == State::Downloading || s == State::Installing;
+    }
+
+    // URLDownloadToFile keeps what it fetched: the list is asked for anew each time
+    static bool FetchFresh(const std::wstring& url, const fs::path& to, std::atomic<float>& progress, float from,
+                           float span, HRESULT& hr) {
+        DeleteUrlCacheEntryW(url.c_str());
+        FrameGenDownload::Progress p{};
+        p.out = &progress;
+        p.from = from;
+        p.span = span;
+        fs::path part = to;
+        part += L".part";
+        hr = URLDownloadToFileW(nullptr, url.c_str(), part.c_str(), 0, &p);
+        std::error_code ec;
+        if (FAILED(hr) || fs::file_size(part, ec) == 0) {
+            fs::remove(part, ec);
+            if (SUCCEEDED(hr)) hr = E_FAIL;
+            return false;
+        }
+        fs::remove(to, ec);
+        fs::rename(part, to, ec);
+        if (ec) hr = HRESULT_FROM_WIN32(ec.value());
+        return !ec;
+    }
+
+    void Check(bool enabled) {
+        if (Busy()) return;
+        if (worker.joinable()) worker.join();
+        own = OwnRelease();
+        if (!enabled) {
+            state = State::Off;
+            return;
+        }
+        if (own.empty()) {
+            state = State::Developer;
+            return;
+        }
+        state = State::Checking;
+        worker = std::thread([this] {
+            CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            std::error_code ec;
+            fs::path dir = ExeDir() / L"update";
+            fs::create_directories(dir, ec);
+            fs::path list = dir / L"releases.json";
+            HRESULT hr = S_OK;
+            State result = State::Unreachable;
+            if (FetchFresh(Wide(kUpdateApi), list, progress, 0, 1, hr)) {
+                std::ifstream f(list, std::ios::binary);
+                std::string text((std::istreambuf_iterator<char>(f)), {});
+                PortRelease r;
+                if (NewestRelease(text, r)) {
+                    latest = r;
+                    result = r.tag == own ? State::UpToDate : State::Available;
+                }
+            }
+            fs::remove(list, ec);
+            CoUninitialize();
+            state = result;
+        });
+    }
+
+    // the game is not running: its exe may be written (one that runs is held open)
+    static bool GameClosed() {
+        for (const wchar_t* exe : {L"Castlevania.exe", L"CastlevaniaEU.exe"}) {
+            fs::path p = ExeDir() / exe;
+            std::error_code ec;
+            if (!fs::exists(p, ec)) continue;
+            HANDLE h = CreateFileW(p.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
+            if (h == INVALID_HANDLE_VALUE) return false;
+            CloseHandle(h);
+        }
+        return true;
+    }
+
+    void Apply() {
+        if (Busy() || state != State::Available) return;
+        if (worker.joinable()) worker.join();
+        state = State::Downloading;
+        progress = 0;
+        error.clear();
+        game_open = false;
+        PortRelease r = latest;
+        worker = std::thread([this, r] {
+            CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            std::error_code ec;
+            fs::path game = ExeDir(), dir = game / L"update", unpacked = dir / L"unpacked";
+            fs::remove_all(unpacked, ec);
+            fs::create_directories(dir, ec);
+            fs::path zip = dir / Wide(r.asset);
+            HRESULT hr = S_OK;
+            bool ok = FetchFresh(Wide(r.url), zip, progress, 0, 0.9f, hr);
+            if (ok && r.size && fs::file_size(zip, ec) != r.size) {
+                ok = false;
+                hr = TRUST_E_BAD_DIGEST;
+            }
+            if (ok && !r.sha256.empty() && Sha256File(zip) != r.sha256) {
+                ok = false;
+                hr = TRUST_E_BAD_DIGEST;
+            }
+            if (ok) {
+                state = State::Installing;
+                fs::create_directories(unpacked, ec);
+                ok = FrameGenDownload::Extract(zip, unpacked, {});
+                if (!ok) hr = E_FAIL;
+            }
+            fs::path from = ok ? PackageFolder(unpacked) : fs::path();
+            if (ok && from.empty()) {
+                ok = false;
+                hr = E_INVALIDARG;
+            }
+            if (ok && !GameClosed()) {
+                ok = false;
+                game_open = true;
+                hr = HRESULT_FROM_WIN32(ERROR_SHARING_VIOLATION);
+            }
+            if (ok) {
+                if (int e = PutInPlace(from, game, dir / L"previous", r.tag)) {
+                    ok = false;
+                    hr = HRESULT_FROM_WIN32(e);
+                } else {
+                    progress = 0.98f;
+                }
+            }
+            fs::remove_all(unpacked, ec);
+            if (ok) fs::remove(zip, ec);
+            progress = 1;
+            if (!ok) error = std::to_string(uint32_t(hr));
+            CoUninitialize();
+            state = ok ? State::Restart : State::Failed;
+        });
+    }
+
+    // the new launcher in this one's place, told what it was updated to; false when it could not be started
+    bool Restart() const {
+        fs::path exe = ExeDir() / L"CastlevaniaLauncher.exe";
+        std::wstring cmd = L"\"" + exe.wstring() + L"\" --updated " + Wide(latest.tag);
+        STARTUPINFOW si{sizeof(si)};
+        PROCESS_INFORMATION pi{};
+        if (!CreateProcessW(exe.c_str(), cmd.data(), nullptr, nullptr, FALSE, 0, nullptr, ExeDir().c_str(), &si, &pi))
+            return false;
+        AllowSetForegroundWindow(pi.dwProcessId);
+        CloseHandle(pi.hThread);
+        CloseHandle(pi.hProcess);
+        return true;
+    }
+
+    ~Updater() {
+        if (worker.joinable()) worker.join();
+    }
+};
+
 #else
 // SHA-256 (FIPS 180-4), for the downloads' pins
 struct Sha256 {
@@ -1098,6 +1658,57 @@ std::string Sha256File(const fs::path& file) {
     return s.Hex();
 }
 
+// url to file by the system's curl, else its wget, through a .part beside it, so a file is whole or not there; its
+// progress by the part's size (when the size is known). code: the tool's exit code, 127 when there is neither
+bool FetchUrl(const std::string& url, const fs::path& to, uint64_t size, std::atomic<float>& progress, float from,
+              float span, int& code) {
+    fs::path part = to;
+    part += ".part";
+    std::error_code ec;
+    fs::remove(part, ec);
+    code = 127;
+    for (int tool = 0; tool < 2; tool++) {
+        std::vector<std::string> args =
+            tool == 0 ? std::vector<std::string>{"curl", "-fsSL", "--retry", "2", "--connect-timeout", "30", "-o", part.string(), url}
+                      : std::vector<std::string>{"wget", "-q", "-t", "3", "-T", "30", "-O", part.string(), url};
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        if (posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ) != 0) continue;  // not here: the other
+        int status = 0;
+        for (;;) {
+            pid_t r = waitpid(pid, &status, WNOHANG);
+            if (r == pid || (r < 0 && errno != EINTR)) break;
+            uint64_t have = fs::file_size(part, ec);
+            if (!ec && size) progress = from + span * float(std::min(1.0, double(have) / double(size)));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+        if (code == 0 && fs::file_size(part, ec) > 0 && !ec) {
+            fs::rename(part, to, ec);
+            if (!ec) return true;
+            code = 1;
+        }
+        fs::remove(part, ec);
+        return false;  // the tool ran and failed: the other would too
+    }
+    return false;
+}
+
+// a program run to its end: its exit code, 127 when it could not be started
+int RunTool(std::vector<std::string> args) {
+    std::vector<char*> argv;
+    for (std::string& a : args) argv.push_back(a.data());
+    argv.push_back(nullptr);
+    pid_t pid = 0;
+    if (posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ) != 0) return 127;
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
 // Linux: NVIDIA DLSS's files (kDlssSdkFiles) by the system's curl, else its wget
 struct FrameGenDownload {
     std::atomic<bool> running{false};
@@ -1106,41 +1717,8 @@ struct FrameGenDownload {
     std::string result;
     std::thread worker;
 
-    // url to file through a .part beside it, so a file is whole or not there; its progress by the part's size. code: the
-    // tool's exit code, 127 when there is neither
     bool Fetch(const std::string& url, const fs::path& to, uint64_t size, float from, float span, int& code) {
-        fs::path part = to;
-        part += ".part";
-        std::error_code ec;
-        fs::remove(part, ec);
-        code = 127;
-        for (int tool = 0; tool < 2; tool++) {
-            std::vector<std::string> args =
-                tool == 0 ? std::vector<std::string>{"curl", "-fsSL", "--retry", "2", "--connect-timeout", "30", "-o", part.string(), url}
-                          : std::vector<std::string>{"wget", "-q", "-t", "3", "-T", "30", "-O", part.string(), url};
-            std::vector<char*> argv;
-            for (std::string& a : args) argv.push_back(a.data());
-            argv.push_back(nullptr);
-            pid_t pid = 0;
-            if (posix_spawnp(&pid, argv[0], nullptr, nullptr, argv.data(), environ) != 0) continue;  // not here: the other
-            int status = 0;
-            for (;;) {
-                pid_t r = waitpid(pid, &status, WNOHANG);
-                if (r == pid || (r < 0 && errno != EINTR)) break;
-                uint64_t have = fs::file_size(part, ec);
-                if (!ec && size) progress = from + span * float(std::min(1.0, double(have) / double(size)));
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            }
-            code = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-            if (code == 0 && fs::file_size(part, ec) > 0 && !ec) {
-                fs::rename(part, to, ec);
-                if (!ec) return true;
-                code = 1;
-            }
-            fs::remove(part, ec);
-            return false;  // the tool ran and failed: the other would too
-        }
-        return false;
+        return FetchUrl(url, to, size, progress, from, span, code);
     }
 
     void Start(uint32_t k, fs::path game) {
@@ -1178,6 +1756,142 @@ struct FrameGenDownload {
         });
     }
     ~FrameGenDownload() {
+        if (worker.joinable()) worker.join();
+    }
+};
+
+// Linux: the port's own update, as on Windows (kUpdateRepo): Check looks up the newest release by curl (else wget),
+// Apply downloads its Linux archive into update/ (checked against the size and SHA-256 GitHub gives), unpacks it there
+// by the system's tar, and puts its files in place by the same renames (PutInPlace: a running program's file may be
+// renamed, and the launcher's own is). Then the new launcher is started and this one closes
+struct Updater {
+    enum class State { Idle, Off, Developer, Checking, Unreachable, UpToDate, Available, Downloading, Installing, Restart, Failed };
+    std::atomic<State> state{State::Idle};
+    std::atomic<float> progress{0};
+    PortRelease latest;  // the newest release, from Check (read by the frame once state says so)
+    std::string own;    // the release here
+    std::string error;  // Failed's reason, a number
+    bool game_open = false;  // Failed as the game was running
+    std::thread worker;
+
+    bool Busy() const {
+        State s = state;
+        return s == State::Checking || s == State::Downloading || s == State::Installing;
+    }
+
+    void Check(bool enabled) {
+        if (Busy()) return;
+        if (worker.joinable()) worker.join();
+        own = OwnRelease();
+        if (!enabled) {
+            state = State::Off;
+            return;
+        }
+        if (own.empty()) {
+            state = State::Developer;
+            return;
+        }
+        state = State::Checking;
+        worker = std::thread([this] {
+            std::error_code ec;
+            fs::path dir = ExeDir() / "update";
+            fs::create_directories(dir, ec);
+            fs::path list = dir / "releases.json";
+            int code = 0;
+            State result = State::Unreachable;
+            if (FetchUrl(kUpdateApi, list, 0, progress, 0, 1, code)) {
+                std::ifstream f(list, std::ios::binary);
+                std::string text((std::istreambuf_iterator<char>(f)), {});
+                PortRelease r;
+                if (NewestRelease(text, r)) {
+                    latest = r;
+                    result = r.tag == own ? State::UpToDate : State::Available;
+                }
+            }
+            fs::remove(list, ec);
+            state = result;
+        });
+    }
+
+    // the game is not running from this folder: no process whose program is its Castlevania or CastlevaniaEU
+    static bool GameClosed() {
+        std::error_code ec;
+        fs::path usa = fs::weakly_canonical(ExeDir() / "Castlevania", ec);
+        fs::path eu = fs::weakly_canonical(ExeDir() / "CastlevaniaEU", ec);
+        for (auto& e : fs::directory_iterator("/proc", ec)) {
+            std::string pid = e.path().filename().string();
+            if (pid.empty() || !std::isdigit(uint8_t(pid[0]))) continue;
+            std::error_code rec;
+            fs::path exe = fs::read_symlink(e.path() / "exe", rec);
+            if (!rec && (exe == usa || exe == eu)) return false;
+        }
+        return true;
+    }
+
+    void Apply() {
+        if (Busy() || state != State::Available) return;
+        if (worker.joinable()) worker.join();
+        state = State::Downloading;
+        progress = 0;
+        error.clear();
+        game_open = false;
+        PortRelease r = latest;
+        worker = std::thread([this, r] {
+            std::error_code ec;
+            fs::path game = ExeDir(), dir = game / "update", unpacked = dir / "unpacked";
+            fs::remove_all(unpacked, ec);
+            fs::create_directories(dir, ec);
+            fs::path archive = dir / r.asset;
+            int code = 0;
+            bool ok = FetchUrl(r.url, archive, r.size, progress, 0, 0.9f, code);
+            if (ok && ((r.size && fs::file_size(archive, ec) != r.size) ||
+                       (!r.sha256.empty() && Sha256File(archive) != r.sha256))) {
+                ok = false;  // not the file GitHub has: never used
+                code = 200;
+            }
+            if (ok) {
+                state = State::Installing;
+                fs::create_directories(unpacked, ec);
+                code = RunTool({"tar", "-xJf", archive.string(), "-C", unpacked.string()});
+                ok = code == 0;
+            }
+            fs::path from = ok ? PackageFolder(unpacked) : fs::path();
+            if (ok && from.empty()) {
+                ok = false;
+                code = 201;
+            }
+            if (ok && !GameClosed()) {
+                ok = false;
+                game_open = true;
+                code = EBUSY;
+            }
+            if (ok) {
+                if (int e = PutInPlace(from, game, dir / "previous", r.tag)) {
+                    ok = false;
+                    code = e;
+                } else {
+                    progress = 0.98f;
+                }
+            }
+            fs::remove_all(unpacked, ec);
+            if (ok) fs::remove(archive, ec);
+            progress = 1;
+            if (!ok) error = std::to_string(code);
+            state = ok ? State::Restart : State::Failed;
+        });
+    }
+
+    // the new launcher in this one's place, told what it was updated to; false when it could not be started
+    bool Restart() const {
+        std::vector<std::string> args{(ExeDir() / "CastlevaniaLauncher").string(), "--updated", latest.tag};
+        std::vector<char*> argv;
+        for (std::string& a : args) argv.push_back(a.data());
+        argv.push_back(nullptr);
+        pid_t pid = 0;
+        return posix_spawn(&pid, argv[0], nullptr, nullptr, argv.data(), environ) == 0;
+    }
+
+    ~Updater() {
         if (worker.joinable()) worker.join();
     }
 };
@@ -1223,9 +1937,13 @@ struct Settings {
     uint32_t upscaling = 0;             // 0 native, 1 quality, 2 balanced, 3 performance
     uint32_t sharpening = 30;           // percent, AMD FSR's
     uint32_t ambient_occlusion = 0;     // 0 off, 1 low, 2 high
+    uint32_t ray_tracing = 0;           // 0 off, 1 ambient occlusion, 5 lighting (menu.cpp); reflections are not offered
+    uint32_t rt_lighting = 100;         // percent, how strongly its lighting shows (menu.cpp)
+    uint32_t rt_quality = 2;            // 0 low, 1 medium, 2 high: how much ray tracing a frame does (menu.cpp)
     uint32_t surface_depth = 0;         // 0 off, 1 low, 2 high: a pack's material maps seen into (parallax)
     std::string gpu;                    // the graphics card by its name, empty the fastest (the SDK's)
     std::string release;                // the release played, by its executable's name, when there are more (the SDK's)
+    bool update_check = true;           // the launcher's own: the port's newest release looked up on GitHub at its start
     toml::table rest;
 
     fs::path File() const { return ExeDir() / kSettings; }
@@ -1275,9 +1993,15 @@ struct Settings {
         upscaling = std::min(rest["upscaling"].value_or(upscaling), 3u);
         sharpening = std::min(rest["sharpening"].value_or(sharpening), 100u);
         ambient_occlusion = std::min(rest["ambient_occlusion"].value_or(ambient_occlusion), 2u);
+        // bits (1 ambient occlusion, 2 reflections, 4 lighting) as the choices offer them: off, ambient occlusion, lighting
+        uint32_t rt = rest["ray_tracing"].value_or(ray_tracing);
+        ray_tracing = (rt & 6) ? 5u : (rt & 1);  // an older build's lighting and reflections (7): lighting
+        rt_lighting = std::min(rest["ray_tracing_lighting"].value_or(rt_lighting), 200u);
+        rt_quality = std::min(rest["ray_tracing_quality"].value_or(rt_quality), 2u);
         surface_depth = std::min(rest["surface_depth"].value_or(surface_depth), 2u);
         gpu = rest["gpu"].value_or(gpu);
         release = rest["release"].value_or(release);
+        update_check = rest["update_check"].value_or(update_check);
     }
 
     bool Save() {
@@ -1319,9 +2043,13 @@ struct Settings {
         rest.insert_or_assign("upscaling", int64_t(upscaling));
         rest.insert_or_assign("sharpening", int64_t(sharpening));
         rest.insert_or_assign("ambient_occlusion", int64_t(ambient_occlusion));
+        rest.insert_or_assign("ray_tracing", int64_t(ray_tracing));
+        rest.insert_or_assign("ray_tracing_lighting", int64_t(rt_lighting));
+        rest.insert_or_assign("ray_tracing_quality", int64_t(rt_quality));
         rest.insert_or_assign("surface_depth", int64_t(surface_depth));
         rest.insert_or_assign("gpu", gpu);
         rest.insert_or_assign("release", release);
+        rest.insert_or_assign("update_check", update_check);
         std::ofstream f(File());
         f << rest << "\n";
         return bool(f);
@@ -1334,6 +2062,7 @@ struct Settings {
         d.language = language;
         d.game_language = game_language;
         d.release = release;  // which game, not how it plays
+        d.update_check = update_check;
         *this = std::move(d);
     }
 };
@@ -2383,6 +3112,24 @@ Picture LoadCrest() {
 #endif
 }
 
+// the launcher window's icon (the taskbar's, the title bar's) from the crest made from the player's files, for a
+// launcher without one of its own (a release, Linux)
+void SetWindowIcon(const std::vector<uint8_t>& px, int size) {
+#ifdef _WIN32
+    static HICON big = nullptr, little = nullptr;
+    HICON old_big = big, old_little = little;
+    app::icon::Set(g_hwnd, px, size, &big, &little);
+    if (old_big) DestroyIcon(old_big);
+    if (old_little) DestroyIcon(old_little);
+#else
+    std::vector<uint8_t> copy = px;
+    SDL_Surface* s = SDL_CreateSurfaceFrom(size, size, SDL_PIXELFORMAT_BGRA32, copy.data(), size * 4);
+    if (!s) return;
+    SDL_SetWindowIcon(g_window, s);
+    SDL_DestroySurface(s);
+#endif
+}
+
 // a progress bar with its text still, in its middle: ImGui's own moves the text along with the fill
 void Progress(float fraction, ImVec2 size, const char* text) {
     ImGui::ProgressBar(fraction, size, "");
@@ -2393,8 +3140,9 @@ void Progress(float fraction, ImVec2 size, const char* text) {
 
 // the crest made from the player's own files, for a launcher without the icon (Linux, a release): as the build makes
 // the icon (src/common/crest.h), the HD pack's picture of it in its ring of runes, else the xbe's title image (assets'
-// default.xbe, or a disc image's); at the icon's largest size, 256. None without either
-Picture MakeCrest(const Files& f) {
+// default.xbe, or a disc image's); at the icon's largest size, 256. None without either. bgra: its pixels too, for the
+// window's icon
+Picture MakeCrest(const Files& f, std::vector<uint8_t>* bgra = nullptr) {
     try {
         crest::Image art;
         std::vector<uint8_t> px;
@@ -2424,7 +3172,9 @@ Picture MakeCrest(const Files& f) {
             return {};
         }
         if (art.w != 256) art = crest::Resize(art, 256);
-        return Upload(crest::Bgra(art), 256, 256);
+        std::vector<uint8_t> out = crest::Bgra(art);
+        if (bgra) *bgra = out;
+        return Upload(out, 256, 256);
     } catch (const std::string&) {
         return {};
     }
@@ -2489,10 +3239,15 @@ public:
         auto_gpu_ = Automatic();
         modes_ = Resolutions();
         LoadArt();
+        updater_.Check(settings_.update_check);
     }
 
     // the page shown, by the sidebar's order: --page on the command line, for screenshots of a page
     void ShowPage(int page) { page_ = page; }
+    // --updated <release>: this launcher was just put in place by the one before it
+    void Updated(const std::string& tag) {
+        Note(F("Updated to {}. The game builds its code again on its next start.", {tag}));
+    }
 
     // false: the launcher closes
     bool Frame() {
@@ -2541,6 +3296,16 @@ public:
         ImGui::End();
         AutoSave();
         g_marks.Write(page_);
+        // the update is in place: the new launcher takes over and this one closes
+        if (updater_.state == Updater::State::Restart) {
+            updater_.state = Updater::State::Idle;
+            if (updater_.Restart()) keep = false;
+#ifdef _WIN32
+            else Note(F("The update failed (error {}): check the connection and try again.", {std::to_string(GetLastError())}));
+#else
+            else Note(F("The update failed (error {}): check the connection and try again.", {std::to_string(errno)}));
+#endif
+        }
         return keep;
     }
 
@@ -2561,8 +3326,9 @@ private:
                std::to_string(s.fog_distance) + "|" + s.release + "|" +
                std::to_string(s.hdr) + std::to_string(s.hdr_peak_nits) + "|" + std::to_string(s.hdr_scene_nits) + "|" +
                std::to_string(s.frame_generation) + "|" + std::to_string(s.menu_spread) + std::to_string(s.antialiasing) +
-               std::to_string(s.upscaling) + std::to_string(s.ambient_occlusion) + std::to_string(s.surface_depth) + "|" +
-               std::to_string(s.sharpening) + "|" + std::to_string(s.hd_movies) + std::to_string(s.movie_view);
+               std::to_string(s.upscaling) + std::to_string(s.ambient_occlusion) + std::to_string(s.surface_depth) + std::to_string(s.ray_tracing) + "|" + std::to_string(s.rt_lighting) + std::to_string(s.rt_quality) + "|" +
+               std::to_string(s.sharpening) + "|" + std::to_string(s.hd_movies) + std::to_string(s.movie_view) + "|" +
+               std::to_string(s.update_check);
     }
 
     void AutoSave() {
@@ -2699,6 +3465,63 @@ private:
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", T("The release Play starts, of those in your game files"));
     }
 
+    // the port's own update (Updater): where it stands, and the button that brings it in; one row, as the pack's
+    void UpdateCard() {
+        using State = Updater::State;
+        State st = updater_.state;
+        BeginCard("update", S(12));
+        float row = S(38), y = ImGui::GetCursorPosY(), mid = y + (row - g_semi->FontSize) * 0.5f;
+        ImGui::SetCursorPosY(mid);
+        Text(g_semi, kText, T("Updates"));
+        ImGui::SameLine(0, S(26));
+        ImGui::SetCursorPosY(mid);
+        const PortRelease& r = updater_.latest;
+        switch (st) {
+            case State::Off: Status(kIconCheck, kMuted, T("Update checks are off.")); break;
+            case State::Developer: Status(kIconCheck, kMuted, T("Development build: no update checks.")); break;
+            case State::Checking: Status(kIconGlobe, kMuted, T("Checking for updates...")); break;
+            case State::Unreachable: Status(kIconWarn, kAmber, T("Could not reach GitHub to check for updates.")); break;
+            case State::UpToDate: Status(kIconCheck, kGreen, F("Up to date ({})", {updater_.own})); break;
+            case State::Available:
+                Status(kIconWarn, kAmber, F("Update available: {} (you have {})", {r.tag + (r.date.empty() ? "" : ", " + r.date), updater_.own}));
+                break;
+            case State::Downloading:
+                Progress(updater_.progress, {S(420), S(30)}, F("Downloading {}...", {r.asset}).c_str());
+                break;
+            case State::Installing: Progress(updater_.progress, {S(420), S(30)}, T("Unpacking and installing...")); break;
+            case State::Restart: Status(kIconCheck, kGreen, T("Restarting the launcher...")); break;
+            case State::Failed:
+                Status(kIconWarn, kRed, updater_.game_open ? T("Close the game before updating.")
+                                            : F("The update failed (error {}): check the connection and try again.", {updater_.error}));
+                break;
+            default: break;
+        }
+        // the buttons at the row's right: the update, and its notes on GitHub
+        if (st == State::Available || st == State::Failed) {
+            const char* update = T("Update");
+            const char* notes = T("Release notes");
+            float bw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, update).x + S(40) + row * 0.6f;
+            float nw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, notes).x + S(40) + row * 0.6f;
+            ImGui::SameLine();
+            ImGui::SetCursorPos({ImGui::GetContentRegionMax().x - bw - nw - S(10), y});
+            if (Button(notes, {nw, row}, Kind::Secondary) && !r.page.empty()) Open(Wide(r.page));
+            ImGui::SameLine(0, S(10));
+            ImGui::SetCursorPosY(y);
+            ImGui::BeginDisabled(import_.running || prepare_.running);
+            if (Button(update, {bw, row}, Kind::Primary)) {
+                if (st == State::Failed) updater_.state = State::Available;
+                updater_.Apply();
+            }
+            ImGui::EndDisabled();
+            ImGui::SetCursorPosY(y + row);
+            ControlNote(kMuted, T("Your saves, settings and textures stay as they are. The game builds its code again on its next start."));
+        } else {
+            ImGui::SetCursorPosY(y + row);
+        }
+        ImGui::Dummy({0, 0});
+        EndCard();
+    }
+
     bool HomePage() {
         // the title screen: night and fog, the crest faint behind, the logo
         float w = ImGui::GetContentRegionAvail().x, h = S(322);
@@ -2733,10 +3556,25 @@ private:
 
         ImGui::SetCursorScreenPos(a + ImVec2(S(30), h - S(26) - S(54)));
         bool keep = true, ready = files_.Playable();
-        ImGui::BeginDisabled(!ready || import_.running);
-        if (Button(T("Play"), {S(230), S(54)}, Kind::Primary, g_button)) keep = Play();
-        g_marks.Mark("play");
-        ImGui::EndDisabled();
+        if (prepare_.running) {
+            // the shaders being prepared, then the game: the bar where Play was, and a way past it
+            uint32_t done = prepare_.done, total = prepare_.total;
+            std::string bar = total ? F("Preparing shaders for your graphics card...  {} / {}",
+                                        {std::to_string(done), std::to_string(total)})
+                                    : T("Preparing shaders for your graphics card...");
+            ImGui::ProgressBar(prepare_.Fraction(), {S(460), S(54)}, bar.c_str());
+            ImGui::SameLine(0, S(14));
+            if (Button(T("Skip"), {0, S(54)}, Kind::Secondary)) prepare_.skip = true;
+        } else {
+            if (play_after_prepare_) {
+                play_after_prepare_ = false;
+                keep = Launch();
+            }
+            ImGui::BeginDisabled(!ready || import_.running);
+            if (Button(T("Play"), {S(230), S(54)}, Kind::Primary, g_button)) keep = Play();
+            g_marks.Mark("play");
+            ImGui::EndDisabled();
+        }
         float buttons_mid = ImGui::GetItemRectMax().y - S(54) * 0.5f;  // for what is beside them
         if (!ready) {
             ImGui::SameLine(0, S(22));
@@ -2748,6 +3586,7 @@ private:
         ImVec2 end = ImGui::GetItemRectMax();
         ImGui::SetCursorScreenPos({end.x + S(20), buttons_mid - g_semi->FontSize * 0.5f});
         if (!UsedGpu().d3d12) Status(kIconWarn, kRed, T(CV_WIN_LINUX("No Direct3D 12", "No Vulkan")));
+        else if (prepare_.running) Status(kIconCheck, kGreen, T("Once, for this card and driver"));
         else if (ready) Status(kIconCheck, kGreen, T("Ready to play"));
         else if (!files_.exe) Status(kIconWarn, kRed, T(CV_WIN_LINUX("Castlevania.exe is missing", "Castlevania is missing")));
         else Status(kIconWarn, kAmber, T("Game files needed"));
@@ -2783,6 +3622,8 @@ private:
         ImGui::SetCursorPosY(y + row);
         ImGui::Dummy({0, 0});
         EndCard();
+
+        UpdateCard();
 
         // what is set, at a glance; each opens its page
         Label(T("CURRENT SETUP"));
@@ -3106,6 +3947,38 @@ private:
                      true);
         Segmented<uint32_t>("ao", settings_.ambient_occlusion, {0, 1, 2}, {T("Off"), T("Low"), T("High")});
         EndSetting();
+        {
+            bool rays = TracesRays(settings_.gpu);
+            BeginOff(!aa || !rays);
+            BeginSetting(T("Ray tracing"), T("Rays through the room itself. Ambient occlusion: found from the room "
+                                             "rather than from what the screen shows, so it holds at the screen's "
+                                             "edges and behind things. Lighting adds the light the room's surfaces "
+                                             "throw onto each other: water's on the stone beside it, a torchlit wall's "
+                                             "on the floor. Needs a graphics card with DirectX ray tracing."),
+                         true);
+            Segmented<uint32_t>("rt", settings_.ray_tracing, {0, 1, 5}, {T("Off"), T("Ambient occlusion"), T("Lighting")});
+            EndOff();
+            if (!rays) ControlNote(kAmber, T("This graphics card has no DirectX ray tracing."));
+            else if (!aa) ControlNote(kAmber, T("Needs anti-aliasing on."));
+            else if ((settings_.ray_tracing & 1) && !settings_.ambient_occlusion)
+                ControlNote(kAmber, T("Ambient occlusion is off: only the lighting is traced."));
+            EndSetting();
+            BeginOff(!aa || !rays || !(settings_.ray_tracing & 4));
+            BeginSetting(T("Lighting strength"),
+                         T("How strongly ray tracing's lighting shows: the light the room's surfaces throw onto each "
+                           "other, in place of the flat fill the game lit each room with. 100% keeps each room as "
+                           "bright as the game made it; more brings out the glow and the shade."));
+            Slider("rtlight", settings_.rt_lighting, 0, 200,
+                   settings_.rt_lighting ? std::to_string(settings_.rt_lighting) + "%" : std::string(T("Off")));
+            EndOff();
+            if (rays && aa && !(settings_.ray_tracing & 4)) ControlNote(kMuted, T("Needs ray tracing's Lighting."));
+            EndSetting();
+            BeginOff(!aa || !rays || !settings_.ray_tracing);
+            BeginSetting(T("Ray tracing quality"), T("How much ray tracing does each frame, for slower graphics cards (AMD's, Intel's, a handheld's). Low lights the room with fewer rays at a smaller size, reaches less far and reflects only the smoothest surfaces; High does all of it."));
+            Segmented<uint32_t>("rtq", settings_.rt_quality, {0, 1, 2}, {T("Low"), T("Medium"), T("High")});
+            EndOff();
+            EndSetting();
+        }
         BeginSetting(T("Anisotropic filtering"), T("Keeps floors and walls sharp where they are seen at an angle. It costs "
                                                    "little."));
         Segmented<uint32_t>("aniso", settings_.aniso, {0, 2, 4, 8, 16}, {T("Off"), "2x", "4x", "8x", "16x"});
@@ -3324,6 +4197,12 @@ private:
         BeginSetting(T("Keep launcher open"), T("Leave this window open while the game runs."));
         ToggleRight("keep", settings_.keep_open);
         EndSetting();
+#ifdef _WIN32
+        BeginSetting(T("Check for updates on start"),
+                     T("Looks up the newest release on GitHub each time the launcher opens and offers it on the Home page. An update replaces only the program files: saves, settings and textures are never touched."));
+        ToggleRight("updates", settings_.update_check);
+        EndSetting();
+#endif
         EndCard();
     }
 
@@ -3458,6 +4337,17 @@ private:
             Note(T("Could not write the settings file"));
             return true;
         }
+        // a first run, another card or a new driver: the shaders prepared first, then the game (HomePage)
+        if (Prepare::Needed(UsedGpu())) {
+            prepare_.Start(files_.Player(settings_.release));
+            play_after_prepare_ = true;
+            return true;
+        }
+        return Launch();
+    }
+
+    // the game started; false: the launcher closes (unless kept open)
+    bool Launch() {
         fs::path exe = files_.Player(settings_.release);
 #ifndef _WIN32
         std::string path = exe.string(), dir = ExeDir().string();
@@ -3562,7 +4452,9 @@ private:
         if (!icon_ && from != crest_from_) {
             crest_.Release();
             crest_from_ = from;
-            crest_ = MakeCrest(files_);
+            std::vector<uint8_t> px;
+            crest_ = MakeCrest(files_, &px);
+            if (!px.empty()) SetWindowIcon(px, 256);  // the taskbar's too
         }
         if (files_.logo == logo_file_) return;
         logo_.Release();
@@ -3583,8 +4475,11 @@ private:
     std::mutex picked_lock_;
     fs::path picked_;  // the dialog's file, for the next frame (Picked)
 #endif
+    Prepare prepare_;
+    bool play_after_prepare_ = false;
     std::vector<Res> modes_;
     FrameGenDownload fg_download_;
+    Updater updater_;
     std::string status_, saved_, shown_language_;
     double status_time_ = -100;
     bool rescan_ = false;
@@ -3634,6 +4529,28 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         d.Start(kind, ExeDir());
         if (d.worker.joinable()) d.worker.join();
         return HaveFrameGen(ExeDir(), kind) ? 0 : 1;
+    }
+    // --update-check: the newest release looked up without the window, the answer in update\check.txt (the state and
+    // the release); exit code 0 up to date, 3 an update available, 2 a developer build, 1 GitHub not reached.
+    // --update-apply: the update brought in too (the launcher is not restarted); exit code 0 once it is in place
+    if (std::wcsstr(GetCommandLineW(), L"--update-check") || std::wcsstr(GetCommandLineW(), L"--update-apply")) {
+        bool apply = std::wcsstr(GetCommandLineW(), L"--update-apply") != nullptr;
+        Updater u;
+        u.Check(true);
+        if (u.worker.joinable()) u.worker.join();
+        Updater::State s = u.state;
+        if (apply && s == Updater::State::Available) {
+            u.Apply();
+            if (u.worker.joinable()) u.worker.join();
+            s = u.state;
+        }
+        std::error_code ec;
+        fs::create_directories(ExeDir() / L"update", ec);
+        std::ofstream out(ExeDir() / L"update" / L"check.txt");
+        out << int(s) << " " << u.own << " " << u.latest.tag << " " << u.latest.asset << " " << u.error << "\n";
+        return s == Updater::State::UpToDate || s == Updater::State::Restart ? 0
+               : s == Updater::State::Available ? 3
+               : s == Updater::State::Developer ? 2 : 1;
     }
     float scale = float(GetDpiForSystem()) / 96.0f;
     {
@@ -3703,6 +4620,12 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
                                                     L"textures", L"game", L"controls", L"files"};
     for (int i = 0; i < kPageCount; i++)
         if (std::wcsstr(GetCommandLineW(), (std::wstring(L"--page ") + kPageNames[i]).c_str())) launcher.ShowPage(i);
+    // --updated <release>: started by the launcher before, which put this one in place (Updater)
+    if (const wchar_t* at = std::wcsstr(GetCommandLineW(), L"--updated ")) {
+        std::wstring tag(at + 10);
+        size_t end = tag.find(L' ');
+        launcher.Updated(Utf8(tag.substr(0, end)));
+    }
     g_launcher = &launcher;
     g_paint = PaintFrame;
     while (g_running) {
@@ -3748,6 +4671,27 @@ int main(int argc, char** argv) {
             if (d.worker.joinable()) d.worker.join();
             if (!d.result.empty()) std::printf("%s\n", d.result.c_str());
             return HaveFrameGen(ExeDir(), kind) ? 0 : 1;
+        } else if (!std::strcmp(argv[a], "--update-check") || !std::strcmp(argv[a], "--update-apply")) {
+            // as on Windows: the newest release looked up without the window, the answer in update/check.txt; exit
+            // code 0 up to date (or, --update-apply, the update in place), 3 an update available, 2 a developer build,
+            // 1 GitHub not reached or the update failed
+            bool apply = !std::strcmp(argv[a], "--update-apply");
+            Updater u;
+            u.Check(true);
+            if (u.worker.joinable()) u.worker.join();
+            Updater::State s = u.state;
+            if (apply && s == Updater::State::Available) {
+                u.Apply();
+                if (u.worker.joinable()) u.worker.join();
+                s = u.state;
+            }
+            std::error_code ec;
+            fs::create_directories(ExeDir() / "update", ec);
+            std::ofstream out(ExeDir() / "update" / "check.txt");
+            out << int(s) << " " << u.own << " " << u.latest.tag << " " << u.latest.asset << " " << u.error << "\n";
+            return s == Updater::State::UpToDate || s == Updater::State::Restart ? 0
+                   : s == Updater::State::Available ? 3
+                   : s == Updater::State::Developer ? 2 : 1;
         }
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         std::fprintf(stderr, "SDL failed to start: %s\n", SDL_GetError());
@@ -3795,6 +4739,9 @@ int main(int argc, char** argv) {
     for (int a = 1; a + 1 < argc; a++)
         for (int i = 0; i < kPageCount; i++)
             if (!std::strcmp(argv[a], "--page") && !std::strcmp(argv[a + 1], kPageNames[i])) launcher.ShowPage(i);
+    // --updated <release>: started by the launcher before, which put this one in place (Updater)
+    for (int a = 1; a + 1 < argc; a++)
+        if (!std::strcmp(argv[a], "--updated")) launcher.Updated(argv[a + 1]);
     bool running = true;
     while (running) {
         SDL_Event e;

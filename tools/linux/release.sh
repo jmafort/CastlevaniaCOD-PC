@@ -106,6 +106,9 @@ patchelf --set-rpath '$ORIGIN' $PKG/lib/*.so.*
 cp /work/llvm/clang /work/llvm/ld.lld $PKG/compiler/
 cp $B/fonts/MaterialIcons-Regular.ttf /cache/P052-*.otf $PKG/fonts/
 cp $SRC/tools/release/README-linux.txt $PKG/README.txt
+# the release this package is, for the launcher's update check (its GitHub tag without the v): a folder without it is
+# a developer's build, which is never offered an update
+echo "$VERSION" > $PKG/version.txt
 cp $SRC/LICENSE $PKG/LICENSE.txt
 cat /src/XboxXBE-Recomp/THIRD_PARTY.txt $SRC/tools/release/THIRD_PARTY-port.txt $SRC/tools/linux/THIRD_PARTY-linux.txt \
     /cache/fidelityfx/LICENSE.txt /cache/urw-base35-LICENSE.txt /cache/urw-base35-COPYING.txt \

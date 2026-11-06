@@ -99,6 +99,15 @@ On top of Pazzi7054's port:
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
 - **Launcher in seven languages** - English, Deutsch, Español, Français, Italiano, Português (Brasil) and Русский,
   from a dropdown.
+- **Updates from the launcher** - each time it opens, the launcher looks up the newest release on GitHub and, when it
+  is not the one in your folder, offers it on the Home page: one click downloads the release, checks it, puts the
+  program files in place (the exes, the launcher, the compiler folder, the notes) and restarts the launcher. Your
+  saves (`hdd`), `castlevania.toml`, textures, movies and game files are never touched; the files replaced are kept
+  in `update\previous` until the next update. The game builds its code again on its first start after an update.
+  The check is a switch on the Game page (`update_check`, on by default). The release a folder holds is
+  `version.txt` beside the launcher, which `release.bat` and `tools/linux/release.sh` write into the packages; a
+  build folder without one is never offered an update. On Linux the launcher downloads with `curl` (or `wget`) and
+  unpacks with `tar`, as desktop Linux has them.
 - **Program icon** - the game's crest, made from your copy when you build.
 - **Newer recompiler** - Xbox XBE Recomp moved up to its commit `91146ff`, this fork's changes kept as a patch.
 - **Requirements written out** - what a PC needs to play, down to which graphics can run it.
@@ -330,6 +339,110 @@ background first); the size pictures load at applies from the next start.
 - **Anisotropic Filtering** - Up to 16x, on the game's own textures too: they have no mip levels, so a floor or
   wall seen at an angle shimmers in the distance without it; with the HD pack, whose pictures have mip levels,
   it keeps them sharp there instead.
+- **Ambient Occlusion** - Soft shadow where surfaces meet: in corners, between stones, under ledges and where feet
+  touch the floor (`ambient_occlusion`: 0 off, 1 low, 2 high). It is worked out from the 3D's depth before the
+  anti-aliasing smooths it, so it needs anti-aliasing on.
+- **Ray Tracing** - Off by default. On a graphics card with DirectX ray tracing (DXR 1.1: NVIDIA GeForce RTX, AMD
+  Radeon RX 6000 or newer, Intel Arc), on Windows, rays through the room itself (`ray_tracing`: 0 off, 1 ambient occlusion, 5 lighting; bits 1 and
+  4; launcher Graphics page or the in-game menu; anti-aliasing on). Reflections (bit 2) are no longer offered: an
+  older setting of 7, lighting and reflections, is read as 5. Each frame, the vertices the game's own draws put on
+  the screen are gathered into an acceleration structure (the world as drawn, characters posed as they are), with
+  each draw's picture and texture pack material. Cut-outs (railings, leaves, grates) are seen through where their
+  pictures are.
+  - *Ambient occlusion* is traced instead of guessed from the screen: each pixel sends rays over its surface, so what
+    is off screen or behind something still shades, and an edge's shadow does not end where the screen's view of it
+    does.
+  - *Lighting*: the light the room's surfaces throw onto each other. Each pixel, at half the 3D's size, sends two
+    rays over its surface, takes on the colour of what they meet as the game drew and lit it, and throws it back in
+    its own colour: the courtyard's water lights the carved wall and gargoyle above it in blue, a torchlit wall warms
+    the floor before it, Hector picks up the light around him. A filter across its neighbours on the same surface
+    smooths it, and the anti-aliasing gathers it over the frames. It comes with the ray traced ambient occlusion.
+    It takes the place of the flat fill the game's artists lit each room with rather than adding to it: a surface
+    gets the light it gets above the room's average (the room's over the frames since it came in, so a turn of the
+    camera does not pump it), raised in the light's own hue against the room's (a surface that gets more of the room's own
+    light is raised in white: the room's colour is in its fill already), and gives up a share of the game's own as it
+    gets less, so a room keeps the brightness the game gave it while its light comes from where the rays say: the
+    glow by the water, the shade in a corner. **Lighting
+    strength** (`ray_tracing_lighting`, 0% to 200%, 100% by default) sets how strongly it shows. Reflections take the
+    place of the share of a surface's own colour they stand for (its Fresnel share: little head on, most at a glancing
+    angle) rather than adding to it, too.
+    - *Lights*: what the game adds onto the frame as light, a torch's flame, a glow, a spell in Hector's hand, lights
+      the room too. Each pixel samples one of them a frame (picked among a few by how strongly each lights it) with a
+      ray toward it for its shadow, so a character between a torch and the wall throws one. Each light is known from
+      frame to frame by where it is (up to 128 of them), whatever picture it is drawn with and in whatever order: its
+      light grows in over about half a second once it has been there a third of one, so a sword's swing, a hit's
+      sparks and a spell's burst throw none while a torch, a lamp and a lava golem's glow throw all of theirs; the
+      point a pixel settled on follows its light as others come and go; and a light that leaves the screen goes on
+      lighting what is in view for twenty seconds, so a torch just out of view still lights the wall beside it.
+      Flames and glows the game draws as flat sprites are put back into the room at their own depth (the game depth
+      tests them against the room, so that is where they are: a flame at its bracket, a brazier's fire on its stand),
+      four fifths as bright as the room's own (an effect more than a lamp: a cloud of motes tints the wall behind it);
+      a haze over the whole view is no light, and the glow a character is drawn with (the embroidery on Hector's coat)
+      is its look, not a lamp. Their light is light above the room's own, so the room's average leaves it out: a torch
+      brightens its wall without the rest of the room dimming to make up for it.
+    - *Sky*: outdoors, a ray that leaves the room upward brings the sky's colour as the frame shows it (the more the
+      higher it heads, as much as the frame shows sky: none indoors), so the open air lights what faces it and an
+      arch or a ledge shades what lies under it. It is light above the room's own too, left out of the room's average
+      as the lights' is.
+    - *Light shafts*: the air catches the lights' light on its way to the eye: a torch's glow in the air, cut by the
+      bars before it. Only lights drawn in 3D light the air (a fountain's spray, motes and a glow's sprite drawn flat
+      filled whole rooms with a grainy, sparkling haze). Marched at a quarter of the frame's size, smoothed, gathered
+      over the frames and laid over the frame as a glow, never a fog: a little light at most, and less where the frame
+      is already bright (a fountain's falling water and a ghost's body are large lights, and their air washed the
+      room out). The game's own fog stays as it was (the sky's light in the air is
+      left out: outdoors it laid a haze over every open place, which washed the courtyards out and turned the door's
+      blur white).
+  - *Reflections* (in the renderer, no longer offered in the menus): a surface with a texture pack's material maps reflects what its mirror direction meets, that
+    draw's picture lit as the game lit it, blurred as its roughness spreads the rays. The HD pack's maps are rough all
+    over (about 0.8, no metal), too rough to reflect anything, so the port gives the pack's iron (railings, gates)
+    a metal's gloss and its dressed stone a worn polish that shows at a low angle; a manifest's `reflect_roughness`
+    and `reflect_metalness` set a material's own. Water is a smooth mirror with water's Fresnel, rippled by a few
+    slow waves laid in the world (they stay put as the camera moves): the courtyard's pool reflects its gargoyles and
+    the balustrade above it. Characters' metal shines too: Hector's armour, gauntlets and sword, an enemy's blade and
+    gold trims, told by their pictures' colour (grey steel, gold), their cloth, leather and skin left matte.
+  - *Character shadows*: Hector, the enemies and the Innocent Devils cast soft shadows on the floor and the walls
+    around them (the game drew none), from a light above and a little to one side, the same way in every room, which
+    only the characters block, so the ceiling does not shade the room. They come with the ray traced ambient
+    occlusion.
+  - *Denoising*: with anti-aliasing on NVIDIA DLSS (any GeForce RTX), DLSS Ray Reconstruction takes over from it and
+    cleans the rays' grain as it anti-aliases. Each frame it is given what every pixel's surface is, traced through
+    the room at the 3D's full size: its picture's colour, its normal (bent by a texture pack's normal map), roughness
+    and specular colour, and how far its reflection's ray went. It takes the light as the frame's colour over the
+    surface's own, so the bounce lighting's haze is smoothed while the stone's carving stays as sharp as its picture.
+    It needs Streamline's DLSS-RR files (`sl.dlss_d.dll`, `nvngx_dlssd.dll`), which the launcher's DLSS download now
+    brings with the rest (a download from before asks to be made again).
+    With AMD FSR (any card), or DLSS without those files, the port's own denoiser takes all three before the
+    anti-aliasing. The bounce lighting goes through the port's own with Ray Reconstruction too: the lights' samples
+    left to it alone flickered on the walls they lit. Each surface's light is gathered over the frames, followed to where the frame's motion says it was
+    a frame before (taken only from the same surface: what a character or the camera uncovers starts afresh, so
+    nothing trails behind them):
+    - the bounce lighting over up to 24 frames, then smoothed across its neighbours on the same surface by how much
+      it still varies, a little where the frames have settled it, more where they have not;
+    - the ambient occlusion over up to 16, held within what the pixel's neighbours show this frame, so a character's
+      contact shadow moves with them rather than trailing behind;
+    - the reflections over a few frames on a mirror-like surface and up to 12 on the roughest that still reflects
+      (a reflection slides over its surface as the eye moves, so a sharp one keeps little history and needs little),
+      held within this frame's neighbours the same way, then smoothed as widely as the surface's roughness blurs it.
+
+    Together they cost about 0.55 ms at 1080p on a GeForce RTX 5080.
+  - *Sampling*: the rays' directions, the lights' candidates and the shadows' points are spread rather than drawn at
+    random (a low-discrepancy sequence from a blue-noise start of each pixel's own, each frame's points after the
+    frame before's), so a texel's few rays cover its hemisphere and its neighbours' errors cancel, which the
+    denoisers settle faster. The eye's ray through each pixel is traced once, by the guides, and the ambient
+    occlusion and bounce lighting take their surface from it. Above 1080p's pixels the ray traced ambient occlusion
+    is worked out at half the 3D's size, with 8 rays a pixel (`XBE_RT_AO_SCALE` sets it): at 4K its rays from every
+    pixel took most of the ray tracing's time, and the bounce lighting's rays were halved to make room. A
+    character's shadow by a lamp falls from the lamp the bounce lighting has settled on for that surface, so it
+    holds still rather than flickering between two lamps.
+
+  All of it costs about 3 ms a frame at 1080p on a GeForce RTX 5080 (the screen space ambient occlusion 0.4 ms), and
+  about 3.7 ms at 4K with DLSS Balanced.
+  **Ray tracing quality** (`ray_tracing_quality`: 0 low, 1 medium, 2 high, the default) is for slower graphics cards
+  (AMD's, Intel's, a handheld's): low lights the room with one ray a pixel at a third of the frame's size, reaches
+  less far, sends fewer ambient occlusion rays, reflects only the smoothest surfaces and leaves the light shafts out
+  (about 2 ms on the RTX 5080); medium is between.
+  The shaders are compiled to DXIL by the Windows SDK's `dxc` when the port is built; a build without it, or a card
+  without DXR 1.1, keeps the screen space ambient occlusion.
 - **Field of View** - 100% (the game's, which each room's camera sets) to 200%, a wider view as the number goes up;
   the in-game menu shows the view's angle as you move it. It holds through a room change's fade-in; story scenes
   keep the game's framing (`fov = 130`).
@@ -588,7 +701,12 @@ Changes this game needed beyond the generated config:
   an executable of its own, which the others start for its game files (`GameInfo::releases`, `xbe_releases()`); the
   console language a title reads (`GameInfo::language`); the settings file written over, its other keys kept; a
   target telling whether its picture is the CPU's (`Target::cpu`). The SDK's mixer plays every channel of a voice by
-  itself now (cutscene audio is a 5.1 stream with the voices in the centre channel).
+  itself now (cutscene audio is a 5.1 stream with the voices in the centre channel). `kernel::g_file_opened`, a
+  game's hook on each file the title opens; a replacement uploaded into the texture of the one before it when it has
+  its size. Ray tracing (`runtime\gpu\raytrace.h`, `rt_*.hlsl`): the world's draws captured by their vertex shaders
+  into an acceleration structure each frame, ambient occlusion, bounce lighting and reflections traced through it,
+  and a material's `gpu::Material::gloss` for reflections. `XBE_MUTE` keeps a test's game silent;
+  `XBE_D3D12_DRED` logs where the GPU stopped when the device is lost, `XBE_D3D12_DEBUG` the debug layer's errors.
 - Releases are the SDK's own (`release.bat`): the game code is `Castlevania.dll` (`CastlevaniaEU.dll` for the
   European release), which the exe builds on the player's PC on its first start (the SDK's
   `runtime\app\game_code.cpp`, behind a progress window) from their own `default.xbe`, with the config whose `library`
@@ -724,7 +842,12 @@ Changes this game needed beyond the generated config:
   models against the pack's own pictures of the same textures (`kAliases`' and those): of
   RealESRGAN_x4plus, UltraSharpV2, GTAV textures (RGT, and its dither model) and GameAI 2.0, RealESRGAN_x4plus came
   closest by far (31.2 dB on average, 45 dB on one, the others 26.7 to 28.7), the pack likely made with it, so its
-  pictures look like the pack's. They are the game's art, as a pack is: they stay out of this repository.
+  pictures look like the pack's. They are the game's art, as a pack is: they stay out of this repository. The
+  menus' text is pictures too (the words, digits and panels of the pause menu's pages, the title screen's menu, the
+  loading and save screens: 71 sheets the pack never covered, seen with `CV_TEXPACK_MISSES` on cvtest's
+  `pausemenu`), so the same run makes them sharp, with the pack's own redrawn pieces placed in where it has them;
+  `tools\texpack\clean_menu_bars.py` then redraws the pause menu's button bars' ends, painted ragged in the game's
+  sheets, as a smooth fade (its docstring says which two sheets draw a bar, and how).
 - `widescreen.json` keeps the screens widescreen reaches the sides of: the pause menu, the map, and with a route
   step's `"box_shots": true` each box on the first-save recording (the save point's, and the Memorial Ticket's
   dimmed panel when the first enemy drops it).
@@ -772,6 +895,7 @@ Changes this game needed beyond the generated config:
 - Linux has no frame generation yet: the Linux build of AMD's FidelityFX SDK has none, and the port's Linux DLSS is
   its anti-aliasing and upscaling only. Its anti-aliasing and upscaling by AMD FSR 3 are new (1.8.6): tested in WSL on
   an NVIDIA card through Mesa's dozen, not yet on a Linux PC's own graphics drivers.
+- Ray tracing is Windows' alone: the Linux build draws through vkd3d, which has no DirectX ray tracing.
 - NVIDIA DLSS on Linux is new (1.8.7) and not yet tested on NVIDIA's own Linux driver: in WSL, where the card is
   Mesa's dozen, its download, the game's link to it and the switch to AMD FSR were tested, and DLSS itself ran there
   through NVIDIA's NGX, but not in the game. If it does not run, `logs/castlevania.log` says why (and NVIDIA's own

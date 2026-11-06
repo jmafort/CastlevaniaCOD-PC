@@ -245,6 +245,9 @@ def tests():
         {"name": "install-dlss", "cmd": [str(HERE / "install.py"), pkgs, str(d.get("usa", "")),
                                          str(HERE / "scenarios" / "dlss-linux.json")],
          "needs": ["package", "usa"], "platforms": ["linux"]},
+        # the launcher's own update: the newest release on GitHub downloaded and put in place over an install marked
+        # older, the player's files left alone
+        {"name": "update", "cmd": [str(HERE / "update_test.py"), pkgs], "needs": ["package"]},
         {"name": "launcher", "cmd": [str(HERE / "launcher_test.py"), pkgs, str(d.get("usa", "")), str(d.get("eu", ""))]
          + (["--other", str(d["other"])] if "other" in d else []),
          "quick": True, "needs": ["package", "usa", "eu"]},
