@@ -197,6 +197,7 @@ std::string TexturePackJson();  // texpack.cpp
 std::string MoviesJson();       // movies.cpp
 bool SprintOn();                // keyboard.cpp
 extern uint32_t g_sprint;       // keyboard.cpp
+extern uint32_t g_speed_up;     // keyboard.cpp
 bool MenuOpen();         // menu.cpp
 
 // for the bot (bot.cpp), each frame: Hector's position and facing, the camera's heading (the direction stick up
@@ -349,6 +350,8 @@ std::string GameStateJson() {
     out += MenuOpen() ? ",\"settings_menu\":true" : ",\"settings_menu\":false";
     // Hector's sprint: the setting (percent of his walk, 0 off) and whether he sprints (keyboard.cpp)
     out += ",\"sprint\":{\"setting\":" + std::to_string(g_sprint) + ",\"active\":" + (SprintOn() ? "true" : "false") + "}";
+    // the speed-up: the setting (0 off, 2, 4) and the game's speed now (keyboard.cpp, the SDK's app::Speed)
+    out += ",\"speed\":{\"setting\":" + std::to_string(g_speed_up) + ",\"times\":" + std::to_string(app::Speed()) + "}";
     // the virtual controller (XBE_VIRTUAL_PAD): plugged in, taken by a port, the motors the game drove it with
     if (input::VirtualOn()) {
         input::VirtualReport v = input::VirtualState();

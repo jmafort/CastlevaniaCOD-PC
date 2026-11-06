@@ -94,6 +94,8 @@ On top of Pazzi7054's port:
 - **The settings menu by controller** - LB and RB turn its pages, B and Start close it. By Calm-Consideration41.
 - **Sprint** - a click of L3 (the left stick pressed in) or of Left Shift while Hector walks, and he sprints until the
   stick is let go: 1.25, 1.5 or 2 times his walk, off by default. Only his walk speeds up.
+- **Speed-up** - a click of R3 (the right stick pressed in) or of Tab runs the whole game at 2x or 4x until it is
+  clicked again, with a fast-forward sign at the screen's top right while it is on.
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
@@ -515,6 +517,13 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   `sprint = 150`). Only his walk speeds up, its animation with it, so his steps keep up with the ground: his guarded
   walk, the dodge, jumps and attacks, every enemy and the game's clock keep their pace. The game has no use of its own
   for the stick's click, in either button layout; L3 with R3 is still the settings menu.
+- **Speed-up** - Click the right stick in (R3), or press Tab: the whole game runs at 2x (the default) or 4x until you
+  click it again (the launcher's or the in-game menu's Controls page; `speed_up = 4`, or `0` for no speed-up). A
+  fast-forward sign and the speed show at the screen's top right while it is on, and every start begins at the game's
+  own speed. The game runs two or four times as many frames a second and the screen shows one of each two or four, so
+  4x needs a PC that draws the game at 240 frames a second: heavy graphics settings (ray tracing above all) hold it
+  to what the PC can draw. The game has no use of its own for R3, in either button layout; L3 with R3 is still the
+  settings menu, and leaves the speed as it is.
 
 ### Keyboard
 The keyboard plays as player 1 while the window is in front:
@@ -532,6 +541,7 @@ The keyboard plays as player 1 while the window is in front:
 | Enter / Backspace | Start / Back |
 | numpad 8 2 4 6 | d-pad |
 | Left Shift | sprint (L3 on a controller) |
+| Tab | speed-up (R3 on a controller) |
 | F10 (changeable) | settings menu (L3 + R3 on a controller) |
 
 ### Miscellaneous

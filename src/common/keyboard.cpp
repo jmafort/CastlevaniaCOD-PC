@@ -6,7 +6,7 @@
 //   WASD left stick         arrows right stick (camera)    numpad 8 2 4 6 d-pad
 //   K or Space  A (jump)    J  X (attack)                  L  B         I  Y
 //   Q  left trigger         E  right trigger               Z  white     C  black
-//   Enter  Start            Backspace  Back
+//   Enter  Start            Backspace  Back                Left Shift  sprint (L3)    Tab  speed-up (R3)
 //
 // CV_PAD_SCRIPT="<ms>:<button>[+<button>...][:<hold ms>],..." presses buttons at times measured from the game's
 // first read of the pad (default hold 150 ms). A time ending in f counts the game's frames instead, its hold too
@@ -85,6 +85,8 @@ void BotPad(input::Pad& p);
 
 // Hector's sprint speed, in percent of his walk: 0 off, 125, 150, 200 (the settings file's sprint; game/hooks.cpp)
 uint32_t g_sprint = 0;
+// the speed-up's speed, times the game's own: 0 off, 2, 4 (the settings file's speed_up). R3 or Tab turns it on and off
+uint32_t g_speed_up = 2;
 
 namespace {
 
@@ -538,6 +540,31 @@ void Sprint(const input::Pad& p, bool menu) {
     }
 }
 
+// The speed-up: a click of R3, the right stick pressed in, or of Tab turns it on at the setting's speed and off again.
+// The whole game then runs that many frames a second (the SDK's app::SetSpeed: its pacing, and one frame of each so
+// many shown). A click is R3 let go with L3 not held at any time while it was down (L3 with R3 is the settings
+// menu's) and the settings menu closed. The setting changed while it is on takes it along, set off ends it; every
+// start begins at the game's own speed. The game has no use of its own for R3, in either button layout
+std::atomic<bool> g_sped{false};
+
+void SpeedUp(const input::Pad& p, bool menu) {
+    static std::atomic<bool> r3_was{false}, spoiled{false}, tab_was{false};
+    bool l3 = (p.buttons & kL3) != 0, r3 = (p.buttons & kR3) != 0;
+    bool tab = Focused() && Down(VK_TAB);
+    bool was = r3_was.exchange(r3), clicked = false;
+    if (!was && r3) spoiled = l3 || menu;
+    else if (r3 && (l3 || menu)) spoiled = true;
+    else if (was && !r3) clicked = !spoiled.exchange(false) && !menu;
+    clicked |= !tab_was.exchange(tab) && tab && !menu;
+    if (g_speed_up < 2) g_sped = false;
+    else if (clicked) g_sped = !g_sped;
+    uint32_t want = g_sped ? std::min<uint32_t>(g_speed_up, 4) : 1;
+    if (app::Speed() != want) {
+        app::SetSpeed(want);
+        LOGR("speed: %ux", want);
+    }
+}
+
 // the game's rumble, a frame at a time (KeyboardRumble)
 struct Motors {
     uint16_t want[2] = {}, sent[2] = {};  // as the game asks for them, as the controller has them
@@ -613,6 +640,7 @@ void KeyboardPad(int port, input::Pad& p) {
     }
     if (input::VirtualOn()) input::VirtualSet(scripted);
     Sprint(p, MenuOpen());
+    SpeedUp(p, MenuOpen());
     // both sticks clicked in together: the menu, from a controller or a test's script; once a press, of the threads the
     // game reads the pad on (each sees it, one turns it)
     static std::atomic<bool> sticks{false};

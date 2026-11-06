@@ -2015,6 +2015,7 @@ struct Settings {
     bool ps2_stick = true;              // the sticks as the PS2 read them (hooks.cpp)
     bool invert_camera_x = false, invert_camera_y = false;  // the camera stick the other way (keyboard.cpp)
     uint32_t sprint = 0;                // Hector's sprint, percent of his walk: 0 off, 125, 150, 200 (keyboard.cpp)
+    uint32_t speed_up = 2;              // the speed-up R3 or Tab turns on: 0 off, 2, 4 times the game's (keyboard.cpp)
     uint32_t fov = 100;                 // percent of the game's field of view in play (game/view.cpp)
     uint32_t draw_distance = 100;       // percent of the game's far plane (game/view.cpp)
     uint32_t fog_distance = 100;        // percent of the game's fog distance, 0 none (game/view.cpp)
@@ -2072,6 +2073,8 @@ struct Settings {
         invert_camera_y = rest["invert_camera_y"].value_or(invert_camera_y);
         sprint = rest["sprint"].value_or(sprint);
         if (sprint != 125 && sprint != 150 && sprint != 200) sprint = 0;
+        speed_up = rest["speed_up"].value_or(speed_up);
+        if (speed_up != 0 && speed_up != 4) speed_up = 2;
         fov = rest["fov"].value_or(fov);
         draw_distance = rest["draw_distance"].value_or(draw_distance);
         fog_distance = rest["fog_distance"].value_or(fog_distance);
@@ -2122,6 +2125,7 @@ struct Settings {
         rest.insert_or_assign("invert_camera_x", invert_camera_x);
         rest.insert_or_assign("invert_camera_y", invert_camera_y);
         rest.insert_or_assign("sprint", int64_t(sprint));
+        rest.insert_or_assign("speed_up", int64_t(speed_up));
         rest.insert_or_assign("fov", int64_t(fov));
         rest.insert_or_assign("draw_distance", int64_t(draw_distance));
         rest.insert_or_assign("fog_distance", int64_t(fog_distance));
@@ -3413,7 +3417,7 @@ private:
                std::to_string(s.button_layout) +
                std::to_string(s.lament_save) + "|" + s.gpu + "|" + s.language + "|" + std::to_string(s.game_language) +
                "|" + std::to_string(s.ps2_stick) + std::to_string(s.invert_camera_x) + std::to_string(s.invert_camera_y) +
-               "|" + std::to_string(s.sprint) + "|" +
+               "|" + std::to_string(s.sprint) + std::to_string(s.speed_up) + "|" +
                std::to_string(s.hud_edges) + "|" + std::to_string(s.fov) + "|" + std::to_string(s.draw_distance) + "|" +
                std::to_string(s.fog_distance) + "|" + s.release + "|" +
                std::to_string(s.hdr) + std::to_string(s.hdr_peak_nits) + "|" + std::to_string(s.hdr_scene_nits) + "|" +
@@ -4333,6 +4337,10 @@ private:
                                     "dodge, jumps and attacks keep their speed."));
         Segmented<uint32_t>("sprint", settings_.sprint, {0, 125, 150, 200}, {T("Off"), "1.25x", "1.5x", "2x"});
         EndSetting();
+        BeginSetting(T("Speed-up"), T("Click the right stick in (R3), or press Tab: the whole game runs at this speed "
+                                      "until you click it again. A sign at the screen's top right shows it is on."));
+        Segmented<uint32_t>("speedup", settings_.speed_up, {0, 2, 4}, {T("Off"), "2x", "4x"});
+        EndSetting();
         EndCard();
         BeginCard("keys");
         // the keys by their names on a keyboard, the controller's buttons (B, Y, Start, Back) by the Xbox's
@@ -4341,7 +4349,7 @@ private:
             {"W A S D", T("Move")},       {T("Arrows"), T("Camera")}, {T("K / Space"), T("Jump (A)")}, {"J", T("Attack (X)")},
             {"L", "B"},                   {"I", "Y"},                 {"Q / E", T("Triggers")},        {"Z / C", T("White / Black")},
             {T("Enter"), "Start"},        {T("Backspace"), "Back"},   {"Num 8 2 4 6", T("D-pad")},     {menu.c_str(), T("Settings menu")},
-            {T("Left Shift"), T("Sprint")},
+            {T("Left Shift"), T("Sprint")}, {"Tab", T("Speed-up")},
         };
         if (ImGui::BeginTable("keys", 4, ImGuiTableFlags_SizingStretchProp)) {
             for (auto& k : kKeys) {

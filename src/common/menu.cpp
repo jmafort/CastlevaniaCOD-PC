@@ -64,6 +64,7 @@ extern bool g_hd_movies;         // movies.cpp: a movie pack's HD movies drawn
 extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture whole as large as it goes, 2 filled
 extern uint32_t g_button_layout;    // texpack.cpp
 extern uint32_t g_sprint;           // keyboard.cpp: Hector's sprint, percent of his walk (0 off)
+extern uint32_t g_speed_up;         // keyboard.cpp: the speed-up's speed (0 off, 2, 4)
 extern bool g_texture_pack;         // texpack.cpp: an HD texture pack's pictures drawn
 bool ViewFov(double& game, double& drawn);  // game/view.cpp: the field of view in degrees, the game's and as drawn
 extern std::atomic<bool> g_wide_trace_frame;  // widescreen.cpp: log the next frame's draws
@@ -585,6 +586,9 @@ void ControlsTab(bool& save) {
                       "until you let go of the stick. Only his walk is faster: enemies, his dodge, jumps and attacks "
                       "keep their speed.");
         save |= Choice<uint32_t>("##sprint", g_sprint, {0, 125, 150, 200}, {"Off", "1.25x", "1.5x", "2x"});
+        Row("Speed-up", "Click the right stick in (R3), or press Tab: the whole game runs at this speed until you "
+                        "click it again. A sign at the screen's top right shows it is on.");
+        save |= Choice<uint32_t>("##speedup", g_speed_up, {0, 2, 4}, {"Off", "2x", "4x"});
         ImGui::EndTable();
     }
     ImGui::Spacing();
@@ -596,7 +600,8 @@ void ControlsTab(bool& save) {
         {"J", "X (attack)"},           {"L", "B"},                 {"I", "Y"},
         {"Q / E", "Left / right trigger"}, {"Z / C", "White / black"}, {"Enter", "Start"},
         {"Backspace", "Back"},         {"Numpad 8 2 4 6", "D-pad"},
-        {"Left Shift", "Sprint (L3 on a controller)"}, {"L3 + R3 (controller)", "This menu"},
+        {"Left Shift", "Sprint (L3 on a controller)"}, {"Tab", "Speed-up (R3 on a controller)"},
+        {"L3 + R3 (controller)", "This menu"},
     };
     if (ImGui::BeginTable("keys", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
         ImGui::TableNextRow();
@@ -661,6 +666,7 @@ void Defaults() {
     g_draw_distance = g_fog_distance = 100;
     g_hud_edges = true;
     g_sprint = 0;
+    g_speed_up = 2;
     g_menu_spread = true;
     g_hd_movies = true;
     g_texture_pack = true;
@@ -818,12 +824,35 @@ void MenuUi(double fps) {
         app::FrameGenState fg = app::FrameGen();
         if (fg.active && fg.shown_fps > fps + 1)
             std::snprintf(text, sizeof(text), "%.0f FPS (game %.0f)", fg.shown_fps, fps);
+        else if (uint32_t times = app::Speed(); times > 1)  // sped up: one of each so many frames shown
+            std::snprintf(text, sizeof(text), "%.0f FPS (game %.0f)", fps / times, fps);
         else
             std::snprintf(text, sizeof(text), "%.0f FPS", fps);
         ImDrawList* dl = ImGui::GetForegroundDrawList();
         ImVec2 at{io.DisplaySize.x * 0.01f, io.DisplaySize.y * 0.01f};
         dl->AddText({at.x + 2, at.y + 2}, IM_COL32(0, 0, 0, 200), text);
         dl->AddText(at, IM_COL32(255, 230, 140, 255), text);
+    }
+    if (uint32_t times = app::Speed(); times > 1) {
+        // the speed-up on (keyboard.cpp): a fast-forward sign and the speed at the screen's top right, where the
+        // game draws nothing in play, its size the screen's (as the HUD's), whatever the menu's font size
+        char text[8];
+        std::snprintf(text, sizeof(text), "%ux", times);
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+        ImFont* font = ImGui::GetFont();
+        float h = std::max(18.0f, io.DisplaySize.y * 0.03f), margin = io.DisplaySize.y * 0.025f, w = h * 0.45f;
+        float shade = std::max(1.0f, std::round(h / 9));
+        ImVec2 size = font->CalcTextSizeA(h, FLT_MAX, 0, text);
+        float x = io.DisplaySize.x - margin - size.x, y = margin;
+        const ImU32 kShade = IM_COL32(0, 0, 0, 200), kGold = IM_COL32(255, 230, 140, 255);
+        for (int i = 0; i < 2; i++) {
+            float a = x - h * 0.35f - (2 - i) * w;
+            for (float d : {shade, 0.0f})
+                dl->AddTriangleFilled({a + d, y + h * 0.18f + d}, {a + w + d, y + h * 0.5f + d}, {a + d, y + h * 0.82f + d},
+                                      d > 0 ? kShade : kGold);
+        }
+        dl->AddText(font, h, {x + shade, y + shade}, kShade, text);
+        dl->AddText(font, h, {x, y}, kGold, text);
     }
     io.MouseDrawCursor = false;
     {

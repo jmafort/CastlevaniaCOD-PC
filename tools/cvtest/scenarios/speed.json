@@ -1,0 +1,127 @@
+{
+  "name": "speed",
+  "after": "newgame.json",
+  "env": {
+    "XBE_VIRTUAL_PAD": "1"
+  },
+  "note": "The speed-up (keyboard.cpp, the SDK's app::SetSpeed), by a controller as SDL reads one (the virtual controller): the game at its own 60 frames a second (step.fps, the game's frames over the step's time), R3 clicked turns it to 2x (120: the pace doubled, one frame of each two shown, so the screen's refresh does not hold it back) and a fast-forward sign shows at the screen's top right, R3 again back to 60 and no sign; set to 4x, R3 runs it at 240 (above 150, for a slower machine); L3 with R3 opens the settings menu and leaves the speed as it is, R3 inside the menu does nothing; set off while on: back to 60, R3 does nothing. Ends at the game's own speed and the default setting (2x).",
+  "steps": [
+    {
+      "press": "0:set=speed_up=2,0f:wait:30f",
+      "expect": [
+        "speed.setting == 2",
+        "speed.times == 1"
+      ]
+    },
+    {
+      "press": "0f:wait:240f",
+      "shot": "normal",
+      "note": "its own speed",
+      "expect": [
+        "54 < step.fps < 66",
+        "speed.times == 1"
+      ]
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:10f",
+      "note": "R3 clicked: 2x",
+      "expect": [
+        "speed.times == 2"
+      ]
+    },
+    {
+      "press": "0f:wait:480f",
+      "shot": "fast",
+      "note": "2x: the game's frames twice as many a second, the sign at the top right",
+      "differs": {
+        "sign": ["normal", 0.9, 0.0, 1.0, 0.08]
+      },
+      "expect": [
+        "speed.times == 2",
+        "105 < step.fps < 132",
+        "screen.differs.sign > 3"
+      ]
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:10f",
+      "note": "R3 again: its own speed",
+      "expect": [
+        "speed.times == 1"
+      ]
+    },
+    {
+      "press": "0f:wait:240f",
+      "shot": "normal-again",
+      "differs": {
+        "sign": ["normal", 0.9, 0.0, 1.0, 0.08]
+      },
+      "expect": [
+        "54 < step.fps < 66",
+        "screen.differs.sign < 2"
+      ]
+    },
+    {
+      "press": "0:set=speed_up=4,0f:r3:4f,10f:wait:10f",
+      "note": "set to 4x, R3: 4x",
+      "expect": [
+        "speed.setting == 4",
+        "speed.times == 4"
+      ]
+    },
+    {
+      "press": "0f:wait:960f",
+      "shot": "faster",
+      "expect": [
+        "speed.times == 4",
+        "step.fps > 150"
+      ]
+    },
+    {
+      "press": "0f:l3+r3:5f,25f:wait:20f",
+      "note": "both sticks: the settings menu, the speed as it was",
+      "expect": [
+        "settings_menu",
+        "speed.times == 4"
+      ]
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:10f",
+      "note": "R3 in the settings menu: nothing",
+      "expect": [
+        "settings_menu",
+        "speed.times == 4"
+      ]
+    },
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "note": "both sticks again: the menu closed, the speed as it was",
+      "expect": [
+        "not settings_menu",
+        "speed.times == 4"
+      ]
+    },
+    {
+      "press": "0:set=speed_up=0,0f:wait:20f",
+      "note": "set off while on: its own speed",
+      "expect": [
+        "speed.setting == 0",
+        "speed.times == 1"
+      ]
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:240f",
+      "note": "off: R3 does nothing",
+      "expect": [
+        "speed.times == 1",
+        "54 < step.fps < 66"
+      ]
+    },
+    {
+      "press": "0:set=speed_up=2,0f:wait:10f",
+      "expect": [
+        "speed.setting == 2",
+        "speed.times == 1"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "name": "speed-keys",
+  "after": "newgame.json",
+  "platforms": [
+    "linux"
+  ],
+  "note": "The speed-up by the keyboard: Tab pressed turns it on (the game at 2x), held or let go it stays, pressed again turns it off. Linux only: on Windows the test would take the PC's own keyboard.",
+  "steps": [
+    {
+      "press": "0:set=speed_up=2,0f:wait:10f",
+      "expect": [
+        "speed.times == 1"
+      ]
+    },
+    {
+      "keys": "Tab",
+      "press": "0f:wait:20f",
+      "note": "Tab: 2x",
+      "expect": [
+        "speed.times == 2"
+      ]
+    },
+    {
+      "press": "0f:wait:20f",
+      "note": "let go: still 2x",
+      "expect": [
+        "speed.times == 2"
+      ]
+    },
+    {
+      "keys": "Tab",
+      "press": "0f:wait:20f",
+      "note": "Tab again: its own speed",
+      "expect": [
+        "speed.times == 1"
+      ]
+    }
+  ]
+}
