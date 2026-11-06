@@ -959,25 +959,30 @@ bool RtxCard(const std::string& name) {
 
 // The port's own updates (Updater, below): the newest release of the port on GitHub, looked up when the launcher
 // starts and offered on the Home page when it is not the one here. The release here is version.txt beside the
-// launcher, which release.bat writes into the package (the tag without its v: 1.4.0-qol10); a build without one is
-// a developer's and is never offered an update. An update replaces the program files alone (the exes, the launcher,
-// the compiler folder, the docs): the saves (hdd), castlevania.toml, the textures and the game files are never touched
+// launcher, which release.bat and release.sh write into the packages (the tag without its v: 1.8.10); a build without
+// one is a developer's and is never offered an update. An update replaces the program files alone (the exes, the
+// launcher, the compiler folder, the docs): the saves (hdd), castlevania.toml, the textures and the game files are never
+// touched. GitHub's API is kept out of it: it answers an address without an account 60 requests an hour (a shared
+// address, or the hour a release comes out, could use them up). The look is at the latest release's own page, which
+// sends to its tag; the package and its digest (the release's SHA256SUMS.txt) are downloads like any other. The API is
+// asked only for a release from before the sums file, once, as the update is brought in
 constexpr const char* kUpdateRepo = "jmafort/CastlevaniaCOD-PC";
 constexpr const char* kUpdateApi = "https://api.github.com/repos/jmafort/CastlevaniaCOD-PC/releases?per_page=10";
 constexpr const char* kUpdateReleases = "https://github.com/jmafort/CastlevaniaCOD-PC/releases";
+constexpr const char* kLatestPage = "https://github.com/jmafort/CastlevaniaCOD-PC/releases/latest";
+constexpr const char* kSumsFile = "SHA256SUMS.txt";  // each release's: "<sha256>  <file>" a line, sha256sum's
 constexpr const char* kVersionFile = "version.txt";
 
-// a release of the port as GitHub lists it
+// a release of the port on GitHub
 struct PortRelease {
     std::string tag;     // without its v
-    std::string name;    // the release's title
-    std::string date;    // published, YYYY-MM-DD
-    std::string published;  // and the whole time, for the order
+    std::string date;    // published, YYYY-MM-DD (not known from its page: empty)
     std::string page;    // its page on GitHub
+    std::string base;    // where its files download from: .../releases/download/<tag>/
     std::string url;     // the package's download
     std::string asset;   // the package's file name
-    std::string sha256;  // its digest as GitHub gives it (empty: none)
-    uint64_t size = 0;
+    std::string sha256;  // its digest (its sums file's, else the API's), once Apply has it
+    uint64_t size = 0;   // its size, when the API gave it (0: not known)
 };
 
 // the release here (version.txt beside the launcher), empty for a developer's build
@@ -1065,50 +1070,115 @@ std::vector<std::string_view> Array(std::string_view obj, std::string_view key) 
 
 }  // namespace json
 
-// this system's package among a release's files: Windows' zip, or Linux's archive
-bool OwnPackage(const std::string& name) {
-    if (name.compare(0, 17, "CastlevaniaCOD-PC") != 0) return false;
+// this system's package of a release, by its name: Windows' zip, or Linux's archive
+std::string PackageName(const std::string& tag) {
 #ifdef _WIN32
-    return name.size() > 4 && name.compare(name.size() - 4, 4, ".zip") == 0 && name.find("linux") == std::string::npos;
+    return "CastlevaniaCOD-PC-" + tag + ".zip";
 #else
-    constexpr std::string_view kEnd = "-linux.tar.xz";
-    return name.size() > kEnd.size() && name.compare(name.size() - kEnd.size(), kEnd.size(), kEnd) == 0;
+    return "CastlevaniaCOD-PC-" + tag + "-linux.tar.xz";
 #endif
 }
 
-// the newest release of the port in GitHub's list, by when it was published (the list's own order is by the commit
-// each was tagged on, which a release made from an older commit falls behind in): a draft or a prerelease left out
-// (the port publishes none), and only one that has this system's package. False when none
-bool NewestRelease(const std::string& list, PortRelease& out) {
-    bool found = false;
-    for (std::string_view r : json::Objects(list, list.find('['))) {
-        if (json::Value(r, "draft") == "true" || json::Value(r, "prerelease") == "true") continue;
-        PortRelease rel;
-        rel.tag = json::Value(r, "tag_name");
-        if (!rel.tag.empty() && (rel.tag[0] == 'v' || rel.tag[0] == 'V')) rel.tag.erase(rel.tag.begin());
-        if (rel.tag.empty()) continue;
-        rel.name = json::Value(r, "name");
-        std::string published = json::Value(r, "published_at");  // ISO 8601, UTC: its order is the text's
-        rel.date = published.substr(0, 10);
-        rel.page = json::Value(r, "html_url");
-        for (std::string_view a : json::Array(r, "assets")) {
-            std::string name = json::Value(a, "name");
-            if (!OwnPackage(name)) continue;
-            rel.asset = name;
-            rel.url = json::Value(a, "browser_download_url");
-            rel.size = std::strtoull(json::Value(a, "size").c_str(), nullptr, 10);
+// where an update stands (the Home page's card says it); the same on both systems
+enum class UpdateState {
+    Idle, Off, Developer, Checking, Unreachable, Busy, UpToDate, Available, Downloading, Installing, Restart, Failed
+};
+
+// an HTTP request's answer: its status (0: none came) and where a redirect sends to
+struct HttpAnswer {
+    int status = 0;
+    std::string location;
+};
+// the request, by each system's own means (below): a redirect followed only when follow, the body into to (when given)
+// only for a 200
+HttpAnswer HttpRequest(const std::string& url, const fs::path* to, bool follow);
+
+// GitHub turning a request away: its API's limit for an address without an account (403, 429), or the site busy (503)
+bool GitHubBusy(int status) { return status == 403 || status == 429 || status == 503; }
+
+// the latest release as its own page on GitHub says: /releases/latest sends to /releases/tag/<tag>, the latest that is
+// neither a draft nor a prerelease (the port publishes neither). No API request; this system's package by its name
+UpdateState LookUpLatest(const std::string& own, PortRelease& out) {
+    HttpAnswer a = HttpRequest(kLatestPage, nullptr, false);
+    if (GitHubBusy(a.status)) return UpdateState::Busy;
+    size_t at = a.location.find("/releases/tag/");
+    if (a.status < 300 || a.status >= 400 || at == std::string::npos) return UpdateState::Unreachable;
+    std::string raw = a.location.substr(at + 14);
+    raw = raw.substr(0, raw.find_first_of("?#/ \r\n"));
+    if (raw.empty()) return UpdateState::Unreachable;
+    out = {};
+    out.tag = raw;
+    if (out.tag[0] == 'v' || out.tag[0] == 'V') out.tag.erase(out.tag.begin());
+    out.page = std::string(kUpdateReleases) + "/tag/" + raw;
+    out.base = std::string(kUpdateReleases) + "/download/" + raw + "/";
+    out.asset = PackageName(out.tag);
+    out.url = out.base + out.asset;
+    return out.tag == own ? UpdateState::UpToDate : UpdateState::Available;
+}
+
+// a sums file's digest for a file name (sha256sum's lines: "<hex>  <name>", or "<hex> *<name>"), in lower case;
+// empty when the file is not in it
+std::string DigestIn(const std::string& sums, const std::string& name) {
+    size_t start = 0;
+    while (start < sums.size()) {
+        size_t end = sums.find('\n', start);
+        if (end == std::string::npos) end = sums.size();
+        std::string line = sums.substr(start, end - start);
+        start = end + 1;
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.size() < 66 || line[64] != ' ') continue;
+        std::string file = line.substr(65);
+        while (!file.empty() && (file[0] == ' ' || file[0] == '*')) file.erase(file.begin());
+        if (file != name) continue;
+        std::string hex = line.substr(0, 64);
+        for (char& c : hex) c = char(std::tolower(uint8_t(c)));
+        return hex;
+    }
+    return {};
+}
+
+// the API's list of releases: the package of r's release, its size and digest. False when not there
+bool ApiAsset(const std::string& list, PortRelease& r) {
+    for (std::string_view rel : json::Objects(list, list.find('['))) {
+        std::string tag = json::Value(rel, "tag_name");
+        if (!tag.empty() && (tag[0] == 'v' || tag[0] == 'V')) tag.erase(tag.begin());
+        if (tag != r.tag) continue;
+        for (std::string_view a : json::Array(rel, "assets")) {
+            if (json::Value(a, "name") != r.asset) continue;
+            r.size = std::strtoull(json::Value(a, "size").c_str(), nullptr, 10);
             std::string digest = json::Value(a, "digest");  // "sha256:<hex>"
-            if (digest.compare(0, 7, "sha256:") == 0) rel.sha256 = digest.substr(7);
-            break;
-        }
-        if (rel.url.empty()) continue;
-        if (!found || published > out.published) {
-            out = rel;
-            out.published = published;
-            found = true;
+            if (digest.compare(0, 7, "sha256:") == 0) r.sha256 = digest.substr(7);
+            return !r.sha256.empty();
         }
     }
-    return found;
+    return false;
+}
+
+// the package's SHA-256 before it is downloaded: from the release's SHA256SUMS.txt (a download as the package is), else,
+// for a release from before the sums file, from GitHub's API (one request, which gives its size too). Idle once known;
+// else Busy, Unreachable, or Failed when neither has it
+UpdateState ExpectedDigest(PortRelease& r, const fs::path& dir) {
+    std::error_code ec;
+    auto read = [&](const fs::path& p) {
+        std::ifstream f(p, std::ios::binary);
+        std::string text((std::istreambuf_iterator<char>(f)), {});
+        f.close();
+        fs::remove(p, ec);
+        return text;
+    };
+    fs::path sums = dir / kSumsFile;
+    HttpAnswer a = HttpRequest(r.base + kSumsFile, &sums, true);
+    if (a.status == 200) {
+        r.sha256 = DigestIn(read(sums), r.asset);
+        return r.sha256.empty() ? UpdateState::Failed : UpdateState::Idle;
+    }
+    fs::remove(sums, ec);
+    if (GitHubBusy(a.status)) return UpdateState::Busy;
+    fs::path list = dir / "releases.json";
+    a = HttpRequest(kUpdateApi, &list, true);
+    if (GitHubBusy(a.status)) return UpdateState::Busy;
+    if (a.status != 200) return UpdateState::Unreachable;
+    return ApiAsset(read(list), r) ? UpdateState::Idle : UpdateState::Failed;
 }
 
 // what an update leaves alone: the player's own places and files, by their first folder or name under the game's
@@ -1392,6 +1462,39 @@ struct FrameGenDownload {
     }
 };
 
+// an HTTP request by WinINet: its status and Location, a redirect followed only when follow, the body into to (when
+// given) for a 200
+HttpAnswer HttpRequest(const std::string& url, const fs::path* to, bool follow) {
+    HttpAnswer a;
+    HINTERNET net = InternetOpenW(L"CastlevaniaLauncher", INTERNET_OPEN_TYPE_PRECONFIG, nullptr, nullptr, 0);
+    if (!net) return a;
+    DWORD ms = 30000;
+    InternetSetOptionW(net, INTERNET_OPTION_CONNECT_TIMEOUT, &ms, sizeof(ms));
+    InternetSetOptionW(net, INTERNET_OPTION_RECEIVE_TIMEOUT, &ms, sizeof(ms));
+    DWORD flags = INTERNET_FLAG_RELOAD | INTERNET_FLAG_NO_CACHE_WRITE | INTERNET_FLAG_PRAGMA_NOCACHE |
+                  INTERNET_FLAG_NO_COOKIES | INTERNET_FLAG_NO_UI | (follow ? 0 : INTERNET_FLAG_NO_AUTO_REDIRECT);
+    if (HINTERNET h = InternetOpenUrlW(net, Wide(url).c_str(), nullptr, 0, flags, 0)) {
+        DWORD code = 0, len = sizeof(code);
+        if (HttpQueryInfoW(h, HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &code, &len, nullptr)) a.status = int(code);
+        std::wstring loc(2048, L'\0');
+        len = DWORD(loc.size() * sizeof(wchar_t));
+        if (HttpQueryInfoW(h, HTTP_QUERY_LOCATION, loc.data(), &len, nullptr)) {
+            loc.resize(len / sizeof(wchar_t));
+            a.location = Utf8(loc);
+        }
+        if (to && a.status == 200) {
+            std::ofstream f(*to, std::ios::binary);
+            std::vector<char> buf(1 << 16);
+            DWORD n = 0;
+            while (InternetReadFile(h, buf.data(), DWORD(buf.size()), &n) && n) f.write(buf.data(), std::streamsize(n));
+            if (!f) a.status = 0;
+        }
+        InternetCloseHandle(h);
+    }
+    InternetCloseHandle(net);
+    return a;
+}
+
 // The port's own update (kUpdateRepo): Check looks up the newest release in the background and Apply brings it in,
 // each a thread of its own; the Home page draws the state. Apply: the package downloaded into update\ (a .part until
 // whole, then checked against the size and SHA-256 GitHub gives), unpacked there by Windows' tar, the exes and the
@@ -1400,13 +1503,14 @@ struct FrameGenDownload {
 // work folder (not in the package: the recompiled objects stay, and the game's next start builds again only what the
 // new executable changes). Then the new launcher is started and this one closes
 struct Updater {
-    enum class State { Idle, Off, Developer, Checking, Unreachable, UpToDate, Available, Downloading, Installing, Restart, Failed };
+    using State = UpdateState;
     std::atomic<State> state{State::Idle};
     std::atomic<float> progress{0};
     PortRelease latest;  // the newest release, from Check (read by the frame once state says so)
     std::string own;    // the release here
     std::string error;  // Failed's reason, a number
     bool game_open = false;  // Failed as the game was running
+    bool busy = false;       // Failed as GitHub turned the request away
     std::thread worker;
 
     bool Busy() const {
@@ -1451,24 +1555,9 @@ struct Updater {
         }
         state = State::Checking;
         worker = std::thread([this] {
-            CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-            std::error_code ec;
-            fs::path dir = ExeDir() / L"update";
-            fs::create_directories(dir, ec);
-            fs::path list = dir / L"releases.json";
-            HRESULT hr = S_OK;
-            State result = State::Unreachable;
-            if (FetchFresh(Wide(kUpdateApi), list, progress, 0, 1, hr)) {
-                std::ifstream f(list, std::ios::binary);
-                std::string text((std::istreambuf_iterator<char>(f)), {});
-                PortRelease r;
-                if (NewestRelease(text, r)) {
-                    latest = r;
-                    result = r.tag == own ? State::UpToDate : State::Available;
-                }
-            }
-            fs::remove(list, ec);
-            CoUninitialize();
+            PortRelease r;
+            State result = LookUpLatest(own, r);
+            if (result == State::Available || result == State::UpToDate) latest = r;
             state = result;
         });
     }
@@ -1493,8 +1582,9 @@ struct Updater {
         progress = 0;
         error.clear();
         game_open = false;
+        busy = false;
         PortRelease r = latest;
-        worker = std::thread([this, r] {
+        worker = std::thread([this, r]() mutable {
             CoInitializeEx(nullptr, COINIT_MULTITHREADED);
             std::error_code ec;
             fs::path game = ExeDir(), dir = game / L"update", unpacked = dir / L"unpacked";
@@ -1502,13 +1592,14 @@ struct Updater {
             fs::create_directories(dir, ec);
             fs::path zip = dir / Wide(r.asset);
             HRESULT hr = S_OK;
-            bool ok = FetchFresh(Wide(r.url), zip, progress, 0, 0.9f, hr);
-            if (ok && r.size && fs::file_size(zip, ec) != r.size) {
-                ok = false;
-                hr = TRUST_E_BAD_DIGEST;
-            }
-            if (ok && !r.sha256.empty() && Sha256File(zip) != r.sha256) {
-                ok = false;
+            // its digest first: a package is never used unchecked
+            State known = ExpectedDigest(r, dir);
+            busy = known == State::Busy;
+            bool ok = known == State::Idle;
+            if (!ok) hr = known == State::Failed ? TRUST_E_BAD_DIGEST : HRESULT_FROM_WIN32(ERROR_INTERNET_CANNOT_CONNECT);
+            ok = ok && FetchFresh(Wide(r.url), zip, progress, 0, 0.9f, hr);
+            if (ok && ((r.size && fs::file_size(zip, ec) != r.size) || Sha256File(zip) != r.sha256)) {
+                ok = false;  // not the file GitHub has: never used
                 hr = TRUST_E_BAD_DIGEST;
             }
             if (ok) {
@@ -1709,6 +1800,53 @@ int RunTool(std::vector<std::string> args) {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 }
 
+// an HTTP request by the system's curl, else its wget: its status and Location (from the headers they write into
+// update/headers.txt: the last answer's, after any redirect followed), a redirect followed only when follow, the body
+// into to (when given; removed again unless a 200)
+HttpAnswer HttpRequest(const std::string& url, const fs::path* to, bool follow) {
+    HttpAnswer a;
+    std::error_code ec;
+    fs::path dir = ExeDir() / "update";
+    fs::create_directories(dir, ec);
+    fs::path hdr = dir / "headers.txt";
+    std::string body = to ? to->string() : std::string("/dev/null");
+    for (int tool = 0; tool < 2; tool++) {
+        fs::remove(hdr, ec);
+        std::vector<std::string> args =
+            tool == 0 ? std::vector<std::string>{"curl", "-s", "--connect-timeout", "30", "--max-time", "300", "-D",
+                                                 hdr.string(), "-o", body}
+                      : std::vector<std::string>{"wget", "-S", "-t", "1", "-T", "30", "-o", hdr.string(), "-O", body,
+                                                 follow ? "--max-redirect=20" : "--max-redirect=0"};
+        if (tool == 0 && follow) args.push_back("-L");
+        args.push_back(url);
+        if (RunTool(args) == 127) continue;  // not here: the other
+        std::ifstream f(hdr, std::ios::binary);
+        std::string line;
+        while (std::getline(f, line)) {
+            size_t p = line.find_first_not_of(" \t");
+            if (p == std::string::npos) continue;
+            std::string v = line.substr(p);
+            while (!v.empty() && (v.back() == '\r' || v.back() == ' ')) v.pop_back();
+            std::string low = v.substr(0, 9);
+            for (char& c : low) c = char(std::tolower(uint8_t(c)));
+            if (v.compare(0, 5, "HTTP/") == 0) {
+                size_t sp = v.find(' ');
+                a.status = sp == std::string::npos ? 0 : std::atoi(v.c_str() + sp + 1);
+                a.location.clear();  // a later answer's own
+            } else if (low == "location:") {
+                std::string l = v.substr(9);
+                l.erase(0, l.find_first_not_of(' '));
+                a.location = l.substr(0, l.find(' '));  // wget adds " [following]"
+            }
+        }
+        f.close();
+        fs::remove(hdr, ec);
+        if (to && a.status != 200) fs::remove(*to, ec);
+        return a;
+    }
+    return a;
+}
+
 // Linux: NVIDIA DLSS's files (kDlssSdkFiles) by the system's curl, else its wget
 struct FrameGenDownload {
     std::atomic<bool> running{false};
@@ -1765,13 +1903,14 @@ struct FrameGenDownload {
 // by the system's tar, and puts its files in place by the same renames (PutInPlace: a running program's file may be
 // renamed, and the launcher's own is). Then the new launcher is started and this one closes
 struct Updater {
-    enum class State { Idle, Off, Developer, Checking, Unreachable, UpToDate, Available, Downloading, Installing, Restart, Failed };
+    using State = UpdateState;
     std::atomic<State> state{State::Idle};
     std::atomic<float> progress{0};
     PortRelease latest;  // the newest release, from Check (read by the frame once state says so)
     std::string own;    // the release here
     std::string error;  // Failed's reason, a number
     bool game_open = false;  // Failed as the game was running
+    bool busy = false;       // Failed as GitHub turned the request away
     std::thread worker;
 
     bool Busy() const {
@@ -1793,22 +1932,9 @@ struct Updater {
         }
         state = State::Checking;
         worker = std::thread([this] {
-            std::error_code ec;
-            fs::path dir = ExeDir() / "update";
-            fs::create_directories(dir, ec);
-            fs::path list = dir / "releases.json";
-            int code = 0;
-            State result = State::Unreachable;
-            if (FetchUrl(kUpdateApi, list, 0, progress, 0, 1, code)) {
-                std::ifstream f(list, std::ios::binary);
-                std::string text((std::istreambuf_iterator<char>(f)), {});
-                PortRelease r;
-                if (NewestRelease(text, r)) {
-                    latest = r;
-                    result = r.tag == own ? State::UpToDate : State::Available;
-                }
-            }
-            fs::remove(list, ec);
+            PortRelease r;
+            State result = LookUpLatest(own, r);
+            if (result == State::Available || result == State::UpToDate) latest = r;
             state = result;
         });
     }
@@ -1835,17 +1961,22 @@ struct Updater {
         progress = 0;
         error.clear();
         game_open = false;
+        busy = false;
         PortRelease r = latest;
-        worker = std::thread([this, r] {
+        worker = std::thread([this, r]() mutable {
             std::error_code ec;
             fs::path game = ExeDir(), dir = game / "update", unpacked = dir / "unpacked";
             fs::remove_all(unpacked, ec);
             fs::create_directories(dir, ec);
             fs::path archive = dir / r.asset;
             int code = 0;
-            bool ok = FetchUrl(r.url, archive, r.size, progress, 0, 0.9f, code);
-            if (ok && ((r.size && fs::file_size(archive, ec) != r.size) ||
-                       (!r.sha256.empty() && Sha256File(archive) != r.sha256))) {
+            // its digest first: a package is never used unchecked
+            State known = ExpectedDigest(r, dir);
+            busy = known == State::Busy;
+            bool ok = known == State::Idle;
+            if (!ok) code = known == State::Failed ? 200 : 202;
+            ok = ok && FetchUrl(r.url, archive, r.size, progress, 0, 0.9f, code);
+            if (ok && ((r.size && fs::file_size(archive, ec) != r.size) || Sha256File(archive) != r.sha256)) {
                 ok = false;  // not the file GitHub has: never used
                 code = 200;
             }
@@ -3483,6 +3614,7 @@ private:
             case State::Developer: Status(kIconCheck, kMuted, T("Development build: no update checks.")); break;
             case State::Checking: Status(kIconGlobe, kMuted, T("Checking for updates...")); break;
             case State::Unreachable: Status(kIconWarn, kAmber, T("Could not reach GitHub to check for updates.")); break;
+            case State::Busy: Status(kIconWarn, kAmber, T("GitHub is busy right now: wait a few minutes and try again.")); break;
             case State::UpToDate: Status(kIconCheck, kGreen, F("Up to date ({})", {updater_.own})); break;
             case State::Available:
                 Status(kIconWarn, kAmber, F("Update available: {} (you have {})", {r.tag + (r.date.empty() ? "" : ", " + r.date), updater_.own}));
@@ -3494,6 +3626,7 @@ private:
             case State::Restart: Status(kIconCheck, kGreen, T("Restarting the launcher...")); break;
             case State::Failed:
                 Status(kIconWarn, kRed, updater_.game_open ? T("Close the game before updating.")
+                                        : updater_.busy    ? T("GitHub is busy right now: wait a few minutes and try again.")
                                             : F("The update failed (error {}): check the connection and try again.", {updater_.error}));
                 break;
             default: break;
@@ -4533,7 +4666,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         return HaveFrameGen(ExeDir(), kind) ? 0 : 1;
     }
     // --update-check: the newest release looked up without the window, the answer in update\check.txt (the state and
-    // the release); exit code 0 up to date, 3 an update available, 2 a developer build, 1 GitHub not reached.
+    // the release); exit code 0 up to date, 3 an update available, 2 a developer build, 4 GitHub busy, 1 GitHub not
+    // reached.
     // --update-apply: the update brought in too (the launcher is not restarted); exit code 0 once it is in place
     if (std::wcsstr(GetCommandLineW(), L"--update-check") || std::wcsstr(GetCommandLineW(), L"--update-apply")) {
         bool apply = std::wcsstr(GetCommandLineW(), L"--update-apply") != nullptr;
@@ -4552,7 +4686,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int show) {
         out << int(s) << " " << u.own << " " << u.latest.tag << " " << u.latest.asset << " " << u.error << "\n";
         return s == Updater::State::UpToDate || s == Updater::State::Restart ? 0
                : s == Updater::State::Available ? 3
-               : s == Updater::State::Developer ? 2 : 1;
+               : s == Updater::State::Developer ? 2
+               : s == Updater::State::Busy || (s == Updater::State::Failed && u.busy) ? 4 : 1;
     }
     float scale = float(GetDpiForSystem()) / 96.0f;
     {
@@ -4693,7 +4828,8 @@ int main(int argc, char** argv) {
             out << int(s) << " " << u.own << " " << u.latest.tag << " " << u.latest.asset << " " << u.error << "\n";
             return s == Updater::State::UpToDate || s == Updater::State::Restart ? 0
                    : s == Updater::State::Available ? 3
-                   : s == Updater::State::Developer ? 2 : 1;
+                   : s == Updater::State::Developer ? 2
+               : s == Updater::State::Busy || (s == Updater::State::Failed && u.busy) ? 4 : 1;
         }
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD)) {
         std::fprintf(stderr, "SDL failed to start: %s\n", SDL_GetError());
