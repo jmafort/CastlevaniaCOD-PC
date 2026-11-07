@@ -53,8 +53,10 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cwchar>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
 #include <mutex>
 #include <sstream>
@@ -343,6 +345,17 @@ void Scripted(input::Pad& p) {
     Press(p, steps, MsSince(start), int64_t(d3d::Swaps() - start_frame));
 }
 
+// this start is the game started again by itself (the SDK's kernel::Relaunch adds --relaunched)
+bool Relaunched() {
+#ifdef _WIN32
+    return std::wcsstr(GetCommandLineW(), L"--relaunched") != nullptr;
+#else
+    std::ifstream f("/proc/self/cmdline", std::ios::binary);
+    std::string all((std::istreambuf_iterator<char>(f)), {});
+    return all.find(std::string("--relaunched")) != std::string::npos;
+#endif
+}
+
 // CV_PAD_LIVE: the command running, its entries and when it is over
 struct Live {
     std::filesystem::path dir;
@@ -359,11 +372,14 @@ Live& LiveState() {
     static Live live = [] {
         Live l;
         if (const char* v = std::getenv("CV_PAD_LIVE"); v && *v) l.dir = v;
-        // the game started again in the same run (back to the title, TitleCombo): the commands go on from the last
-        // one, and one it was in the middle of is done as this start reads the pad
+        // the game started again in the same run (back to the title, TitleCombo; --relaunched): the commands go on
+        // from the last one, and one it was in the middle of is done as this start reads the pad. Only then: a first
+        // start may find its first command already there (cvtest writes it as soon as the game is up)
         std::error_code ec;
-        for (int n = 1; !l.dir.empty() && fs::exists(l.dir / ("cmd-" + std::to_string(n) + ".txt"), ec); n++) l.n = n;
-        if (l.n && !fs::exists(l.dir / ("done-" + std::to_string(l.n) + ".txt"), ec)) l.running = true;
+        if (Relaunched()) {
+            for (int n = 1; !l.dir.empty() && fs::exists(l.dir / ("cmd-" + std::to_string(n) + ".txt"), ec); n++) l.n = n;
+            if (l.n && !fs::exists(l.dir / ("done-" + std::to_string(l.n) + ".txt"), ec)) l.running = true;
+        }
         return l;
     }();
     return live;
