@@ -16,7 +16,8 @@
 //   menus                u32 0xB25518 is not 0 while the pause or inventory menu is up; a modal box sets bit 16 of the
 //                        word at u32 [0x548C10]
 //   scene                u32 0xB23410 (found here, by comparing memory in play and in a story scene)
-//   game                 0xB23700, what sub_002F7180 returns: the mode u32 at +0 (0 Hector, 1 Crazy, 2 Trevor) and the
+//   game                 0xB23700, what sub_002F7180 returns: the mode u32 at +0 (0 Hector, 1 Crazy, 2 Trevor), the
+//                        play time at +8 (1/300 s, the pause menu's Time: sub_002F7250 adds 5 a frame played) and the
 //                        save's name at +0x10, which sub_002F7240 returns
 //
 // Beside the game's own, for the regression suite (tools/cvtest/SUITE.md): "pad", the buttons and sticks as the game
@@ -235,6 +236,12 @@ void HealPlayer() {
     if (Read(hp_max, max) && max > 0 && mem::IsCommitted(hp)) std::memcpy(mem::Base() + hp, &max, 4);
 }
 
+// a test's "playtime=<seconds>": the pause menu's play time set (game/hooks.cpp), in its 1/300 of a second
+void SetPlayTime(uint32_t seconds) {
+    uint32_t t = seconds * 300;
+    if (mem::IsCommitted(cv::kGameInfo + 8)) std::memcpy(mem::Base() + cv::kGameInfo + 8, &t, 4);
+}
+
 bool PauseMenuUp() {
     uint32_t v = 0;
     return Read(cv::kMenu, v) && v;
@@ -287,6 +294,8 @@ std::string GameStateJson() {
     uint32_t mode = 0;
     std::array<char, 16> raw{};
     if (Read(cv::kGameInfo, mode)) j.Int("mode", mode);
+    uint32_t play_time = 0;  // the pause menu's Time, 1/300 s (game/hooks.cpp)
+    if (Read(cv::kGameInfo + 8, play_time)) j.Int("play_time", play_time);
     if (Read(cv::kGameInfo + 0x10, raw)) {
         std::string name(raw.data(), strnlen(raw.data(), raw.size()));
         for (char& c : name)

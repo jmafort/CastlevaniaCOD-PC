@@ -4,7 +4,7 @@
   "env": {
     "XBE_VIRTUAL_PAD": "1"
   },
-  "note": "The speed-up (keyboard.cpp, the SDK's app::SetSpeed), by a controller as SDL reads one (the virtual controller): the game at its own 60 frames a second (step.fps, the game's frames over the step's time), R3 clicked turns it to 2x (120: the pace doubled, one frame of each two shown, so the screen's refresh does not hold it back) and a fast-forward sign shows at the screen's top right, R3 again back to 60 and no sign; set to 4x, R3 runs it at 240 (above 150, for a slower machine) with the screen still at some 60 frames a second (telemetry speed.shown), and so with a heavy frame (400% render, ambient occlusion high, anti-aliasing): some 4 times the heavy frame's own rate at 1x, the screen at that rate (1.9.0 drew every frame: 4x came to the heavy frame's rate, the screen to a quarter of it); L3 with R3 opens the settings menu and leaves the speed as it is, R3 inside the menu does nothing; set off while on: back to 60, R3 does nothing. Ends at the game's own speed and the default setting (2x).",
+  "note": "The speed-up (keyboard.cpp, the SDK's app::SetSpeed), by a controller as SDL reads one (the virtual controller): the game at its own 60 frames a second (step.fps, the game's frames over the step's time), R3 clicked turns it to 2x (120: the pace doubled, one frame of each two shown, so the screen's refresh does not hold it back) and a fast-forward sign shows at the screen's top right, R3 again back to 60 and no sign; set to 4x, R3 runs it at 240 (above 150, for a slower machine) with the screen still at some 60 frames a second (telemetry speed.shown), and so with a heavy frame (400% render, ambient occlusion high, anti-aliasing): some 4 times the heavy frame's own rate at 1x, the screen at that rate (1.9.0 drew every frame: 4x came to the heavy frame's rate, the screen to a quarter of it); L3 with R3 opens the settings menu and leaves the speed as it is, R3 inside the menu does nothing; set off while on: back to 60, R3 does nothing. Ends at the game's own speed and the default setting (2x). The pause menu's play time (telemetry play_time, 1/300 s) keeps to the real time at every speed (1.9.0's ran 2x and 4x with the game).",
   "steps": [
     {
       "press": "0:set=speed_up=2,0f:wait:30f",
@@ -19,7 +19,8 @@
       "note": "its own speed",
       "expect": [
         "54 < step.fps < 66",
-        "speed.times == 1"
+        "speed.times == 1",
+        "abs((play_time - prev.play_time) / 300 - step.seconds) < 0.2 * step.seconds"
       ]
     },
     {
@@ -45,7 +46,8 @@
       "expect": [
         "speed.times == 2",
         "105 < step.fps < 132",
-        "screen.differs.sign > 3"
+        "screen.differs.sign > 3",
+        "abs((play_time - prev.play_time) / 300 - step.seconds) < 0.2 * step.seconds"
       ]
     },
     {
@@ -86,7 +88,8 @@
       "expect": [
         "speed.times == 4",
         "step.fps > 150",
-        "40 < (speed.shown - prev.speed.shown) / step.seconds < 75"
+        "40 < (speed.shown - prev.speed.shown) / step.seconds < 75",
+        "abs((play_time - prev.play_time) / 300 - step.seconds) < 0.2 * step.seconds"
       ]
     },
     {
@@ -122,7 +125,8 @@
       "expect": [
         "speed.times == 4",
         "step.fps > min(160, 2.5 * shots['heavy'].step.fps)",
-        "(speed.shown - prev.speed.shown) / step.seconds > 0.6 * min(60, shots['heavy'].step.fps)"
+        "(speed.shown - prev.speed.shown) / step.seconds > 0.6 * min(60, shots['heavy'].step.fps)",
+        "abs((play_time - prev.play_time) / 300 - step.seconds) < 0.2 * step.seconds"
       ]
     },
     {

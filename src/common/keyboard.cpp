@@ -23,6 +23,7 @@
 // need not be in front. Live entries can also be
 //   0:warp=<map>.<room>[.<entry>]     Hector sent to that room at the command's start (game/warp.cpp)
 //   0:heal                            his HP back to full at the command's start
+//   0:playtime=<seconds>              the pause menu's play time set to that (game/hooks.cpp)
 //   0:capture                         the frame after the command's start into XBE_CAPTURE_DIR, as F3 captures one:
 //                                     each draw's state and textures (the SDK's gpu/d3d12.cpp)
 //   0:unplug, 0:plug                  the virtual controller unplugged, plugged in again
@@ -83,6 +84,7 @@ std::string RoomListJson();          // telemetry.cpp
 void TelemetryFrame(const input::Pad& p);        // telemetry.cpp
 void RequestWarp(int map, int room, int entry);  // game/warp.cpp
 void HealPlayer();                               // telemetry.cpp
+void SetPlayTime(uint32_t seconds);              // telemetry.cpp
 void MenuClick(const std::string& name);         // menu.cpp
 void MenuScrollEnd();                            // menu.cpp
 struct BotGoal {                                 // bot.cpp
@@ -167,6 +169,7 @@ struct Step {
     int16_t lx, ly, rx, ry;
     int map = -1, room = 0, entry = 0;  // warp=<map>.<room>[.<entry>]: live commands send Hector there at their start
     bool goal = false, heal = false;    // walk=, fight (bot.cpp) and heal, live commands too
+    int64_t play_time = -1;             // playtime=<seconds>: the pause menu's play time set
     bool capture = false;               // capture, a live command's too
     int plug = -1;                      // unplug 0, plug 1: the virtual controller
     std::string click;                  // click=<control>: the settings menu's
@@ -232,6 +235,7 @@ std::vector<Step> ParseScript(std::string text) {
             else if (b.rfind("ls=", 0) == 0) Stick(b.substr(3), s.lx, s.ly);
             else if (b.rfind("rs=", 0) == 0) Stick(b.substr(3), s.rx, s.ry);
             else if (b == "heal") s.heal = true;
+            else if (b.rfind("playtime=", 0) == 0) s.play_time = std::strtoll(b.c_str() + 9, nullptr, 10);
             else if (b == "capture") s.capture = true;
             else if (b == "menuscroll") s.menu_scroll = true;
             else if (b.rfind("click=", 0) == 0) s.click = b.substr(6);
@@ -456,6 +460,7 @@ void LiveWait() {
             for (const Step& s : l.steps) {
                 if (s.map >= 0) RequestWarp(s.map, s.room, s.entry);
                 if (s.heal) HealPlayer();
+                if (s.play_time >= 0) SetPlayTime(uint32_t(s.play_time));
                 if (s.capture) gpu::g_capture = true;
                 if (s.plug >= 0) input::VirtualPlug(s.plug == 1);
                 if (!s.click.empty()) MenuClick(s.click);

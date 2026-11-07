@@ -38,6 +38,9 @@
 #define CV_PS2_MOTOR CV_PICK(000138F0, 00013990)        // a PS2 motor set (hooks.cpp)
 #define CV_SCREEN_DISTANCE CV_PICK(00012B30, 00012AC0)  // the camera's screen distance set (view.cpp)
 #define CV_FAR_Z CV_PICK(00012B90, 00012B20)            // its far plane set
+#define CV_PLAY_TIME CV_PICK(002F7250, 002F8A00)        // the play time's tick, each frame played (hooks.cpp)
+#define CV_MENU_NUMBER CV_PICK(0030F960, 00311170)      // a number drawn in the pause menu (hooks.cpp, the hours)
+#define CV_SAVE_NUMBER CV_PICK(0033E670, 00340200)      // a number drawn in a save slot (hooks.cpp, the hours)
 #define CV_FOG CV_PICK(00012A90, 00012A20)              // the fog set
 
 namespace cv {
@@ -83,6 +86,10 @@ inline constexpr uint32_t kMenu = CV_PICK(0xB25518, 0xB2CE78);
 inline constexpr uint32_t kModalFlags = CV_PICK(0x548C10, 0x54C748);
 // the game: its mode (0 Hector, 1 Crazy, 2 Trevor) and the save's name 0x10 on, what the getter there returns
 inline constexpr uint32_t kGameInfo = CV_PICK(0xB23700, 0xB2B060);
+// the play time's hours drawn (hooks.cpp): where the pause menu's (sub_003103D0) and a save slot's (sub_0033E750)
+// calls to their number drawers come back to
+inline constexpr uint32_t kMenuHoursDrawn = CV_PICK(0x31042F, 0x311C3F);
+inline constexpr uint32_t kSaveHoursDrawn = CV_PICK(0x33E8A6, 0x340436);
 // the room table the game writes (telemetry.cpp)
 inline constexpr uint32_t kRoomTable = CV_PICK(0x55BA00, 0x55F840);
 

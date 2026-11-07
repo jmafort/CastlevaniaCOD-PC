@@ -214,6 +214,9 @@ def tests():
         scenario("speed-keys", platforms=["linux"]),
         # 1.9.1: Back + Start (Select + Start) held a second, the setting on: the game started again at its title
         scenario("title-combo"),
+        # 1.9.2: the play time by the PC's clock (any speed, any frame rate), up to 999:59:59, its hours drawn whole
+        scenario("playtime"),
+        scenario("playtime", "--release", "eu", test="playtime-eu"),
         # 1.9.1: a page of the launcher (launcher_test.py) and of the settings menu opens at its top
         scenario("menu-scroll"),
         # 1.8.0: ambient occlusion with no anti-aliasing, the renderer's own TAA, 16:10 at the Steam Deck's size, an HD

@@ -1,0 +1,119 @@
+{
+  "name": "playtime",
+  "after": "newgame.json",
+  "env": {
+    "XBE_VIRTUAL_PAD": "1"
+  },
+  "note": "The play time (game/hooks.cpp): the pause menu's Time, kept by the PC's clock rather than by frames played, up to 999:59:59, its hours drawn whole. With the frame rate held to 30 (the game itself at half its speed) it still counts the real seconds (telemetry play_time, 1/300 s; the speed test checks 2x and 4x); set near the most (the live entry playtime=) it stops at 999:59:59; the pause menu shows 999 hours (231 before: the hours were cut to a byte); the first save room's save keeps it, the title (back to it by Back + Start) shows 999 hours on its slot, and the save loads with it.",
+  "steps": [
+    {
+      "press": "0:set=fps_cap=30,0f:wait:30f",
+      "note": "the frame rate held to 30"
+    },
+    {
+      "press": "0f:wait:150f",
+      "note": "five seconds at 30 frames a second: five seconds of play time, not two and a half",
+      "expect": [
+        "step.fps < 35",
+        "abs((play_time - prev.play_time) / 300 - step.seconds) < 0.2 * step.seconds"
+      ]
+    },
+    {
+      "press": "0:set=fps_cap=60,0:playtime=3599990,0f:wait:30f",
+      "note": "999:59:50",
+      "expect": [
+        "play_time >= 3599990 * 300"
+      ]
+    },
+    {
+      "press": "0f:wait:900f",
+      "note": "fifteen seconds on: held at 999:59:59",
+      "expect": [
+        "play_time == 1079999700"
+      ]
+    },
+    {
+      "press": "0f:start:4f,60f:wait:10f",
+      "shot": "pause",
+      "ask": {
+        "question": "What does the Time line at the bottom left of this pause menu read?",
+        "choices": {
+          "999": "999:59:59",
+          "231": "231:59:59",
+          "other": "another time, or no Time line"
+        }
+      },
+      "expect": [
+        "menu",
+        "screen.ask.answer == '999'"
+      ]
+    },
+    {
+      "press": "0f:start:4f,60f:wait:10f",
+      "note": "the pause menu closed",
+      "expect": [
+        "not menu"
+      ]
+    },
+    {
+      "route": "first-save",
+      "note": "to the first save room and a save there, back into 5.2",
+      "expect": [
+        "step.saved",
+        "play_time == 1079999700"
+      ]
+    },
+    {
+      "press": "0:set=title_combo=true,0f:wait:10f,10f:back+start:90f,0f:wait:30f",
+      "note": "back to the title",
+      "expect": [
+        "found(log, 'title: Back and Start held')"
+      ]
+    },
+    {
+      "until": "frame >= 640",
+      "timeout": 60,
+      "note": "the title drawn"
+    },
+    {
+      "press": "600:a,8000:wait",
+      "shot": "load",
+      "ask": {
+        "question": "What play time does the save slot on this load screen show?",
+        "choices": {
+          "999": "999:59:59",
+          "231": "231:59:59",
+          "other": "another time, or no save slot with a time"
+        }
+      },
+      "expect": [
+        "screen.ask.answer == '999'"
+      ]
+    },
+    {
+      "press": "0:a,3000:wait,3000:a,6000:a,11000:wait",
+      "note": "the slot, confirmed, Yes"
+    },
+    {
+      "until": "player.active and not loading and not menu",
+      "timeout": 60,
+      "poll_by": [
+        [
+          "cutscene",
+          "0:start,45f:wait"
+        ],
+        [
+          "modal",
+          "0:a,30f:wait"
+        ]
+      ],
+      "shot": "loaded",
+      "note": "loaded: in the save room, its play time as saved",
+      "expect": [
+        "map == 5",
+        "room == 27",
+        "play_time >= 1079999700"
+      ]
+    }
+  ]
+}

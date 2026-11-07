@@ -11,6 +11,7 @@
 // made from (common/release.h); the European executable compiles this file too (game_eu/hooks.cpp). The addresses in
 // the comments are the USA release's.
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 
 #include "app/app.h"
@@ -204,6 +205,61 @@ X86_EXTERN_FUNC(CV_ORIGINAL(CV_LAMENT_FLAG));
 X86_FUNC(CV_HOOK(CV_LAMENT_FLAG)) {
     CV_ORIGINAL(CV_LAMENT_FLAG)(ctx, base);
     if (g_lament_save) ctx.eax = 1;
+}
+
+// The play time (the pause menu's Time, kept in the save): a u32 at the game block's +8 (sub_002F7180's), in 1/300 of a
+// second. Its tick (sub_002F7250) runs at each frame the game plays: it added 300 over the game's frame rate (the float
+// at 0x4476F8, 60: sub_00320B90 adds 5) and held the time to 99:59:59 (sub_00320B70 makes ((h * 60 + m) * 60 + s) *
+// 300). So it counted frames: sped up (keyboard.cpp, the SDK's app::Speed) it ran two or four times as fast, and on a
+// PC that draws fewer than 60 frames it ran slow. Here the tick adds the time passed since the one before, by the PC's
+// clock, so the time is the time played at any speed and frame rate. A gap over a quarter of a second (the game held
+// at a loading screen, behind other windows, its pause menu up: wherever it did not tick) counts as one frame, as the
+// game counted it. The time goes up to 999:59:59 (3,599,999 seconds, 1,079,999,700 in its units: an int32 still),
+// which the pause menu and the save screens draw with their three hour digits.
+X86_FUNC(CV_HOOK(CV_PLAY_TIME)) {
+    using Clock = std::chrono::steady_clock;
+    constexpr int64_t kSecond = 1000000000, kFrame = kSecond / 60, kGap = kSecond / 4;
+    constexpr uint32_t kMost = ((999u * 60 + 59) * 60 + 59) * 300;
+    static Clock::time_point last{};
+    static int64_t carry = 0;  // nanoseconds times 300 not yet a whole unit
+    Clock::time_point now = Clock::now();
+    int64_t ns = last == Clock::time_point{} ? 0 : std::chrono::duration_cast<std::chrono::nanoseconds>(now - last).count();
+    last = now;
+    if (ns <= 0 || ns > kGap) ns = kFrame;
+    carry += ns * 300;
+    uint32_t add = uint32_t(carry / kSecond);
+    carry %= kSecond;
+    uint32_t t = 0;
+    std::memcpy(&t, base + cv::kGameInfo + 8, 4);
+    if (t < kMost) t = std::min<uint32_t>(kMost, t + add);
+    std::memcpy(base + cv::kGameInfo + 8, &t, 4);
+    ctx.eax = kMost;  // as the original leaves them: the cap, and the time
+    ctx.ecx = t;
+    ctx.esp += 4;  // its ret: no arguments
+}
+
+// The play time's hours, drawn whole. The pause menu (sub_003103D0) and the save slots (sub_0033E750) unpack the time
+// sub_002F70A0 packs as (hours << 16) | (minutes << 8) | seconds, the hours with a shift of 8 and the high byte of
+// what is left (movzx bh): hours over 255 came out less 256 (999 as 231), though the pause menu draws three digits.
+// Up to 99:59:59 that never showed; with the play time to 999:59:59 (above) the drawers get the hours whole, from the
+// caller's ebx (the packed time shifted by 8), on the calls that draw them.
+X86_EXTERN_FUNC(CV_ORIGINAL(CV_MENU_NUMBER));
+X86_FUNC(CV_HOOK(CV_MENU_NUMBER)) {
+    uint32_t back = 0;
+    std::memcpy(&back, base + ctx.esp, 4);
+    if (back == cv::kMenuHoursDrawn) {
+        uint32_t hours = (ctx.ebx >> 8) & 0xFFFF;  // its first argument, the number
+        std::memcpy(base + ctx.esp + 4, &hours, 4);
+    }
+    CV_ORIGINAL(CV_MENU_NUMBER)(ctx, base);
+}
+
+X86_EXTERN_FUNC(CV_ORIGINAL(CV_SAVE_NUMBER));
+X86_FUNC(CV_HOOK(CV_SAVE_NUMBER)) {
+    uint32_t back = 0;
+    std::memcpy(&back, base + ctx.esp, 4);
+    if (back == cv::kSaveHoursDrawn) ctx.eax = (ctx.ebx >> 8) & 0xFFFF;  // the number, in eax
+    CV_ORIGINAL(CV_SAVE_NUMBER)(ctx, base);
 }
 
 // The name codes: a new game named @CRAZY plays Crazy mode, one named @TREVOR plays as Trevor. The game takes them

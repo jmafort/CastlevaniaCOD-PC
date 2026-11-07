@@ -98,6 +98,8 @@ On top of Pazzi7054's port:
   clicked again, with a fast-forward sign at the screen's top right while it is on.
 - **Back to the title** - Back and Start (Select and Start in the PS2 layout) held for a second start the game again
   at its title screen, as a console's reset does. Off by default.
+- **Play time by the clock** - the pause menu's Time counts the real time played at any speed and frame rate (the
+  game counted frames), up to 999:59:59 rather than 99:59:59, with its hours shown whole.
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
@@ -525,8 +527,13 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   own speed. The game steps two or four times for each frame the screen shows: the frames in between are worked out
   but not drawn (the 3D, the anti-aliasing, ray tracing and the rest are only drawn for the frames shown), so the
   screen keeps its 60 frames a second with heavy graphics settings too, each two or four of the game's steps on from
-  the one before. The game has no use of its own for R3, in either button layout; L3 with R3 is still the settings
-  menu, and leaves the speed as it is.
+  the one before. The play time (the pause menu's Time) keeps to the real time meanwhile. The game has no use of its
+  own for R3, in either button layout; L3 with R3 is still the settings menu, and leaves the speed as it is.
+- **Play time** - The pause menu's Time, kept in each save, counts the real time played by the PC's clock: the game
+  counted its frames, so it ran fast with the speed-up and slow on a PC that draws fewer than 60 frames a second. A
+  pause of over a quarter of a second where the game does not tick (a loading screen, the window behind others)
+  counts as a frame, as the game counted it. It goes up to 999:59:59 (the game stopped at 99:59:59), and the pause
+  menu and the save and load screens show its hours whole (the game kept them to a byte: 999 hours showed as 231).
 - **Back to the title** - With the setting on (off by default; the launcher's or the in-game menu's Controls page;
   `title_combo = true`), hold Back and Start together for a second (Select and Start in the PS2 layout, Backspace and
   Enter on the keyboard): the game starts again and goes to its title screen, as a console's reset does, and anything
