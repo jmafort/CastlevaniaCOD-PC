@@ -65,6 +65,7 @@ extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture 
 extern uint32_t g_button_layout;    // texpack.cpp
 extern uint32_t g_sprint;           // keyboard.cpp: Hector's sprint, percent of his walk (0 off)
 extern uint32_t g_speed_up;         // keyboard.cpp: the speed-up's speed (0 off, 2, 4)
+extern bool g_title_combo;          // keyboard.cpp: Back and Start held go back to the title
 extern bool g_texture_pack;         // texpack.cpp: an HD texture pack's pictures drawn
 bool ViewFov(double& game, double& drawn);  // game/view.cpp: the field of view in degrees, the game's and as drawn
 extern std::atomic<bool> g_wide_trace_frame;  // widescreen.cpp: log the next frame's draws
@@ -73,6 +74,8 @@ namespace {
 
 std::atomic<bool> g_open{false};
 bool g_scaled = false;
+std::atomic<bool> g_scroll_end{false};  // MenuScrollEnd
+float g_menu_scroll = 0;                // the page's scroll as last drawn (MenuScroll)
 // CV_MENU_STATE=<file>, for tests (tools/cvtest): where the menu's controls are, by their ids without the ## (a
 // drop-down's choices by their names after it: "mode.Windowed"), a tab as tab.<name>, a button by its words
 Marks g_marks("CV_MENU_STATE");
@@ -589,6 +592,10 @@ void ControlsTab(bool& save) {
         Row("Speed-up", "Click the right stick in (R3), or press Tab: the whole game runs at this speed until you "
                         "click it again. A sign at the screen's top right shows it is on.");
         save |= Choice<uint32_t>("##speedup", g_speed_up, {0, 2, 4}, {"Off", "2x", "4x"});
+        Row(g_button_layout == 1 ? "Select + Start: back to the title" : "Back + Start: back to the title",
+            "Hold both for a second (Enter and Backspace on the keyboard): the game starts again at its title screen, as "
+            "a console's reset does. Anything not saved is lost.");
+        save |= Check("##title", &g_title_combo);
         ImGui::EndTable();
     }
     ImGui::Spacing();
@@ -667,6 +674,7 @@ void Defaults() {
     g_hud_edges = true;
     g_sprint = 0;
     g_speed_up = 2;
+    g_title_combo = false;
     g_menu_spread = true;
     g_hd_movies = true;
     g_texture_pack = true;
@@ -749,6 +757,10 @@ void Style(float scale) {
 }  // namespace
 
 bool MenuOpen() { return g_open; }
+// tests: the page shown scrolled to its end at the menu's next frame (keyboard.cpp's live entry menuscroll), and how
+// far down it is (telemetry's menu_scroll)
+void MenuScrollEnd() { g_scroll_end = true; }
+float MenuScroll() { return g_menu_scroll; }
 void MenuToggle() { g_open = !g_open; }
 
 // keyboard.cpp's live entry click=<control>: the menu's control of that name (CV_MENU_STATE's) clicked
@@ -963,6 +975,12 @@ void MenuUi(double fps) {
                 }
                 ImGui::EndTabBar();
             }
+            // another page opens at its top, not as far down as the page before was scrolled
+            static int scrolled_page = 0;
+            if (page != scrolled_page) ImGui::SetScrollY(0);
+            scrolled_page = page;
+            if (g_scroll_end.exchange(false)) ImGui::SetScrollY(ImGui::GetScrollMaxY());  // a test's (MenuScrollEnd)
+            g_menu_scroll = ImGui::GetScrollY();
         }
         ImGui::EndChild();
         // what the setting in focus does; another page's is not kept

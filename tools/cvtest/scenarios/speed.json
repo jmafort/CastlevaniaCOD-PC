@@ -4,7 +4,7 @@
   "env": {
     "XBE_VIRTUAL_PAD": "1"
   },
-  "note": "The speed-up (keyboard.cpp, the SDK's app::SetSpeed), by a controller as SDL reads one (the virtual controller): the game at its own 60 frames a second (step.fps, the game's frames over the step's time), R3 clicked turns it to 2x (120: the pace doubled, one frame of each two shown, so the screen's refresh does not hold it back) and a fast-forward sign shows at the screen's top right, R3 again back to 60 and no sign; set to 4x, R3 runs it at 240 (above 150, for a slower machine); L3 with R3 opens the settings menu and leaves the speed as it is, R3 inside the menu does nothing; set off while on: back to 60, R3 does nothing. Ends at the game's own speed and the default setting (2x).",
+  "note": "The speed-up (keyboard.cpp, the SDK's app::SetSpeed), by a controller as SDL reads one (the virtual controller): the game at its own 60 frames a second (step.fps, the game's frames over the step's time), R3 clicked turns it to 2x (120: the pace doubled, one frame of each two shown, so the screen's refresh does not hold it back) and a fast-forward sign shows at the screen's top right, R3 again back to 60 and no sign; set to 4x, R3 runs it at 240 (above 150, for a slower machine) with the screen still at some 60 frames a second (telemetry speed.shown), and so with a heavy frame (400% render, ambient occlusion high, anti-aliasing): some 4 times the heavy frame's own rate at 1x, the screen at that rate (1.9.0 drew every frame: 4x came to the heavy frame's rate, the screen to a quarter of it); L3 with R3 opens the settings menu and leaves the speed as it is, R3 inside the menu does nothing; set off while on: back to 60, R3 does nothing. Ends at the game's own speed and the default setting (2x).",
   "steps": [
     {
       "press": "0:set=speed_up=2,0f:wait:30f",
@@ -34,7 +34,13 @@
       "shot": "fast",
       "note": "2x: the game's frames twice as many a second, the sign at the top right",
       "differs": {
-        "sign": ["normal", 0.9, 0.0, 1.0, 0.08]
+        "sign": [
+          "normal",
+          0.9,
+          0.0,
+          1.0,
+          0.08
+        ]
       },
       "expect": [
         "speed.times == 2",
@@ -53,7 +59,13 @@
       "press": "0f:wait:240f",
       "shot": "normal-again",
       "differs": {
-        "sign": ["normal", 0.9, 0.0, 1.0, 0.08]
+        "sign": [
+          "normal",
+          0.9,
+          0.0,
+          1.0,
+          0.08
+        ]
       },
       "expect": [
         "54 < step.fps < 66",
@@ -73,8 +85,49 @@
       "shot": "faster",
       "expect": [
         "speed.times == 4",
-        "step.fps > 150"
+        "step.fps > 150",
+        "40 < (speed.shown - prev.speed.shown) / step.seconds < 75"
       ]
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:10f",
+      "note": "R3: its own speed, for the heavy frame's own rate",
+      "expect": [
+        "speed.times == 1"
+      ]
+    },
+    {
+      "press": "0:set=render_percent=400,0:set=ambient_occlusion=2,0:set=antialiasing=1,0f:wait:120f",
+      "note": "a heavy frame (400% of the window's pixels, ambient occlusion high, anti-aliasing): the settle"
+    },
+    {
+      "press": "0f:wait:240f",
+      "shot": "heavy",
+      "note": "the heavy frame at its own speed: as many frames as the graphics card draws, 60 at most",
+      "expect": [
+        "speed.times == 1"
+      ]
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:10f",
+      "note": "R3: 4x again",
+      "expect": [
+        "speed.times == 4"
+      ]
+    },
+    {
+      "press": "0f:wait:960f",
+      "shot": "faster-heavy",
+      "note": "4x with the heavy frame: the frames let go draw nothing of the frame, so the game runs over 2.5 times the heavy frame's own rate (Windows on the RTX 3060: 230 a second against 60; Linux in WSL, whose frames cost more apart from drawing: 147 against 55) and the screen gets the heavy frame's own rate; in 1.9.0 every frame was drawn, 4x came to that rate, and the screen a quarter of it",
+      "expect": [
+        "speed.times == 4",
+        "step.fps > min(160, 2.5 * shots['heavy'].step.fps)",
+        "(speed.shown - prev.speed.shown) / step.seconds > 0.6 * min(60, shots['heavy'].step.fps)"
+      ]
+    },
+    {
+      "press": "0:set=render_percent=100,0:set=ambient_occlusion=0,0:set=antialiasing=0,0f:wait:60f",
+      "note": "the frame as before"
     },
     {
       "press": "0f:l3+r3:5f,25f:wait:20f",

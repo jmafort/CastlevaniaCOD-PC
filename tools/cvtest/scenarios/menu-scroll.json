@@ -1,0 +1,57 @@
+{
+  "name": "menu-scroll",
+  "after": "newgame.json",
+  "env": {
+    "XBE_VIRTUAL_PAD": "1"
+  },
+  "note": "The settings menu's pages open at their top (menu.cpp): Graphics scrolled to its end (the live entry menuscroll), then the right shoulder turns to View, which opens at its top, not as far down as Graphics was (1.9.1); the left shoulder back to Graphics, at its top too. By a controller as SDL reads one.",
+  "steps": [
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "expect": [
+        "settings_menu"
+      ]
+    },
+    {
+      "click": "tab.Graphics",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'aniso' in menu_controls",
+        "menu_scroll == 0"
+      ]
+    },
+    {
+      "press": "0:menuscroll,0f:wait:10f",
+      "shot": "graphics-end",
+      "note": "Graphics at its end",
+      "expect": [
+        "menu_scroll > 100"
+      ]
+    },
+    {
+      "press": "0f:black:4f,10f:wait:10f",
+      "shot": "view",
+      "note": "the right shoulder: View, at its top",
+      "expect": [
+        "'tab.View' in menu_controls",
+        "'fov' in menu_controls",
+        "menu_scroll == 0"
+      ]
+    },
+    {
+      "press": "0f:white:4f,10f:wait:10f",
+      "note": "the left shoulder: Graphics again, at its top",
+      "expect": [
+        "'aniso' in menu_controls",
+        "menu_scroll == 0"
+      ]
+    },
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "note": "closed",
+      "expect": [
+        "not settings_menu"
+      ]
+    }
+  ]
+}

@@ -81,7 +81,8 @@ player.active, player.pos (x, y, z), player.yaw, player.hp, camera.heading, menu
 before the step, screen has mean, std and flat (one colour) and, with a judge, judge.scene, judge.defect,
 judge.hector and judge.by (the model; judge.first has Jev's answers a review replaced), step has fps, seconds and
 saved (the game wrote a save during it), settings the run's settings (--set changes them), shots["<shot>"] the
-screen of an earlier step with that shot (shots["a"].edges.floor < screen.edges.floor), log the game's log lines
+screen of an earlier step with that shot (shots["a"].edges.floor < screen.edges.floor; its step's fps and seconds as
+shots["a"].step.fps), log the game's log lines
 of the step (any("Rumble" in l for l in log)) and runlog those of the run so far, found(lines, pattern) the
 lines a regular expression matches and total(lines, pattern) the sum of its first group's numbers over them
 (total(runlog, r"(\d+) shaders compiled")), saved the settings file as the game left it (saved.display_mode),
@@ -266,6 +267,37 @@ if not LINUX:
         if hwnd:
             user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
 
+    class Started:
+        """a process the game started, as Popen's: the game going back to its title starts itself again
+        (src/common/keyboard.cpp TitleCombo, the SDK's kernel::Relaunch) and the first one exits"""
+        def __init__(self, pid):
+            kernel32 = ctypes.WinDLL("kernel32")
+            kernel32.OpenProcess.restype = wintypes.HANDLE
+            self.k, self.pid, self.returncode = kernel32, pid, None
+            self.h = kernel32.OpenProcess(0x00100000 | 0x1000 | 0x0001, False, pid)  # SYNCHRONIZE, QUERY_LIMITED, TERMINATE
+
+        def poll(self):
+            if self.returncode is None and self.h:
+                code = wintypes.DWORD()
+                if self.k.GetExitCodeProcess(wintypes.HANDLE(self.h), ctypes.byref(code)) and code.value != 259:
+                    self.returncode = code.value
+            return self.returncode if self.h else 1
+
+        def wait(self, timeout=None):
+            if self.h and self.k.WaitForSingleObject(wintypes.HANDLE(self.h),
+                                                     0xFFFFFFFF if timeout is None else int(timeout * 1000)) == 0x102:
+                raise subprocess.TimeoutExpired("game", timeout)
+            return self.poll()
+
+        def kill(self):
+            if self.h:
+                self.k.TerminateProcess(wintypes.HANDLE(self.h), 1)
+
+    def successor(pid):
+        """the game the exited process pid started in its place, if it did"""
+        kids = family(pid) - {pid}
+        return min(kids) if kids else None
+
 
 else:
     # Linux: a virtual display for the run, its windows by xdotool, their pictures by ImageMagick's import
@@ -385,6 +417,9 @@ else:
         r = subprocess.run(["xdotool", "keydown" if down else "keyup", "--window", str(win)] + names.split("+"),
                            capture_output=True, text=True)
         return r.stderr.strip() or None
+
+    def successor(pid):
+        return None  # execl: the same process starts the game again (runtime kernel::Relaunch)
 
     def close_window(proc, win):
         # SIGTERM: SDL's quit, the game ends as it does closed (runtime/linux/main.cpp); to another release's
@@ -663,7 +698,25 @@ class Game:
             time.sleep(0.5 if self.first_start is not None else 0.1)
 
     def alive(self):
-        return self.proc.poll() is None
+        if self.proc.poll() is None:
+            return True
+        # the game went back to its title: the process it started in its place is the game now
+        nxt = successor(self.proc.pid)
+        if nxt and self.proc.returncode == 0:
+            self.proc, self.hwnd = Started(nxt), None
+            return self.proc.poll() is None
+        return False
+
+    def screen(self):
+        """the game window's picture; its window found again when it has another (the game started again)"""
+        img = capture(self.hwnd) if self.hwnd else None
+        if img is None and not (LINUX and WAYLAND):
+            for h in windows(self.proc.pid):
+                if window_class(h) in ("game", "Castlevania"):
+                    self.hwnd = h
+                    img = capture(h)
+                    break
+        return img
 
     def menu_controls(self):
         try:
@@ -999,7 +1052,7 @@ def play_route(game, route, step, prev, box_shots=None):
         nonlocal boxes
         if not box_shots or play(os.environ.get("CV_BOX_WAIT", "45f") + ":wait") or not game.alive():
             return
-        img = capture(game.hwnd)
+        img = game.screen()
         if img:
             boxes += 1
             write_png(Path(f"{box_shots}-{boxes}.png"), *img)
@@ -1347,7 +1400,7 @@ def play_steps(game, scenario, settings, shots, run, results):
                 r["perf_room"] = step["perf_room"]
         screen, img = {}, None
         if game.alive():
-            img = capture(game.hwnd)
+            img = game.screen()
             if img:
                 screen = screen_stats(*img)
                 if step.get("measure"):
@@ -1398,8 +1451,8 @@ def play_steps(game, scenario, settings, shots, run, results):
                 if not ok:
                     r["errors"].append(f"expect {expr!r} failed" + (f" ({why})" if why else ""))
             r.update(state=state, screen=screen, **info)
-            if step.get("shot"):
-                screens[step["shot"]] = screen
+            if step.get("shot"):  # its screen, and its step's own figures as .step (shots["a"].step.fps)
+                screens[step["shot"]] = dict(screen, step=info)
             if screen.get("flat"):
                 r["warnings"].append(f"screen is one colour (mean {screen['mean']})")
             r["warnings"] += seen

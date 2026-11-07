@@ -881,8 +881,13 @@ private:
         std::vector<uint8_t> px;
         uint32_t w = 0, h = 0;
         if (!Decode(codec, file, px, w, h)) return false;
+        // the PS2's alpha doubled; all but none (3 of 128 or less) none at all. A pack's transparent parts keep
+        // some 1s from its compression, and 1 doubled passed the game's alpha test of its walls (2 or more): those
+        // texels, drawn at 1% and writing depth, hid what is behind them. The save room's window (5.27) lost its
+        // grille that way to a wall picture (f2ea6aeb36a931e5) whose opening is 1s where the game's texture has 0s
         if (ps2_alpha)
-            for (size_t i = 3; i < px.size(); i += 4) px[i] = uint8_t(std::min(255u, (px[i] * 255u + 64) / 128));
+            for (size_t i = 3; i < px.size(); i += 4)
+                px[i] = px[i] <= 3 ? 0 : uint8_t(std::min(255u, (px[i] * 255u + 64) / 128));
         uint32_t cap = g_texture_pack_size ? g_texture_pack_size : 16384;
         while (std::max(w, h) > cap && w > 1 && h > 1) {
             px = Half(px, w, h);

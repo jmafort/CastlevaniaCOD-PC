@@ -1,0 +1,49 @@
+{
+  "name": "rt-memory",
+  "after": "newgame.json",
+  "vendor": true,
+  "needs": [
+    "env:CV_VENDOR_DIR"
+  ],
+  "platforms": [
+    "windows"
+  ],
+  "note": "Ray tracing's memory (the SDK's d3d12.cpp ReleaseRtTargets): its own targets, held after it was turned off, kept a 6 GB card near Windows' budget with the frame at 200% of 2560x1440, and turned on and off again frames slowed to 8 a second for good. Now, off for 2 s, they are given back, and made again when it is next on. On a card with ray tracing (DXR), with AMD FSR (ray tracing needs anti-aliasing) from CV_VENDOR_DIR: Lighting on, then off (given back, the game at 60 again), on (its guides made again, lit), off (given back again).",
+  "settings": {
+    "width": 1280,
+    "height": 720,
+    "antialiasing": 1,
+    "render_percent": 200,
+    "ambient_occlusion": 1
+  },
+  "steps": [
+    {
+      "press": "0f:wait:120f",
+      "note": "off",
+      "expect": ["54 < step.fps < 66", "aa.kind == 1"]
+    },
+    {
+      "press": "0:set=ray_tracing=5,0f:wait:240f",
+      "shot": "on",
+      "note": "Lighting on",
+      "expect": ["found(log, r'ray tracing: guides made at 2560x1440')", "found(log, r'ray tracing: bounce lighting drawn')"]
+    },
+    {
+      "press": "0:set=ray_tracing=0,0f:wait:240f",
+      "shot": "off",
+      "note": "off: its targets given back after 2 s",
+      "expect": ["found(log, r'ray tracing: off a while, its \\d+ targets given back')", "54 < step.fps < 66"]
+    },
+    {
+      "press": "0:set=ray_tracing=5,0f:wait:240f",
+      "shot": "on-again",
+      "note": "on again: its targets made again",
+      "expect": ["found(log, r'ray tracing: guides made at 2560x1440')"]
+    },
+    {
+      "press": "0:set=ray_tracing=0,0f:wait:240f",
+      "note": "off again: given back again",
+      "expect": ["found(log, r'ray tracing: off a while, its \\d+ targets given back')", "54 < step.fps < 66"]
+    }
+  ]
+}

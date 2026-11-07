@@ -1,0 +1,85 @@
+{
+  "name": "save-grille",
+  "after": "newgame.json",
+  "needs": [
+    "textures"
+  ],
+  "settings": {
+    "width": 1280,
+    "height": 720
+  },
+  "note": "The save room's grille with the HD texture pack (texpack.cpp LoadPicture): the window of 5.27 behind the save point has iron bars in front of its statue. A wall picture of the pack (f2ea6aeb36a931e5) keeps alpha 1 of 128 in its opening where the game's texture has 0, which doubled passed the wall's alpha test (2 or more) and wrote depth there, so the bars behind were never drawn (1.9.0). Hector walked to where the window is in view: the bars' edges with the pack off, then on (as strong, the pack's own bars). The left niche's edges: 0.72 of the pack-off ones in 1.9.0, 0.85 with the bars drawn (the pack's smoother pictures have fewer edges of their own).",
+  "steps": [
+    {
+      "press": "0:warp=5.27,10f:wait:20f"
+    },
+    {
+      "until": "map == 5 and room == 27 and player.active and not loading",
+      "timeout": 40,
+      "poll_by": [
+        [
+          "cutscene",
+          "0:start,45f:wait"
+        ],
+        [
+          "menu",
+          "0:b,30f:wait"
+        ]
+      ]
+    },
+    {
+      "press": "0:walk=-2000/-2570/250,0f:wait:600f",
+      "note": "to the save point",
+      "expect": [
+        "abs(player.pos[0] + 2000) < 350",
+        "abs(player.pos[2] + 2570) < 350"
+      ]
+    },
+    {
+      "press": "0f:lsl:25f,0f:wait:40f,0f:lsl:25f,0f:wait:40f,0f:lsu:20f,0f:wait:40f,0f:lsl:30f,0f:wait:40f,0f:lsd:20f,0f:wait:160f",
+      "note": "round to the window's side, the camera on it"
+    },
+    {
+      "press": "0:set=texture_pack=false,0f:wait:150f",
+      "shot": "nopack",
+      "measure": {
+        "left": [
+          0.01,
+          0.12,
+          0.2,
+          0.55
+        ],
+        "middle": [
+          0.47,
+          0.05,
+          0.62,
+          0.55
+        ]
+      },
+      "note": "the game's own textures: the bars"
+    },
+    {
+      "press": "0:set=texture_pack=true,0f:wait:240f",
+      "shot": "pack",
+      "measure": {
+        "left": [
+          0.01,
+          0.12,
+          0.2,
+          0.55
+        ],
+        "middle": [
+          0.47,
+          0.05,
+          0.62,
+          0.55
+        ]
+      },
+      "note": "the pack's: the bars still there",
+      "expect": [
+        "texpack.matched > 0",
+        "screen.edges.left > 0.79 * shots['nopack'].edges.left"
+      ]
+    }
+  ]
+}

@@ -199,6 +199,7 @@ bool SprintOn();                // keyboard.cpp
 extern uint32_t g_sprint;       // keyboard.cpp
 extern uint32_t g_speed_up;     // keyboard.cpp
 bool MenuOpen();         // menu.cpp
+float MenuScroll();      // menu.cpp
 
 // for the bot (bot.cpp), each frame: Hector's position and facing, the camera's heading (the direction stick up
 // walks), the scene word and the pause menu
@@ -348,10 +349,12 @@ std::string GameStateJson() {
         out += b;
     }
     out += MenuOpen() ? ",\"settings_menu\":true" : ",\"settings_menu\":false";
+    out += ",\"menu_scroll\":" + std::to_string(int(MenuScroll()));
     // Hector's sprint: the setting (percent of his walk, 0 off) and whether he sprints (keyboard.cpp)
     out += ",\"sprint\":{\"setting\":" + std::to_string(g_sprint) + ",\"active\":" + (SprintOn() ? "true" : "false") + "}";
     // the speed-up: the setting (0 off, 2, 4) and the game's speed now (keyboard.cpp, the SDK's app::Speed)
-    out += ",\"speed\":{\"setting\":" + std::to_string(g_speed_up) + ",\"times\":" + std::to_string(app::Speed()) + "}";
+    out += ",\"speed\":{\"setting\":" + std::to_string(g_speed_up) + ",\"times\":" + std::to_string(app::Speed()) +
+           ",\"shown\":" + std::to_string(gpu::g_frames_shown.load(std::memory_order_relaxed)) + "}";
     // the virtual controller (XBE_VIRTUAL_PAD): plugged in, taken by a port, the motors the game drove it with
     if (input::VirtualOn()) {
         input::VirtualReport v = input::VirtualState();

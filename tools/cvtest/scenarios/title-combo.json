@@ -1,0 +1,70 @@
+{
+  "name": "title-combo",
+  "after": "newgame.json",
+  "env": {
+    "XBE_VIRTUAL_PAD": "1"
+  },
+  "note": "Back to the title (keyboard.cpp TitleCombo, the SDK's kernel::Relaunch), by a controller as SDL reads one: with the setting off, Back and Start held do what the game does with them (its pause menu, closed again); on, held half a second nothing happens and the game gets neither button (no pause menu); held over a second, the game starts again (the same log goes on, cvtest follows the new process and its window) and reaches its title; Continue then loads the new game's save, so the game plays on after it.",
+  "steps": [
+    {
+      "press": "0:set=title_combo=false,0f:back+start:80f,0f:wait:30f",
+      "note": "off: the game's own",
+      "expect": [
+        "not found(log, 'title: Back and Start held')"
+      ]
+    },
+    {
+      "until": "player.active and not menu and not camera.special and not modal",
+      "timeout": 30,
+      "poll": "30f:wait",
+      "poll_by": [
+        ["menu", "0:start,40f:wait"],
+        ["camera.special", "0:back,40f:wait"],
+        ["modal", "0:a,40f:wait"]
+      ],
+      "note": "its pause menu or map closed"
+    },
+    {
+      "press": "0:set=title_combo=true,0f:wait:10f,10f:back+start:30f,40f:wait:30f",
+      "note": "on, held half a second: nothing, and the game got neither button",
+      "expect": [
+        "player.active",
+        "not menu",
+        "not camera.special",
+        "not found(log, 'title: Back and Start held')"
+      ]
+    },
+    {
+      "press": "0f:back+start:90f,0f:wait:30f",
+      "note": "held over a second: the game started again",
+      "expect": [
+        "found(log, 'title: Back and Start held')",
+        "not player.active"
+      ]
+    },
+    {
+      "until": "frame >= 640",
+      "timeout": 60,
+      "shot": "title",
+      "note": "its title, drawn",
+      "expect": [
+        "not player.active",
+        "not screen.flat",
+        "found(runlog, 'Relaunched')"
+      ]
+    },
+    {
+      "until": "player.active and not cutscene and not loading and not menu",
+      "timeout": 90,
+      "poll": "0:a,90f:wait",
+      "poll_by": [
+        ["cutscene", "0:start,45f:wait"]
+      ],
+      "shot": "loaded",
+      "note": "Continue: the save the new game made, played",
+      "expect": [
+        "map == 5"
+      ]
+    }
+  ]
+}

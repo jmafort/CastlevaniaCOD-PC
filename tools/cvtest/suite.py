@@ -141,7 +141,7 @@ def scenario(name, *args, test=None, quick=False, needs=(), before=None, env=Non
 # and once lockon has let him out of his wall that route is stuck in his corridor
 SESSIONS = {
     "usa": ["newgame", "texpack", "texpack-live", "fps", "fps-uncapped", "stick", "widescreen", "route", "moai-off", "moai-on", "bot",
-            "buttons-xbox", "buttons-live", "shadow", "warp", "rooms", "keyboard", "speed", "menu"],
+            "buttons-xbox", "buttons-live", "shadow", "warp", "rooms", "keyboard", "speed", "menu-scroll", "menu"],
     # ao plays in a game of its own: its regions are a new game's view of the courtyard (a session's warp back leaves
     # Hector by the fountain, its water scrolling where ao looks for still ground)
     "wide": ["filters-pack", "qol", "wide-1610", "lockon"],
@@ -195,6 +195,8 @@ def tests():
         # the pack switched off and on while the game runs, and on in a game started without it
         scenario("texpack-live", needs=["textures"]),
         scenario("texpack-live-on", "--set", "texture_pack=false", needs=["textures"]),
+        # 1.9.1: the save room's grille drawn with the pack (its near-transparent texels no longer pass the alpha test)
+        scenario("save-grille", needs=["textures"]),
         scenario("shadercache-cold", before=empty_shader_cache),
         scenario("shadercache-warm"),
         scenario("stick"),
@@ -210,6 +212,10 @@ def tests():
         # 1.9.0: the speed-up, 2x and 4x by R3 (a controller as SDL reads one), Tab on the keyboard (Linux)
         scenario("speed", quick=True),
         scenario("speed-keys", platforms=["linux"]),
+        # 1.9.1: Back + Start (Select + Start) held a second, the setting on: the game started again at its title
+        scenario("title-combo"),
+        # 1.9.1: a page of the launcher (launcher_test.py) and of the settings menu opens at its top
+        scenario("menu-scroll"),
         # 1.8.0: ambient occlusion with no anti-aliasing, the renderer's own TAA, 16:10 at the Steam Deck's size, an HD
         # movie pack, a texture pack's material maps; anti-aliasing, upscaling and frame generation with AMD's and
         # NVIDIA's files (Windows)
@@ -222,6 +228,8 @@ def tests():
         scenario("aa-dlss", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
         scenario("dlss-linux", needs=["vendor"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["linux"]),
         scenario("fg", needs=["vendor"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
+        # 1.9.1: ray tracing's targets given back once it is off (Windows: DXR; needs anti-aliasing, so AMD's files)
+        scenario("rt-memory", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
         # 1.8.5: Linux's HDR output, made whatever the desktop (XBE_HDR_FORCE), its frame measured
         scenario("hdr-linux", platforms=["linux"]),
         # 1.8.6: Linux's anti-aliasing and upscaling by AMD FSR 3 on Vulkan

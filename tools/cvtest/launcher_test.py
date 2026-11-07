@@ -312,6 +312,35 @@ def main():
         errors.append("a list of releases with one disc")
     results.append(result("one disc: Play, no list of releases", errors))
 
+    # a page opens at its top: Graphics scrolled to its end, then View (1.9.1; it opened as far down as Graphics was)
+    la = Launcher(pkg, env, out, args=("--page", "view"))
+    fresh = {k: v for k, v in la.controls.items() if not k.startswith(("page.", "status:"))}
+    la.close()
+    la = Launcher(pkg, env, out, args=("--page", "graphics"))
+    errors = []
+    own = {k: v for k, v in la.controls.items() if not k.startswith(("page.", "status:"))}
+    top = min(own, key=lambda k: own[k][1]) if own else None
+    first = min(fresh, key=lambda k: fresh[k][1]) if fresh else None
+    if not top or not first:
+        errors.append("the pages said nothing of their controls")
+    else:
+        Path(str(la.state) + ".scroll").write_text("end", encoding="utf-8")
+        moved = wait(lambda: (la.read().get("controls", {}).get(top) or own[top])[1] < own[top][1] - 40, 5)
+        la.shot("graphics-scrolled")
+        if not moved:
+            errors.append("the Graphics page did not scroll")
+        elif not la.click_until("page.3", lambda: la.read().get("page") == 3):
+            errors.append("View did not open from the sidebar")
+        else:
+            time.sleep(0.5)  # its frames drawn
+            now = la.read().get("controls", {}).get(first)
+            if not now or abs(now[1] - fresh[first][1]) > 2:
+                errors.append(f"View opened scrolled: its {first} at y {now[1] if now else None}, "
+                              f"{fresh[first][1]} when opened alone")
+        la.shot("view-after-graphics")
+    la.close()
+    results.append(result("a page opens at its top (View after Graphics scrolled to its end)", errors))
+
     # both discs: the list, the European release chosen, Play starts it
     link(eu)
     la = Launcher(pkg, env, out)

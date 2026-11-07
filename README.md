@@ -96,6 +96,8 @@ On top of Pazzi7054's port:
   stick is let go: 1.25, 1.5 or 2 times his walk, off by default. Only his walk speeds up.
 - **Speed-up** - a click of R3 (the right stick pressed in) or of Tab runs the whole game at 2x or 4x until it is
   clicked again, with a fast-forward sign at the screen's top right while it is on.
+- **Back to the title** - Back and Start (Select and Start in the PS2 layout) held for a second start the game again
+  at its title screen, as a console's reset does. Off by default.
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
@@ -520,10 +522,15 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
 - **Speed-up** - Click the right stick in (R3), or press Tab: the whole game runs at 2x (the default) or 4x until you
   click it again (the launcher's or the in-game menu's Controls page; `speed_up = 4`, or `0` for no speed-up). A
   fast-forward sign and the speed show at the screen's top right while it is on, and every start begins at the game's
-  own speed. The game runs two or four times as many frames a second and the screen shows one of each two or four, so
-  4x needs a PC that draws the game at 240 frames a second: heavy graphics settings (ray tracing above all) hold it
-  to what the PC can draw. The game has no use of its own for R3, in either button layout; L3 with R3 is still the
-  settings menu, and leaves the speed as it is.
+  own speed. The game steps two or four times for each frame the screen shows: the frames in between are worked out
+  but not drawn (the 3D, the anti-aliasing, ray tracing and the rest are only drawn for the frames shown), so the
+  screen keeps its 60 frames a second with heavy graphics settings too, each two or four of the game's steps on from
+  the one before. The game has no use of its own for R3, in either button layout; L3 with R3 is still the settings
+  menu, and leaves the speed as it is.
+- **Back to the title** - With the setting on (off by default; the launcher's or the in-game menu's Controls page;
+  `title_combo = true`), hold Back and Start together for a second (Select and Start in the PS2 layout, Backspace and
+  Enter on the keyboard): the game starts again and goes to its title screen, as a console's reset does, and anything
+  not saved is lost. While both are held the game gets neither button, so its pause menu and map do not open first.
 
 ### Keyboard
 The keyboard plays as player 1 while the window is in front:
@@ -542,6 +549,7 @@ The keyboard plays as player 1 while the window is in front:
 | numpad 8 2 4 6 | d-pad |
 | Left Shift | sprint (L3 on a controller) |
 | Tab | speed-up (R3 on a controller) |
+| Enter + Backspace, held | back to the title, with the setting on (Start + Back on a controller) |
 | F10 (changeable) | settings menu (L3 + R3 on a controller) |
 
 ### Miscellaneous

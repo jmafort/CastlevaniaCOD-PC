@@ -7,6 +7,7 @@
 //   K or Space  A (jump)    J  X (attack)                  L  B         I  Y
 //   Q  left trigger         E  right trigger               Z  white     C  black
 //   Enter  Start            Backspace  Back                Left Shift  sprint (L3)    Tab  speed-up (R3)
+//   Start and Back (Enter and Backspace) held a second, with title_combo set: back to the title (TitleCombo)
 //
 // CV_PAD_SCRIPT="<ms>:<button>[+<button>...][:<hold ms>],..." presses buttons at times measured from the game's
 // first read of the pad (default hold 150 ms). A time ending in f counts the game's frames instead, its hold too
@@ -26,6 +27,7 @@
 //                                     each draw's state and textures (the SDK's gpu/d3d12.cpp)
 //   0:unplug, 0:plug                  the virtual controller unplugged, plugged in again
 //   0:click=<control>                 the settings menu's control of that name clicked (CV_MENU_STATE, menu.cpp)
+//   0:menuscroll                      the settings menu's page scrolled to its end (telemetry menu_scroll)
 // With XBE_VIRTUAL_PAD=1 the presses go to the SDK's virtual controller (core/input.cpp), which the game reads through
 // SDL as it reads a real one: SDL's mapping, the PS2 layout and the stick response take them, a frame later, and the
 // rumble the game sends reaches it (telemetry "vpad").
@@ -67,6 +69,12 @@
 #include "audio/audio.h"
 #include "xdk/d3d8.h"
 
+namespace fs = std::filesystem;
+
+namespace kernel {
+[[noreturn]] void Relaunch(const char* exe);  // the SDK's kernel/kernel.h (its x86 header clashes with windows.h's min)
+}
+
 extern std::atomic<bool> g_closing;  // below: the window is closing
 std::string GameStateJson();         // telemetry.cpp
 std::string RoomListJson();          // telemetry.cpp
@@ -74,6 +82,7 @@ void TelemetryFrame(const input::Pad& p);        // telemetry.cpp
 void RequestWarp(int map, int room, int entry);  // game/warp.cpp
 void HealPlayer();                               // telemetry.cpp
 void MenuClick(const std::string& name);         // menu.cpp
+void MenuScrollEnd();                            // menu.cpp
 struct BotGoal {                                 // bot.cpp
     bool fight;
     float x, z, radius;
@@ -87,6 +96,8 @@ void BotPad(input::Pad& p);
 uint32_t g_sprint = 0;
 // the speed-up's speed, times the game's own: 0 off, 2, 4 (the settings file's speed_up). R3 or Tab turns it on and off
 uint32_t g_speed_up = 2;
+// Back and Start held together go back to the title (the settings file's title_combo; TitleCombo)
+bool g_title_combo = false;
 
 namespace {
 
@@ -157,6 +168,7 @@ struct Step {
     bool capture = false;               // capture, a live command's too
     int plug = -1;                      // unplug 0, plug 1: the virtual controller
     std::string click;                  // click=<control>: the settings menu's
+    bool menu_scroll = false;           // menuscroll: the settings menu's page scrolled to its end
     BotGoal bot{};
     float guard = 0;  // guard=<r>, for the bot's walks
     std::string set;  // set=<setting>=<value>
@@ -219,6 +231,7 @@ std::vector<Step> ParseScript(std::string text) {
             else if (b.rfind("rs=", 0) == 0) Stick(b.substr(3), s.rx, s.ry);
             else if (b == "heal") s.heal = true;
             else if (b == "capture") s.capture = true;
+            else if (b == "menuscroll") s.menu_scroll = true;
             else if (b.rfind("click=", 0) == 0) s.click = b.substr(6);
             else if (b == "unplug") s.plug = 0;
             else if (b == "plug") s.plug = 1;
@@ -346,6 +359,11 @@ Live& LiveState() {
     static Live live = [] {
         Live l;
         if (const char* v = std::getenv("CV_PAD_LIVE"); v && *v) l.dir = v;
+        // the game started again in the same run (back to the title, TitleCombo): the commands go on from the last
+        // one, and one it was in the middle of is done as this start reads the pad
+        std::error_code ec;
+        for (int n = 1; !l.dir.empty() && fs::exists(l.dir / ("cmd-" + std::to_string(n) + ".txt"), ec); n++) l.n = n;
+        if (l.n && !fs::exists(l.dir / ("done-" + std::to_string(l.n) + ".txt"), ec)) l.running = true;
         return l;
     }();
     return live;
@@ -425,6 +443,7 @@ void LiveWait() {
                 if (s.capture) gpu::g_capture = true;
                 if (s.plug >= 0) input::VirtualPlug(s.plug == 1);
                 if (!s.click.empty()) MenuClick(s.click);
+                if (s.menu_scroll) MenuScrollEnd();
                 if (!s.set.empty()) ApplySetting(s.set);
                 if (s.goal) goals.push_back(s.bot);
                 guard = (std::max)(guard, s.guard);
@@ -565,6 +584,36 @@ void SpeedUp(const input::Pad& p, bool menu) {
     }
 }
 
+// Back and Start (Select and Start in the PS2 layout; Backspace and Enter) held together for a second, with title_combo
+// set: back to the title as a console's reset goes there, the game started again (the SDK's kernel::Relaunch, whose
+// window stays up until the new one draws), what was not saved lost. While both are held the game gets neither, so
+// its pause menu and map screen do not open first; one already down when the other came keeps what it did
+void TitleCombo(input::Pad& p, bool menu) {
+    static std::atomic<int64_t> since{-1};  // ms when both were down, -1 not
+    static std::atomic<bool> going{false};
+    bool both = g_title_combo && !menu && (p.buttons & (kStart | kBack)) == (kStart | kBack);
+    if (!both) {
+        since = -1;
+        return;
+    }
+    p.buttons &= ~(kStart | kBack);
+    int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now().time_since_epoch()).count();
+    int64_t was = -1;
+    if (since.compare_exchange_strong(was, now) || now - was < 1000 || going.exchange(true)) return;
+    LOGR("title: Back and Start held, the game started again for its title");
+    audio::g_paused = true;  // the mixer would play the last sounds on while the next start comes up
+    std::string exe;
+#ifdef _WIN32
+    wchar_t self[MAX_PATH] = {};
+    GetModuleFileNameW(nullptr, self, MAX_PATH);
+    exe = fs::path(self).stem().string();
+#else
+    std::error_code ec;
+    exe = fs::read_symlink("/proc/self/exe", ec).filename().string();
+#endif
+    kernel::Relaunch(exe.c_str());
+}
+
 // the game's rumble, a frame at a time (KeyboardRumble)
 struct Motors {
     uint16_t want[2] = {}, sent[2] = {};  // as the game asks for them, as the controller has them
@@ -641,6 +690,7 @@ void KeyboardPad(int port, input::Pad& p) {
     if (input::VirtualOn()) input::VirtualSet(scripted);
     Sprint(p, MenuOpen());
     SpeedUp(p, MenuOpen());
+    TitleCombo(p, MenuOpen());
     // both sticks clicked in together: the menu, from a controller or a test's script; once a press, of the threads the
     // game reads the pad on (each sees it, one turns it)
     static std::atomic<bool> sticks{false};

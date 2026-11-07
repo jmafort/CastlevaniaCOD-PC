@@ -2016,6 +2016,7 @@ struct Settings {
     bool invert_camera_x = false, invert_camera_y = false;  // the camera stick the other way (keyboard.cpp)
     uint32_t sprint = 0;                // Hector's sprint, percent of his walk: 0 off, 125, 150, 200 (keyboard.cpp)
     uint32_t speed_up = 2;              // the speed-up R3 or Tab turns on: 0 off, 2, 4 times the game's (keyboard.cpp)
+    bool title_combo = false;           // Back and Start held go back to the title (keyboard.cpp)
     uint32_t fov = 100;                 // percent of the game's field of view in play (game/view.cpp)
     uint32_t draw_distance = 100;       // percent of the game's far plane (game/view.cpp)
     uint32_t fog_distance = 100;        // percent of the game's fog distance, 0 none (game/view.cpp)
@@ -2075,6 +2076,7 @@ struct Settings {
         if (sprint != 125 && sprint != 150 && sprint != 200) sprint = 0;
         speed_up = rest["speed_up"].value_or(speed_up);
         if (speed_up != 0 && speed_up != 4) speed_up = 2;
+        title_combo = rest["title_combo"].value_or(title_combo);
         fov = rest["fov"].value_or(fov);
         draw_distance = rest["draw_distance"].value_or(draw_distance);
         fog_distance = rest["fog_distance"].value_or(fog_distance);
@@ -2126,6 +2128,7 @@ struct Settings {
         rest.insert_or_assign("invert_camera_y", invert_camera_y);
         rest.insert_or_assign("sprint", int64_t(sprint));
         rest.insert_or_assign("speed_up", int64_t(speed_up));
+        rest.insert_or_assign("title_combo", title_combo);
         rest.insert_or_assign("fov", int64_t(fov));
         rest.insert_or_assign("draw_distance", int64_t(draw_distance));
         rest.insert_or_assign("fog_distance", int64_t(fog_distance));
@@ -2475,6 +2478,18 @@ void TestClick() {
     std::string name;
     std::getline(std::ifstream(file), name);
     if (g_marks.Click(name)) fs::remove(file, ec);
+}
+
+// <CV_LAUNCHER_STATE>.scroll there: the page shown scrolled to its end, once (in the page's window)
+void TestScroll() {
+    static const std::string file = [] {
+        const char* f = std::getenv("CV_LAUNCHER_STATE");
+        return f ? std::string(f) + ".scroll" : std::string();
+    }();
+    std::error_code ec;
+    if (file.empty() || !fs::exists(file, ec)) return;
+    ImGui::SetScrollY(ImGui::GetScrollMaxY());
+    fs::remove(file, ec);
 }
 
 bool Toggle(const char* id, bool& v) {
@@ -3374,7 +3389,11 @@ public:
         Sidebar();
         ImGui::SameLine(0, 0);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {S(36), S(28)});
+        // another page opens at its top, not as far down as the page before was scrolled
+        if (page_ != page_scrolled_) ImGui::SetNextWindowScroll({0, 0});
+        page_scrolled_ = page_;
         ImGui::BeginChild("page", {0, 0}, ImGuiChildFlags_AlwaysUseWindowPadding);
+        TestScroll();
         ImGui::PushFont(g_body);
         switch (page_) {
             case kHome: keep = HomePage(); break;
@@ -3417,7 +3436,7 @@ private:
                std::to_string(s.button_layout) +
                std::to_string(s.lament_save) + "|" + s.gpu + "|" + s.language + "|" + std::to_string(s.game_language) +
                "|" + std::to_string(s.ps2_stick) + std::to_string(s.invert_camera_x) + std::to_string(s.invert_camera_y) +
-               "|" + std::to_string(s.sprint) + std::to_string(s.speed_up) + "|" +
+               "|" + std::to_string(s.sprint) + std::to_string(s.speed_up) + std::to_string(s.title_combo) + "|" +
                std::to_string(s.hud_edges) + "|" + std::to_string(s.fov) + "|" + std::to_string(s.draw_distance) + "|" +
                std::to_string(s.fog_distance) + "|" + s.release + "|" +
                std::to_string(s.hdr) + std::to_string(s.hdr_peak_nits) + "|" + std::to_string(s.hdr_scene_nits) + "|" +
@@ -4341,6 +4360,11 @@ private:
                                       "until you click it again. A sign at the screen's top right shows it is on."));
         Segmented<uint32_t>("speedup", settings_.speed_up, {0, 2, 4}, {T("Off"), "2x", "4x"});
         EndSetting();
+        BeginSetting(settings_.button_layout == 1 ? T("Select + Start: back to the title") : T("Back + Start: back to the title"),
+                     T("Hold both for a second (Enter and Backspace on the keyboard): the game starts again at its title "
+                       "screen, as a console's reset does. Anything not saved is lost."));
+        ToggleRight("title", settings_.title_combo);
+        EndSetting();
         EndCard();
         BeginCard("keys");
         // the keys by their names on a keyboard, the controller's buttons (B, Y, Start, Back) by the Xbox's
@@ -4585,6 +4609,7 @@ private:
     double status_time_ = -100;
     bool rescan_ = false;
     int page_ = 0;
+    int page_scrolled_ = 0;  // the page the page area's scroll belongs to
 };
 
 Launcher* g_launcher = nullptr;
