@@ -1,0 +1,112 @@
+{
+  "name": "speed-door",
+  "after": "newgame.json",
+  "note": "A door at 2x: the speed-up shows one frame of two and the frames not shown draw nothing of their own, and the game swaps its two back buffers each frame, so the one the hidden frames had was not drawn while sped up. A door's transition reads the back buffer back each frame for its trail (a zoom blur as it fades out), which in 1.9.1 laid the picture from when the speed-up was turned on over the screen (here the courtyard where Hector started). Now a hidden frame's back buffer gets the last drawn frame's picture first, and the frames after one that read its back buffer draw it whole: the transition is the door's, its frames far from the start's (screen.differs, the same picture 0; 1.9.1's some 6, now some 27).",
+  "steps": [
+    {
+      "press": "0:set=speed_up=2,0f:wait:10f,0f:r3:4f,10f:wait:20f",
+      "shot": "start",
+      "note": "2x from the start",
+      "expect": [
+        "speed.times == 2"
+      ]
+    },
+    {
+      "press": "0:walk=-5165/-4876/120:8000",
+      "note": "to the courtyard door, the way the first-save recording went (as buttons.json)"
+    },
+    {
+      "press": "0:walk=-5441/-4703/120:8000"
+    },
+    {
+      "press": "0:walk=-5914/-4643/120:8000"
+    },
+    {
+      "press": "0:walk=-6203/-4479/120:8000"
+    },
+    {
+      "press": "0:walk=-6616/-4401/120:8000"
+    },
+    {
+      "press": "0:walk=-8175/-3360/120:10000"
+    },
+    {
+      "press": "0:walk=-8311/-3047/120:8000"
+    },
+    {
+      "press": "0:walk=-8230/-2613/120:8000"
+    },
+    {
+      "press": "0:walk=-7865/-2078/120:8000"
+    },
+    {
+      "press": "0:walk=-7583/-1904/120:8000"
+    },
+    {
+      "press": "0:walk=-6756/-1656/120:8000"
+    },
+    {
+      "press": "0:walk=-5420/-660/120:10000"
+    },
+    {
+      "press": "0:walk=-5250/-360/60:8000"
+    },
+    {
+      "press": "0:walk=-4979/-306/40:8000,0f:wait:30f",
+      "shot": "door",
+      "expect": [
+        "map == 5 and room == 1",
+        "speed.times == 2"
+      ]
+    },
+    {
+      "press": "0:b:4f,0f:wait:4f",
+      "note": "B: the door"
+    },
+    {
+      "press": "0f:wait:4f",
+      "shot": "trail-1",
+      "differs": {
+        "start": [
+          "start",
+          0.05,
+          0.1,
+          0.95,
+          0.95
+        ]
+      },
+      "expect": [
+        "screen.differs.start > 15"
+      ]
+    },
+    {
+      "press": "0f:wait:4f",
+      "shot": "trail-2",
+      "differs": {
+        "start": [
+          "start",
+          0.05,
+          0.1,
+          0.95,
+          0.95
+        ]
+      },
+      "expect": [
+        "screen.differs.start > 15",
+        "found(runlog, 'speed-up: a frame not shown given the last drawn')"
+      ]
+    },
+    {
+      "until": "room != 1 and player.active and not loading",
+      "timeout": 30,
+      "note": "through the door"
+    },
+    {
+      "press": "0f:r3:4f,10f:wait:10f",
+      "note": "back to 1x",
+      "expect": [
+        "speed.times == 1"
+      ]
+    }
+  ]
+}

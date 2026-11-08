@@ -212,6 +212,10 @@ def tests():
         # 1.9.0: the speed-up, 2x and 4x by R3 (a controller as SDL reads one), Tab on the keyboard (Linux)
         scenario("speed", quick=True),
         scenario("speed-keys", platforms=["linux"]),
+        # 1.9.2: a door at 2x, its transition's trail the door's, not the picture from when the speed-up came on
+        scenario("speed-door"),
+        # 1.9.2: the doors' arrows drawn with the draw distance and fog pushed out (1.8.4 to 1.9.1 hid them)
+        scenario("door-arrows"),
         # 1.9.1: Back + Start (Select + Start) held a second, the setting on: the game started again at its title
         scenario("title-combo"),
         # 1.9.2: the play time by the PC's clock (any speed, any frame rate), up to 999:59:59, its hours drawn whole

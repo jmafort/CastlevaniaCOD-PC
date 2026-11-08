@@ -57,9 +57,11 @@
 // CV_BACKDROPS=1, gives the draws of the textures in kSky the room's own fog back (the coefficients in c91, as the
 // game set them) and holds back those wholly past the room's own far plane, for comparing. CV_BACKDROPS=1 with
 // CV_SKY_TRACE logs each room's candidates, the textures drawn only past its far plane; CV_SKY_HIDE hides them.
-// The skies have glow cards too (kSkyCards), drawn additively out where the game's own view never shows them: with the
-// view pushed out their edges showed as faint squares over the moon and the clouds, so then they are not drawn
-// (SkyCard). Their programs place them by constants of their own, so their depth is not measured.
+// The doors' arrows (kSkyCards: the three pyramids by a door, green within reach) are drawn additively, and a door's
+// that is not in use is parked out past the room's far plane, where the game's own view never shows it: with the view
+// pushed out those showed as faint squares over the rampart's moon and clouds, so then the ones wholly past the room's
+// own far plane are not drawn (SkyCard). Their program places them by a matrix of its own (ArrowDepth). 1.8.4 to 1.9.1
+// took them for glow cards of the sky and held back every draw of them with the view pushed out, the doors' too.
 //
 // Overscan: the last pass of each frame draws a copy of the frame back over it with rows -16 to 496 of the copy
 // across rows 0 to 480, the PS2's 448 lines and their border shrunk into the NTSC frame; the European release's rows
@@ -132,7 +134,8 @@ uint64_t g_frame = 0;
 // the sky's draws of the frame before (Backdrop, with CV_BACKDROPS=1): given back the room's own fog, and not drawn,
 // wholly past its far plane
 uint32_t g_sky_fogged = 0, g_sky_held = 0;
-uint32_t g_sky_cards = 0;  // and its glow cards held back (kSkyCards)
+uint32_t g_sky_cards = 0;  // and the doors' arrows held back, parked past the far plane (kSkyCards)
+uint32_t g_sky_arrows = 0;  // the doors' arrows drawn (kSkyCards)
 
 // a widescreen draw's width as a part of its own: the console's 4:3 over the frame's 16:9 (3/4) or 16:10 (5/6)
 float Squeeze() { return (4.0f / 3.0f) / app::WideAspect(); }
@@ -149,11 +152,10 @@ constexpr uint64_t kSky[] = {
     0x8713e8116bb8057bull,  // its moon
     0x2d6da7cc8094311cull,  // its clouds
 };
-// the skies' glow cards by their textures' Name, which the game's own view never shows: the rampart of 5.7, 2.1, 6.2,
-// 9.12, 11.0 and 3.2 shot at the game's view with them drawn and hidden gave the same picture, and a sweep of every
-// room found them only past each room's own far plane (30 rooms)
+// the doors' arrows by their texture's Name: parked past each room's own far plane while not in use (a sweep of every
+// room found them so in 30 rooms, which 1.8.4 took for the sky's glow cards)
 constexpr uint64_t kSkyCards[] = {
-    0xc26555aa0ffd586dull,  // a grey glow and a dark diamond, two of its cards over the rampart's moon
+    0xc26555aa0ffd586dull,  // an arrow's carved face, a grey glow and a dark diamond
 };
 constexpr int kFrameTexCoord = 2;  // the frame pass's texture coordinates, in texels
 constexpr int kTexCoord = 2;       // a 2D draw's, as the game's programs take them
@@ -372,8 +374,9 @@ public:
                 g_sky_fogged = sky_fogged_;
                 g_sky_held = sky_held_;
                 g_sky_cards = sky_cards_;
+                g_sky_arrows = sky_arrows_;
             }
-            sky_fogged_ = sky_held_ = sky_cards_ = 0;
+            sky_fogged_ = sky_held_ = sky_cards_ = sky_arrows_ = 0;
             if (TexturePackCensus() && frame_ % 300 == 0) TexturePackCensusFlush();
             pack_epoch_ = TexturePackEpoch();
             MoviesFrame(frame_);
@@ -1281,10 +1284,12 @@ private:
         return gpu::Hash(guest, n, gpu::Hash(shape, sizeof(shape)));
     }
 
-    // a 3D draw's depth through the camera, while the view is pushed out (Backdrop)
+    // a 3D draw's depth through the camera, while the view is pushed out: Backdrop's, and a glow's (SkyCard)
     void Distance(const gpu::State& s, const gpu::Assembled& a, const Program& p) {
         uint32_t room = 0;
-        backdrop_ = g_sky_backdrops && ViewBackdrop(fog_game_, fog_drawn_, far_z_, room);
+        bool pushed = ViewBackdrop(fog_game_, fog_drawn_, far_z_, room);
+        backdrop_ = g_sky_backdrops && pushed;
+        if (pushed && d_.additive && p.world) ArrowDepth(s, a);
         if (!backdrop_) return;
         if (room != room_) {
             SkyCandidates();
@@ -1304,6 +1309,20 @@ private:
         d_.past = ahead ? float(past) / float(ahead) : 0.0f;
     }
 
+    // a glow's depth as the doors' arrows' program finds it (SkyCard): the vertex times c103, through the object's
+    // matrix in c105 to c108, then the camera's world matrix's depth row (its last, c184)
+    void ArrowDepth(const gpu::State& s, const gpu::Assembled& a) {
+        const auto& k = s.vsc[103];
+        const auto& c = s.vsc[kCameraWorld + 3];
+        auto dot = [](const float* r, const float* m) { return r[0] * m[0] + r[1] * m[1] + r[2] * m[2] + r[3] * m[3]; };
+        d_.arrow_w = Read(a, 0, [&](const float* v, uint32_t comps) {
+            float r[4] = {v[0] * k[0], v[1] * k[1], v[2] * k[2], (comps == 4 ? v[3] : 1.0f) * k[3]};
+            float o[4] = {dot(r, s.vsc[105].data()), dot(r, s.vsc[106].data()), dot(r, s.vsc[107].data()),
+                          dot(r, s.vsc[108].data())};
+            return dot(o, c.data());
+        });
+    }
+
     // CV_SKY_TRACE: the textures of a room none of whose draws came nearer than mostly past its far plane, the
     // candidates for kSky, logged as the next room starts
     void SkyCandidates() {
@@ -1319,15 +1338,33 @@ private:
 
     static bool Sky(uint64_t name) { return std::find(std::begin(kSky), std::end(kSky), name) != std::end(kSky); }
 
-    // a draw of the sky's glow cards (kSkyCards) with the view pushed out (game/view.cpp): not drawn (true), as the
-    // game's own view does not show them
+    // a draw of the doors' arrows (kSkyCards) with the view pushed out (game/view.cpp), wholly past the room's own far
+    // plane (parked): not drawn (true), as the game's own view does not show it. CV_SKY_CARDS logs their depths, the
+    // first frames of each room
     bool SkyCard() {
         if (!d_.world || !d_.name ||
             std::find(std::begin(kSkyCards), std::end(kSkyCards), d_.name) == std::end(kSkyCards))
             return false;
         float game[2], drawn[2], far_z = 0;
         uint32_t room = 0;
-        if (!ViewBackdrop(game, drawn, far_z, room)) return false;
+        if (!ViewBackdrop(game, drawn, far_z, room)) {
+            sky_arrows_++;
+            return false;
+        }
+        bool past = !d_.arrow_w.Empty() && d_.arrow_w.lo > far_z;
+        static const bool trace = std::getenv("CV_SKY_CARDS") != nullptr;
+        static uint32_t traced_room = 0, traced = 0;
+        if (trace && room != traced_room) {
+            traced_room = room;
+            traced = 0;
+        }
+        if (trace && traced < 24 && ++traced)
+            LOGR("wide: glow card in room %u frame %llu: %u vertices, depth %.0f to %.0f, far plane %.0f: %s", room,
+                 (unsigned long long)frame_, d_.count, d_.arrow_w.lo, d_.arrow_w.hi, far_z, past ? "held back" : "drawn");
+        if (!past) {
+            sky_arrows_++;
+            return false;
+        }
         sky_cards_++;
         return true;
     }
@@ -1420,6 +1457,7 @@ private:
         uint64_t name = 0;  // the first texture's (Name), 0 for a target or one not seen uploaded
         uint64_t mesh = 0;  // a world matrix draw's indices or vertices, count and base, for View
         Span w;             // a 3D draw's depth, while the view is pushed out
+        Span arrow_w;       // a glow's, as the doors' arrows' program finds it (ArrowDepth)
         float past = 0;     // the part of its vertices ahead past the room's own far plane
         bool frame = false;  // the frame pass, its scale and move across and down in clip space, for a picture of
         float scale[2] = {1, 1}, move[2] = {0, 0};  // gw by gh (Placement)
@@ -1472,7 +1510,8 @@ private:
     float zscale_ = 16777215.0f;
     float gw_ = 640;
     uint32_t sky_fogged_ = 0, sky_held_ = 0;  // this frame's sky draws, Backdrop's
-    uint32_t sky_cards_ = 0;                  // and its glow cards held back, SkyCard's
+    uint32_t sky_cards_ = 0;                  // and the doors' arrows held back, SkyCard's
+    uint32_t sky_arrows_ = 0;                 // and the ones drawn
     uint32_t pack_epoch_ = 0;                 // TexturePackEpoch's at the frame's first draw
     // backdrops (Backdrop): the room's own fog coefficients and far plane, the fog drawn, the backdrops' textures
     bool backdrop_ = false;
@@ -1495,8 +1534,8 @@ private:
 }  // namespace
 
 // "wide" for telemetry.cpp: {"marker": {"x": [lo, hi], "move": m, "ago": frames since drawn}, "hud": {...}}, each
-// once drawn, and "sky": the frame before's draws of a sky given back the room's own fog, those held back, and its
-// glow cards held back
+// once drawn, and "sky": the frame before's draws of a sky given back the room's own fog, those held back, the doors'
+// arrows held back (parked past the far plane) and the doors' arrows drawn
 std::string WideJson() {
     std::lock_guard lock(g_seen_m);
     std::string out;
@@ -1510,8 +1549,8 @@ std::string WideJson() {
     }
     if (g_frame) {
         char b[128];
-        std::snprintf(b, sizeof(b), "%s\"sky\":{\"fogged\":%u,\"held\":%u,\"cards\":%u}", out.empty() ? "" : ",",
-                      g_sky_fogged, g_sky_held, g_sky_cards);
+        std::snprintf(b, sizeof(b), "%s\"sky\":{\"fogged\":%u,\"held\":%u,\"cards\":%u,\"arrows\":%u}",
+                      out.empty() ? "" : ",", g_sky_fogged, g_sky_held, g_sky_cards, g_sky_arrows);
         out += b;
     }
     return out.empty() ? out : "{" + out + "}";

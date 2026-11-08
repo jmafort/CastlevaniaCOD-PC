@@ -1,0 +1,81 @@
+{
+  "name": "door-arrows",
+  "after": "newgame.json",
+  "note": "The doors' arrows, the three pyramids by a door (green within reach), drawn at the game's distances and with the draw distance and fog pushed out (150, Far View's 400): 1.8.4 to 1.9.1 took them for glow cards of the sky and hid them whenever either was pushed out. Counted by the telemetry: wide.sky.arrows, the arrows' draws drawn in the frame before (three arrows, two draws each), wide.sky.cards those held back.",
+  "steps": [
+    {
+      "press": "0:walk=-5165/-4876/120:8000",
+      "note": "to the courtyard door, the way the first-save recording went (as buttons.json)"
+    },
+    {
+      "press": "0:walk=-5441/-4703/120:8000"
+    },
+    {
+      "press": "0:walk=-5914/-4643/120:8000"
+    },
+    {
+      "press": "0:walk=-6203/-4479/120:8000"
+    },
+    {
+      "press": "0:walk=-6616/-4401/120:8000"
+    },
+    {
+      "press": "0:walk=-8175/-3360/120:10000"
+    },
+    {
+      "press": "0:walk=-8311/-3047/120:8000"
+    },
+    {
+      "press": "0:walk=-8230/-2613/120:8000"
+    },
+    {
+      "press": "0:walk=-7865/-2078/120:8000"
+    },
+    {
+      "press": "0:walk=-7583/-1904/120:8000"
+    },
+    {
+      "press": "0:walk=-6756/-1656/120:8000"
+    },
+    {
+      "press": "0:walk=-5420/-660/120:10000"
+    },
+    {
+      "press": "0:walk=-5250/-360/60:8000"
+    },
+    {
+      "press": "0:walk=-4979/-306/40:8000,0f:wait:30f",
+      "shot": "door-100",
+      "expect": [
+        "map == 5 and room == 1",
+        "wide.sky.arrows == 6",
+        "wide.sky.cards == 0"
+      ]
+    },
+    {
+      "press": "0:set=fog_distance=150,0:set=draw_distance=150,0f:wait:30f",
+      "shot": "door-150",
+      "note": "both at 150: the arrows still there",
+      "expect": [
+        "wide.sky.arrows == 6",
+        "wide.sky.cards == 0"
+      ]
+    },
+    {
+      "press": "0:set=fog_distance=400,0:set=draw_distance=400,0f:wait:30f",
+      "shot": "door-400",
+      "note": "Far View",
+      "expect": [
+        "view.far[1] == 4 * view.far[0]",
+        "wide.sky.arrows == 6",
+        "wide.sky.cards == 0"
+      ]
+    },
+    {
+      "press": "0:set=fog_distance=100,0:set=draw_distance=100,0f:wait:20f",
+      "expect": [
+        "view.far[1] == view.far[0]"
+      ]
+    }
+  ]
+}

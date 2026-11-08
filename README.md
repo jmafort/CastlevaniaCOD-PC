@@ -460,8 +460,10 @@ background first); the size pictures load at applies from the next start.
   hide it. The skies are painted strips, clouds and moons the game placed far out (the Abandoned Castle's rampart
   has a moon 45,000 units out, its fog ending at 39,000); they look as the game shows them with the fog pushed out
   too, their pictures repeating across them as on the PS2 (before 1.8.0 they were read stretched, which showed as
-  smears and the strips' edges). Some skies also have glow cards that the game's own view never shows, which pushed
-  out showed as faint squares over the moon and the clouds; with the view pushed out they are not drawn (1.8.4).
+  smears and the strips' edges). The doors' arrows, the three pyramids by a door, are drawn at any distance (1.8.4 to
+  1.9.1 took them for glow cards of the sky and hid them while either was pushed out). On the Abandoned Castle's
+  rampart, with the camera turned up to the moon, the arrows by its door show as a faint square over the moon, which
+  the game's own view never has behind them.
 - **Anti-Aliasing** - Off by default. Smooth, steady edges on the 3D, gathered over the frames: AMD FSR on any
   graphics card, NVIDIA DLSS on a GeForce RTX (from the game's next start once chosen), their files downloaded by the
   launcher's Graphics page from AMD and NVIDIA (the game loads them only signed by AMD or NVIDIA, the launcher checks
