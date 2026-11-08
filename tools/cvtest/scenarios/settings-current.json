@@ -1,0 +1,11 @@
+{
+  "name": "settings-current",
+  "settings": {"ray_tracing_quality": 0},
+  "note": "A settings file this release saved (settings_version 1) with the ray tracing quality set by hand to 0, Low, as a handheld's: kept at the game's start, the file left as it was (src/common/settings_version.h).",
+  "steps": [
+    {"press": "0:wait:11000", "note": "the logos to the title"},
+    {"until": "frame >= 640", "timeout": 60, "shot": "title",
+     "expect": ["not player.active", "not found(runlog, r'from an older release')", "found(runlog, r'ray_tracing_quality = 0')",
+                "saved.ray_tracing_quality == 0", "saved.settings_version == 1"]}
+  ]
+}

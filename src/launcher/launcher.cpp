@@ -73,6 +73,7 @@ extern char** environ;
 #include "kernel/disc.h"
 #include "../common/crest.h"
 #include "../common/marks.h"
+#include "../common/settings_version.h"
 #include "words.h"
 
 #ifdef _WIN32
@@ -2037,15 +2038,19 @@ struct Settings {
     std::string gpu;                    // the graphics card by its name, empty the fastest (the SDK's)
     std::string release;                // the release played, by its executable's name, when there are more (the SDK's)
     bool update_check = true;           // the launcher's own: the port's newest release looked up on GitHub at its start
+    uint32_t settings_version = 0;      // the file's, 0 none: saved by a release before 1.9.3 (settings_version.h)
+    bool older = false;                 // the file there, saved by an older release: migrated, saved at the start (Launcher)
     toml::table rest;
 
     fs::path File() const { return ExeDir() / kSettings; }
 
     void Load() {
+        bool found = true;
         try {
             rest = toml::parse_file(File().string());
         } catch (...) {
             rest = {};
+            found = false;
         }
         display_mode = rest["display_mode"].value_or(display_mode);
         width = rest["width"].value_or(width);
@@ -2098,6 +2103,9 @@ struct Settings {
         gpu = rest["gpu"].value_or(gpu);
         release = rest["release"].value_or(release);
         update_check = rest["update_check"].value_or(update_check);
+        settings_version = rest["settings_version"].value_or(0u);
+        older = found && settings_version < cv::kSettingsVersion;
+        if (older) cv::MigrateSettings(settings_version, rt_quality);
     }
 
     bool Save() {
@@ -2148,6 +2156,8 @@ struct Settings {
         rest.insert_or_assign("gpu", gpu);
         rest.insert_or_assign("release", release);
         rest.insert_or_assign("update_check", update_check);
+        // a newer release's number kept, so going back to this one does not have it migrate the file again
+        rest.insert_or_assign("settings_version", int64_t(std::max(settings_version, cv::kSettingsVersion)));
         std::ofstream f(File());
         f << rest << "\n";
         return bool(f);
@@ -2161,6 +2171,7 @@ struct Settings {
         d.game_language = game_language;
         d.release = release;  // which game, not how it plays
         d.update_check = update_check;
+        d.settings_version = settings_version;
         *this = std::move(d);
     }
 };
@@ -3342,6 +3353,7 @@ class Launcher {
 public:
     Launcher() {
         settings_.Load();
+        if (settings_.older) settings_.Save();  // an older release's file migrated: kept so, whatever is chosen next
         saved_ = Snapshot();
         files_.Scan();
         g_activated = false;  // the window's first time in front, just looked at
@@ -4093,7 +4105,8 @@ private:
             if (rays && aa && !(settings_.ray_tracing & 4)) ControlNote(kMuted, T("Needs Ray tracing."));
             EndSetting();
             // (ray_tracing_quality, 0 low, 1 medium, 2 high, 3 path traced, is castlevania.toml's alone: Ray tracing
-            // is the path traced lighting, and a handheld sets the key to 0 by hand; the launcher keeps what it read)
+            // is the path traced lighting, and a handheld sets the key to 0 by hand; the launcher keeps what it read,
+            // an older release's set to 3 once, settings_version.h)
         }
         BeginSetting(T("Anisotropic filtering"), T("Keeps floors and walls sharp where they are seen at an angle. It costs "
                                                    "little."));

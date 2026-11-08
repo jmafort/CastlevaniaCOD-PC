@@ -12,7 +12,8 @@ A scenario is JSON:
   {"name": "...",
    "after": "<scenario>.json",            optional: that scenario's steps first (a path beside this one)
    "save": "<name>",                      optional: start from the saves a step kept with save_as
-   "settings": {"display_mode": ...},     optional: castlevania.toml lines (windowed 960x540 by default)
+   "settings": {"display_mode": ...},     optional: castlevania.toml lines (windowed 960x540 by default, saved by this
+                                          release: settings_version); a key set to null left out
    "env": {"CV_RUMBLE_TRACE": "1", ...},  optional: the game's environment besides (XBE_VIRTUAL_PAD=1: the presses go
                                           to a virtual controller the game reads through SDL, src/common/keyboard.cpp)
    "platforms": ["linux"],                optional: where it runs (windows, linux); elsewhere it is skipped
@@ -134,8 +135,10 @@ ROUTE_BUTTONS = ("a", "b")  # presses a route keeps, outside fights: A jumps, B 
 # (in a fight X and B attack, for 15 and 25 HP a hit: the bot fights there)
 FIGHT_NEAR = 800  # an enemy this close: a fight, whose path and presses a route leaves to the guard
 EXIT_BUTTONS = ("a", "b", "x", "y")  # pressed just before a room change: B opens doors
+# settings_version: the file this release's, as the scenario sets it (an older release's would be migrated at the start,
+# src/common/settings_version.h; "settings_version": null in a scenario's settings tests that)
 DEFAULT_SETTINGS = {"display_mode": "windowed", "width": 960, "height": 540, "texture_pack": True,
-                    "pause_on_focus_loss": False}
+                    "pause_on_focus_loss": False, "settings_version": 1}
 # a frame at 60 fps, for how long a frame-timed command may take; CV_FRAME_MS for a slower renderer (WSL's llvmpipe)
 FRAME_MS = int(os.environ.get("CV_FRAME_MS", "17"))
 
@@ -641,7 +644,8 @@ class Game:
             for f in (self.exe + EXE, self.exe + CODE):
                 shutil.copy2(build / f, folder / f)  # dates kept: the exe takes a DLL that is not older than it
         settings = dict(DEFAULT_SETTINGS, **scenario.get("settings", {}))
-        lines = [f"{k} = {json.dumps(v) if isinstance(v, str) else str(v).lower()}" for k, v in settings.items()]
+        lines = [f"{k} = {json.dumps(v) if isinstance(v, str) else str(v).lower()}" for k, v in settings.items()
+                 if v is not None]
         (folder / "castlevania.toml").write_text("\n".join(lines) + "\n")
         if scenario.get("save"):
             shutil.copytree(SAVES / scenario["save"], folder / "hdd")

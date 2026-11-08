@@ -1,6 +1,12 @@
+#include <algorithm>
+
+#include <toml++/toml.hpp>
+
 #include "app/app.h"
 #include "common/release.h"
+#include "common/settings_version.h"
 #include "core/input.h"
+#include "core/log.h"
 
 void KeyboardWindow(void* hwnd);              // keyboard.cpp
 void KeyboardPad(int port, input::Pad& pad);  // keyboard.cpp
@@ -50,6 +56,27 @@ namespace {
 uint32_t g_game_language = 1;
 uint32_t Language() { return cv::kEurope ? g_game_language : 1; }
 
+// castlevania.toml's settings_version (common/settings_version.h): a file an older release saved is brought to this
+// one's and saved at once, as the launcher does with it (the game may be started without the launcher). The runtime
+// calls this after the options above are read, and only with a file there.
+uint32_t g_settings_version = 0;
+
+void SettingsLoad(const void* table) {
+    g_settings_version = (*static_cast<const toml::table*>(table))["settings_version"].value_or(0u);
+    if (g_settings_version >= cv::kSettingsVersion) return;
+    uint32_t quality = g_rt_quality;
+    cv::MigrateSettings(g_settings_version, g_rt_quality);
+    LOGR("settings: castlevania.toml from an older release (settings_version %u), saved as %u's: ray_tracing_quality "
+         "%u to %u", g_settings_version, cv::kSettingsVersion, quality, g_rt_quality);
+    app::Save();  // through SettingsSave, the version with it
+}
+
+// a newer release's number kept, so going back to this one does not have it migrate the file again
+void SettingsSave(void* table) {
+    static_cast<toml::table*>(table)->insert_or_assign(
+        "settings_version", int64_t(std::max(g_settings_version, cv::kSettingsVersion)));
+}
+
 }  // namespace
 
 // what the runtime asks of the game; strings must be set, hooks may stay null
@@ -94,8 +121,8 @@ const app::GameInfo app::kGame = {
                 {"ray_tracing", nullptr, &g_ray_tracing},
                 {"ray_tracing_lighting", nullptr, &g_rt_lighting},
                 {"ray_tracing_quality", nullptr, &g_rt_quality}},
-    .load = nullptr,                      // reads more from the settings file's toml::table
-    .save = nullptr,                      // writes more into it
+    .load = SettingsLoad,                 // reads more from the settings file's toml::table: its version, migrated
+    .save = SettingsSave,                 // writes more into it: the version
     .init = GameInit,                     // after the settings load, before the window and boot: game files, game code, renderer extension
     .loaded = nullptr,                    // image in memory, before its entry point runs
     .window = KeyboardWindow,             // the game window is up: keyboard focus and the menu's font

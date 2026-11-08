@@ -1,0 +1,12 @@
+{
+  "name": "settings-migrate",
+  "settings": {"settings_version": null, "ray_tracing_quality": 2, "draw_distance": 150, "launcher_language": "ru"},
+  "note": "A settings file as 1.9.2 or older left it (no settings_version), with the ray tracing quality the old menus offered (2, High, their default), the game started without the launcher: at its start the quality is set to 3, path traced, the default since Ray tracing became the path traced lighting, and the file saved at once with settings_version 1, the other settings and the keys the game does not know kept (src/common/settings_version.h).",
+  "steps": [
+    {"press": "0:wait:11000", "note": "the logos to the title"},
+    {"until": "frame >= 640", "timeout": 60, "shot": "title",
+     "expect": ["not player.active", "found(runlog, r'settings: castlevania.toml from an older release \\(settings_version 0\\).*ray_tracing_quality 2 to 3')",
+                "saved.ray_tracing_quality == 3", "saved.settings_version == 1", "saved.draw_distance == 150",
+                "saved.launcher_language == 'ru'", "saved.width == settings.width"]}
+  ]
+}

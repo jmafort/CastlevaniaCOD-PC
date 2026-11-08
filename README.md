@@ -472,7 +472,9 @@ background first); the size pictures load at applies from the next start.
   (AMD's, Intel's, a handheld's): low lights the room with one ray a pixel at a third of the frame's size, reaches
   less far, sends fewer ambient occlusion rays at half the frame's size, reflects only the smoothest surfaces and
   leaves the light shafts out (about 1.1 ms on the RTX 5080 at a handheld's 1920x1200); medium is between; high is
-  the bounce lighting above, one bounce. **Path traced** does all High does and lights the room as a path tracer
+  the bounce lighting above, one bounce. 1.8.10 to 1.9.1 offered these as a choice and saved it (2, high, by
+  default); 1.9.3 sets a settings file saved by any release before it to 3 once, at the first start of the launcher or
+  the game (`settings_version` 1 written with it), and keeps a value set by hand after that. **Path traced** does all High does and lights the room as a path tracer
   would: one path a pixel at 0.71 of the frame's size, each followed two bounces through the room. At each place a
   path lands it takes the light of one of the room's lights (a torch, a brazier, a glow, picked by how strongly it
   lights that place, with a ray toward it for its shadow) and of the sky where a ray leaves the room, and where it

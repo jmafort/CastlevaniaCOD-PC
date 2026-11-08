@@ -8,6 +8,8 @@ The release is installed as install.py installs it (outside this repository, in 
 and the game on a virtual X display of their own), with each disc linked into its assets, then
   - fonts: every letter of the launcher's phrases, in all its languages, in the fonts it writes them with
   - one disc: the home page has Play and no list of releases
+  - an older release's settings file (no settings_version, ray_tracing_quality 2): the launcher's start sets the
+    quality to 3, path traced, and saves the version with it; a quality set by hand after that is kept
   - both discs: the list is beside Play; choosing the European release saves release = "CastlevaniaEU", and Play
     starts CastlevaniaEU, which finds the European disc
   - Russian: the home page in Russian, a picture of it for the report
@@ -301,8 +303,9 @@ def main():
 
     # one disc: Play, no list
     link(usa)
-    # the launcher kept open by Play, so the game it starts stays its child
-    set_settings(pkg, display_mode="windowed", width=960, height=540, launcher_keep_open=True)
+    # the launcher kept open by Play, so the game it starts stays its child; the file as 1.9.2 or older left it, with
+    # the quality its menus offered (2, High, their default) and no settings_version (src/common/settings_version.h)
+    set_settings(pkg, display_mode="windowed", width=960, height=540, launcher_keep_open=True, ray_tracing_quality=2)
     la = Launcher(pkg, env, out)
     controls = la.controls
     la.shot("one-disc")
@@ -311,6 +314,16 @@ def main():
     if "release" in controls:
         errors.append("a list of releases with one disc")
     results.append(result("one disc: Play, no list of releases", errors))
+    s = settings(pkg)
+    errors = [f"{key} is {s.get(key)!r}, not {value!r}" for key, value in (("ray_tracing_quality", 3),
+              ("settings_version", 1), ("width", 960), ("launcher_keep_open", True)) if s.get(key) != value]
+    set_settings(pkg, ray_tracing_quality=0)  # a handheld's, by hand, once the file is this release's
+    la = Launcher(pkg, env, out)
+    la.close()
+    if settings(pkg).get("ray_tracing_quality") != 0:
+        errors.append(f"ray_tracing_quality set by hand to 0 is {settings(pkg).get('ray_tracing_quality')!r} after a start")
+    set_settings(pkg, ray_tracing_quality=3)
+    results.append(result("an older release's settings: ray tracing quality to path traced once, by hand kept", errors))
 
     # a page opens at its top: Graphics scrolled to its end, then View (1.9.1; it opened as far down as Graphics was)
     la = Launcher(pkg, env, out, args=("--page", "view"))

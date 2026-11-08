@@ -424,7 +424,7 @@ void GraphicsTab(bool& save) {
         }
     }
     // (ray_tracing_quality, g_rt_quality, is castlevania.toml's alone: Ray tracing is the path traced lighting, 3; a
-    // handheld sets the key to 0, Low, by hand)
+    // handheld sets the key to 0, Low, by hand; an older release's file has it set to 3 once, settings_version.h)
     Row("Anisotropic filtering", "Sharper textures at an angle.");
     save |= Choice<uint32_t>("##aniso", s.aniso, {0, 2, 4, 8, 16}, {"Off", "2x", "4x", "8x", "16x"});
     Row("Render scale", "Of the output height. Above 100% supersamples for a sharper, smoother picture.");
