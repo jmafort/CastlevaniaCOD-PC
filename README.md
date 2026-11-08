@@ -863,6 +863,10 @@ Changes this game needed beyond the generated config:
     of one frame in n, where it lands and what was made of it. Only draws into the device's back buffer are squeezed:
     the game composes an area's name card in another 640x480 target and copies it out to a texture, and squeezed
     there the card lost its left end.
+    3D the game draws into such a target and then lays over the whole frame (room 5.19's breakable pillar, lit
+    green; an enemy's after-images) is the exception: once a target's picture has been laid over the frame, its
+    3D there is squeezed too and the picture laid over whole, or what lies past the 4:3 edge is not in it (the
+    pillar was cut there as the camera turned; telemetry `wide.apart`).
   - Overscan. The last pass of each frame draws a copy of the frame back with its rows -16 to 496 over rows 0 to 480
     (PS2 448 lines plus border shrunk into the NTSC frame); the European release's rows -16 to 490 and columns -20 to
     660 over the 640, its picture narrowed by 640/680. What reads past the copy clamps into streaks at the edges, and
