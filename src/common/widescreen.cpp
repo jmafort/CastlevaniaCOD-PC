@@ -175,9 +175,11 @@ constexpr uint64_t kCardFx[] = {0xe8728269d4380016ull};
 // title's logo, a panorama the game scrolls (wrapping, it goes on), and the Konami logo, on white to its edges
 constexpr uint64_t kSides[] = {0x538892ce4eebc65cull, 0x5aa1017e3e7eb511ull};
 // Hector's cloth, which the game moves itself and draws through the world matrix rather than by his skinned
-// program: his sash (the texture pack's 161bdbe2e3dc5cf4-82307fa6d17c2ea5-00000013) and the tails of his coat
-// (9c7d10af2fbc22c9-dca294ba43969116-00000013): a character's to the ray tracing (Character)
-constexpr uint64_t kCloth[] = {0x083d44c227569dc8ull, 0xc26555aa0ffd586dull};
+// program: his sash (the texture pack's 161bdbe2e3dc5cf4-82307fa6d17c2ea5-00000013, its draws in pairs), a
+// character's to the ray tracing (Character). Not c26555aa0ffd586d, listed here once for the coat: that is the doors'
+// arrows' (kSkyCards), drawn adding their light, and as a character's glow the ray tracing made no light of it, so
+// the green the three arrows cast on a door and the floor before it was gone (Hector's draws never use it)
+constexpr uint64_t kCloth[] = {0x083d44c227569dc8ull};
 // A save room's pool: the glowing water of the throne room where the game is saved, drawn as hundreds of additive
 // sprites of two pictures (256x128 and 128x128, some 520 and 220 of them a frame in the Abandoned Castle's, 5.27; the
 // texture pack has none for them). A frame with kSavePoolDraws or more of them is a save room's (g_save_room, held

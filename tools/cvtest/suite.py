@@ -239,6 +239,9 @@ def tests():
         scenario("fg", needs=["vendor"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
         # 1.9.1: ray tracing's targets given back once it is off (Windows: DXR; needs anti-aliasing, so AMD's files)
         scenario("rt-memory", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
+        # 1.9.3: the doors' arrows' green light with ray tracing on (1.9.2 took their texture for Hector's coat's)
+        scenario("door-arrows-rt", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"),
+                 platforms=["windows"]),
         # 1.8.5: Linux's HDR output, made whatever the desktop (XBE_HDR_FORCE), its frame measured
         scenario("hdr-linux", platforms=["linux"]),
         # 1.8.6: Linux's anti-aliasing and upscaling by AMD FSR 3 on Vulkan

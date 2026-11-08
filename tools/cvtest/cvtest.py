@@ -60,6 +60,8 @@ and may have
                                           fractions of the window: screen.edges.<name>, the mean brightness step
                                           between neighbouring pixels (render scale and texture filtering move it)
   "luma": {"<name>": [x0, y0, x1, y1]}    the mean brightness (0 to 255) of those parts: screen.luma.<name>
+  "tint": {"<name>": [x0, y0, x1, y1]}    how green those parts are, the mean of green less red's and blue's middle
+                                          (-255 to 255): screen.tint.<name>
   "seams": {"<name>": [x0, y0, x1, y1]}   how far the strongest step between two columns there stands out of the
                                           median one: screen.seams.<name> (a straight seam, 70 and more; a continuous
                                           picture some 3)
@@ -490,6 +492,23 @@ def luma(w, h, bgra, box):
             total += bgra[i + 2] * 299 + bgra[i + 1] * 587 + bgra[i] * 114
             count += 1
     return round(total / count / 1000, 1)
+
+
+def tint(w, h, bgra, box):
+    """how green box is (fractions of the window): the mean of each pixel's green less the middle of its red and
+    blue, -255 to 255 (a door's arrows' green light on it, src/common/widescreen.cpp kCloth)"""
+    x0, y0, x1, y1 = (round(f * n) for f, n in zip(box, (w, h, w, h)))
+    x0, y0, x1, y1 = max(0, x0), max(0, y0), min(w, x1), min(h, y1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    every = max(1, (x1 - x0) * (y1 - y0) // 100000)
+    total = count = 0
+    for y in range(y0, y1, every):
+        for x in range(x0, x1):
+            i = (y * w + x) * 4
+            total += 2 * bgra[i + 1] - bgra[i + 2] - bgra[i]
+            count += 1
+    return round(total / count / 2, 1)
 
 
 def differs(w, h, bgra, other, box):
@@ -1407,6 +1426,8 @@ def play_steps(game, scenario, settings, shots, run, results):
                     screen["edges"] = {k: edges(*img, box) for k, box in step["measure"].items()}
                 if step.get("luma"):
                     screen["luma"] = {k: luma(*img, box) for k, box in step["luma"].items()}
+                if step.get("tint"):
+                    screen["tint"] = {k: tint(*img, box) for k, box in step["tint"].items()}
                 if step.get("seams"):
                     screen["seams"] = {k: seams(*img, box) for k, box in step["seams"].items()}
                 if step.get("differs"):

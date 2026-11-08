@@ -62,6 +62,7 @@ his wall). After a test fails the next plays a fresh game. `--alone` plays every
 | Anti-aliasing and upscaling, AMD FSR | `aa` (*Windows*) | FSR on the 3D (its signed libraries loaded), off and on while playing, Performance drawing half the size and softer, native again |
 | NVIDIA DLSS | `aa-dlss` (*Windows*, a GeForce RTX) | DLSS (DLAA) at the start, Quality drawing two thirds across |
 | Ray tracing's memory given back | `rt-memory` (*Windows*, a card with ray tracing) | Lighting on at 200%; off: its targets given back after 2 s and the game at 60 again; on: made again; off: given back again |
+| The doors' arrows' light | `door-arrows-rt` (*Windows*, a card with ray tracing) | the courtyard door's green (`screen.tint.door`) with ray tracing on above it off by more than 10, at the game's distances and at 150: the arrows are a light to the ray tracing, not a character's glow |
 | Frame generation | `fg` (*Windows*) | FSR 3 generating standing and turning: twice the frames shown, the game at 60, presented without v-sync on a screen whose refresh is not a multiple of 120 |
 | The renderer's own TAA (Linux's anti-aliasing) | `taa` | the TAA on the 3D (on Windows by `XBE_TAA=1`), still from frame to frame, off and on, Performance upscaling, the camera turned |
 | AMD FSR on Linux | `fsr-linux` (*Linux*) | AMD FSR 3 on Vulkan on the 3D at full size, still from frame to frame, off and on, Performance upscaling, the camera turned (as `taa` checks the own TAA, which `XBE_TAA=1` keeps there) |

@@ -1,0 +1,87 @@
+{
+  "name": "door-arrows-rt",
+  "after": "newgame.json",
+  "vendor": true,
+  "needs": [
+    "env:CV_VENDOR_DIR"
+  ],
+  "platforms": [
+    "windows"
+  ],
+  "note": "The doors' arrows' green light with ray tracing on: the three pyramids by the courtyard's door, drawn adding their light, light the door and the floor before it green. 1.9.2 took their texture for Hector's coat (widescreen.cpp kCloth), a character's glow, which the ray tracing makes no light of, so with Ray tracing on the door had none of their green (its tint about 7, as with it off; 28 with it). Measured as the door's green (screen.tint.door) with ray tracing off, on, and on with the draw distance and fog at 150. On a card with ray tracing (DXR), with AMD FSR (ray tracing needs anti-aliasing) from CV_VENDOR_DIR.",
+  "settings": {
+    "width": 1920,
+    "height": 1080,
+    "antialiasing": 1,
+    "ray_tracing": 0
+  },
+  "steps": [
+    {
+      "press": "0:walk=-5165/-4876/120:8000",
+      "note": "to the courtyard door, the way the first-save recording went (as door-arrows.json)"
+    },
+    {
+      "press": "0:walk=-5441/-4703/120:8000"
+    },
+    {
+      "press": "0:walk=-5914/-4643/120:8000"
+    },
+    {
+      "press": "0:walk=-6203/-4479/120:8000"
+    },
+    {
+      "press": "0:walk=-6616/-4401/120:8000"
+    },
+    {
+      "press": "0:walk=-8175/-3360/120:10000"
+    },
+    {
+      "press": "0:walk=-8311/-3047/120:8000"
+    },
+    {
+      "press": "0:walk=-8230/-2613/120:8000"
+    },
+    {
+      "press": "0:walk=-7865/-2078/120:8000"
+    },
+    {
+      "press": "0:walk=-7583/-1904/120:8000"
+    },
+    {
+      "press": "0:walk=-6756/-1656/120:8000"
+    },
+    {
+      "press": "0:walk=-5420/-660/120:10000"
+    },
+    {
+      "press": "0:walk=-5250/-360/60:8000"
+    },
+    {
+      "press": "0:walk=-4979/-306/40:8000,0f:wait:60f"
+    },
+    {
+      "press": "0f:wait:120f",
+      "shot": "off",
+      "note": "ray tracing off: the game's own picture, the door a little green",
+      "tint": {"door": [0.25, 0.1, 0.5625, 0.4]},
+      "expect": ["map == 5 and room == 1", "wide.sky.arrows == 6", "screen.tint.door < 14"]
+    },
+    {
+      "press": "0:set=ray_tracing=5,0f:wait:300f",
+      "shot": "on",
+      "note": "ray tracing on, path traced: the arrows' green on the door",
+      "tint": {"door": [0.25, 0.1, 0.5625, 0.4]},
+      "expect": ["screen.tint.door > 18", "screen.tint.door > shots['off'].tint.door + 10"]
+    },
+    {
+      "press": "0:set=fog_distance=150,0:set=draw_distance=150,0f:wait:240f",
+      "shot": "on-150",
+      "note": "the draw distance and fog at 150 too",
+      "tint": {"door": [0.25, 0.1, 0.5625, 0.4]},
+      "expect": ["wide.sky.arrows == 6", "screen.tint.door > 18"]
+    },
+    {
+      "press": "0:set=ray_tracing=0,0:set=fog_distance=100,0:set=draw_distance=100,0f:wait:60f"
+    }
+  ]
+}
