@@ -2031,7 +2031,8 @@ struct Settings {
     uint32_t ambient_occlusion = 0;     // 0 off, 1 low, 2 high
     uint32_t ray_tracing = 0;           // 0 off, 1 ambient occlusion, 5 lighting (menu.cpp); reflections are not offered
     uint32_t rt_lighting = 100;         // percent, how strongly its lighting shows (menu.cpp)
-    uint32_t rt_quality = 2;            // 0 low, 1 medium, 2 high: how much ray tracing a frame does (menu.cpp)
+    uint32_t rt_quality = 3;            // 0 low, 1 medium, 2 high, 3 path traced: how much ray tracing a frame does (menu.cpp;
+                                        // castlevania.toml's alone, not a control: a handheld's 0)
     uint32_t surface_depth = 0;         // 0 off, 1 low, 2 high: a pack's material maps seen into (parallax)
     std::string gpu;                    // the graphics card by its name, empty the fastest (the SDK's)
     std::string release;                // the release played, by its executable's name, when there are more (the SDK's)
@@ -2092,7 +2093,7 @@ struct Settings {
         uint32_t rt = rest["ray_tracing"].value_or(ray_tracing);
         ray_tracing = (rt & 6) ? 5u : (rt & 1);  // an older build's lighting and reflections (7): lighting
         rt_lighting = std::min(rest["ray_tracing_lighting"].value_or(rt_lighting), 200u);
-        rt_quality = std::min(rest["ray_tracing_quality"].value_or(rt_quality), 2u);
+        rt_quality = std::min(rest["ray_tracing_quality"].value_or(rt_quality), 3u);
         surface_depth = std::min(rest["surface_depth"].value_or(surface_depth), 2u);
         gpu = rest["gpu"].value_or(gpu);
         release = rest["release"].value_or(release);
@@ -4068,11 +4069,13 @@ private:
             BeginOff(!aa || !rays);
             BeginSetting(T("Ray tracing"), T("Rays through the room itself. Ambient occlusion: found from the room "
                                              "rather than from what the screen shows, so it holds at the screen's "
-                                             "edges and behind things. Lighting adds the light the room's surfaces "
-                                             "throw onto each other: water's on the stone beside it, a torchlit wall's "
-                                             "on the floor. Needs a graphics card with DirectX ray tracing."),
+                                             "edges and behind things. Ray tracing lights the room as a path tracer "
+                                             "would: each pixel's light followed through the room, lit by the "
+                                             "torches, the braziers and the sky, water's glow on the stone beside it, "
+                                             "a torchlit wall's on the floor. Needs a graphics card with DirectX ray "
+                                             "tracing, and a fast one."),
                          true);
-            Segmented<uint32_t>("rt", settings_.ray_tracing, {0, 1, 5}, {T("Off"), T("Ambient occlusion"), T("Lighting")});
+            Segmented<uint32_t>("rt", settings_.ray_tracing, {0, 1, 5}, {T("Off"), T("Ambient occlusion"), T("Ray tracing")});
             EndOff();
             if (!rays) ControlNote(kAmber, T("This graphics card has no DirectX ray tracing."));
             else if (!aa) ControlNote(kAmber, T("Needs anti-aliasing on."));
@@ -4087,13 +4090,10 @@ private:
             Slider("rtlight", settings_.rt_lighting, 0, 200,
                    settings_.rt_lighting ? std::to_string(settings_.rt_lighting) + "%" : std::string(T("Off")));
             EndOff();
-            if (rays && aa && !(settings_.ray_tracing & 4)) ControlNote(kMuted, T("Needs ray tracing's Lighting."));
+            if (rays && aa && !(settings_.ray_tracing & 4)) ControlNote(kMuted, T("Needs Ray tracing."));
             EndSetting();
-            BeginOff(!aa || !rays || !settings_.ray_tracing);
-            BeginSetting(T("Ray tracing quality"), T("How much ray tracing does each frame, for slower graphics cards (AMD's, Intel's, a handheld's). Low lights the room with fewer rays at a smaller size, reaches less far and reflects only the smoothest surfaces; High does all of it."));
-            Segmented<uint32_t>("rtq", settings_.rt_quality, {0, 1, 2}, {T("Low"), T("Medium"), T("High")});
-            EndOff();
-            EndSetting();
+            // (ray_tracing_quality, 0 low, 1 medium, 2 high, 3 path traced, is castlevania.toml's alone: Ray tracing
+            // is the path traced lighting, and a handheld sets the key to 0 by hand; the launcher keeps what it read)
         }
         BeginSetting(T("Anisotropic filtering"), T("Keeps floors and walls sharp where they are seen at an angle. It costs "
                                                    "little."));

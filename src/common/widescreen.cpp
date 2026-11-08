@@ -117,6 +117,8 @@ bool g_menu_spread = true;  // the pause menu's columns toward the screen's side
 
 // the next frame's draws logged as CV_WIDE_TRACE logs them: the F10 menu's frame capture asks for it (menu.cpp)
 std::atomic<bool> g_wide_trace_frame{false};
+// the frame is a save room's (kSavePool, below): read by menu.cpp's MenuToRenderer, which turns the ambient occlusion off there
+std::atomic<bool> g_save_room{false};
 
 namespace {
 
@@ -170,6 +172,19 @@ constexpr uint64_t kCardFx[] = {0xe8728269d4380016ull};
 // coordinates stretched with it, so past the 4:3 middle they reach out of the picture: the misty castle behind the
 // title's logo, a panorama the game scrolls (wrapping, it goes on), and the Konami logo, on white to its edges
 constexpr uint64_t kSides[] = {0x538892ce4eebc65cull, 0x5aa1017e3e7eb511ull};
+// Hector's cloth, which the game moves itself and draws through the world matrix rather than by his skinned
+// program: his sash (the texture pack's 161bdbe2e3dc5cf4-82307fa6d17c2ea5-00000013) and the tails of his coat
+// (9c7d10af2fbc22c9-dca294ba43969116-00000013): a character's to the ray tracing (Character)
+constexpr uint64_t kCloth[] = {0x083d44c227569dc8ull, 0xc26555aa0ffd586dull};
+// A save room's pool: the glowing water of the throne room where the game is saved, drawn as hundreds of additive
+// sprites of two pictures (256x128 and 128x128, some 520 and 220 of them a frame in the Abandoned Castle's, 5.27; the
+// texture pack has none for them). A frame with kSavePoolDraws or more of them is a save room's (g_save_room, held
+// kSavePoolHold frames past the last; the log says "wide: a save room"): the ambient occlusion is off there whatever
+// the setting (menu.cpp's MenuToRenderer), as its rays meet the statues' facets and the throne from every pixel and its
+// grain changed with the camera's every turn, on the walls and the statues, which no gathering of it settled (Julian,
+// 6 Nov). The other areas' save rooms are taken to draw the same pool
+constexpr uint64_t kSavePool[] = {0xd9239c3b36d1d0b1ull, 0x7b034e5dbc3f2dd2ull};
+constexpr uint32_t kSavePoolDraws = 100, kSavePoolHold = 60;
 
 struct Program {
     bool camera = false;  // projects with the game's camera
@@ -343,6 +358,14 @@ public:
         trace_rt_ = rt ? rt->data : 0;
         trace_device_ = s.rt_back_buffer;
         if (c.Presents() != frame_) {  // the frame's first draw
+            // the frame before's pool draws tell a save room (kSavePool), held kSavePoolHold frames past the last
+            if (pool_draws_ >= kSavePoolDraws) pool_frame_ = frame_;
+            const bool save_room = pool_frame_ != ~0ull && c.Presents() <= pool_frame_ + kSavePoolHold;
+            if (save_room != g_save_room.load(std::memory_order_relaxed)) {
+                g_save_room.store(save_room, std::memory_order_relaxed);
+                LOGR("wide: %s (%u draws of the pool's picture in frame %llu): ambient occlusion %s", save_room ? "a save room" : "the save room left", pool_draws_, (unsigned long long)frame_, save_room ? "off" : "as set");
+            }
+            pool_draws_ = 0;
             frame_ = c.Presents();
             world_ = 0;
             picture_ = false;
@@ -432,8 +455,18 @@ public:
     }
 
     // ray tracing's characters (the SDK's Character): a 3D draw by a skinned program (Program::skinned), Hector, the
-    // enemies and the Innocent Devils, whose shadows it casts and whose armour and blades it lets shine
-    bool Character() override { return d_.world && d_.skinned; }
+    // enemies and the Innocent Devils, whose shadows it casts and whose armour and blades it lets shine; and Hector's
+    // cloth (kCloth), drawn through the world matrix as the things set about a room are: as a mesh of the room's, his
+    // sash threw red light on the floor under him and trailed it as he walked (the path traced lighting). Not every
+    // draw through the world matrix: the game places parts of its rooms by it too, the Abandoned Castle's rampart
+    // walls among them, and as characters to the rays they let the sky in and the rampart's floor went a third
+    // brighter and lost its brazier's purple
+    bool Character() override {
+        if (!d_.world) return false;
+        if (d_.skinned) return true;
+        return d_.matrix == kCameraWorld && d_.name &&
+               std::find(std::begin(kCloth), std::end(kCloth), d_.name) != std::end(kCloth);
+    }
 
     // ray tracing's water (the SDK's Water): a 3D draw of the pools, fountains and moats, by its texture's name (kWater,
     // and CV_WATER's: names in hex by commas, to try others), which ray tracing reflects the room in
@@ -536,6 +569,9 @@ public:
             // the world's 3D is textured; the map screen's rooms are flat colour, drawn before its backdrop (126 of
             // them, 3000 vertices, with half the castle explored: its backdrop stood as a 4:3 box)
             world_ += d_.world && d_.textured ? d_.count : 0;
+            if (d_.world && d_.additive && d_.name &&
+                std::find(std::begin(kSavePool), std::end(kSavePool), d_.name) != std::end(kSavePool))
+                pool_draws_++;
             picture_ |= squeeze && d_.whole && d_.textured && !d_.target;
         }
         // the HUD, from its first draw to the frame pass, to the screen's edges
@@ -646,14 +682,17 @@ public:
         // XBE_FG_TRACE=2: each 3D program once (what it reads, its first draw), and every 3D draw of the three
         // frames after one whose world draws had several cameras
         static const int trace_lvl = std::getenv("XBE_FG_TRACE") ? std::atoi(std::getenv("XBE_FG_TRACE")) : 0;
+        // (XBE_FG_TRACE_FRAME=<n>: every 3D draw of frames n to n + 2 listed, whatever the cameras)
+        static const uint64_t trace_frame = std::getenv("XBE_FG_TRACE_FRAME") ? std::strtoull(std::getenv("XBE_FG_TRACE_FRAME"), nullptr, 10) : 0;
         if (trace_lvl >= 2 && back_buffer_ && d_.world && vsc) {
             bool fresh = programs_told_.insert(d_.program).second;
-            if (fresh || frame_ <= trace_draws_until_)
-                LOGR("wide: %s %llu: program %016llx%s%s%s n %u tex %016llx, c68 [%g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g] "
+            if (fresh || frame_ <= trace_draws_until_ || (trace_frame && frame_ >= trace_frame && frame_ < trace_frame + 3))
+                LOGR("wide: %s %llu: program %016llx%s%s%s n %u tex %016llx (%s), c68 [%g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g] "
                      "c85 row 3 [%g %g %g %g] c94 %g %g %g c95 %g %g %g",
                      fresh ? "3D program, frame" : "3D draw, frame", (unsigned long long)frame_,
                      (unsigned long long)d_.program, d_.matrix == kCameraWorld ? " world" : d_.program ? " camera" : " fixed",
                      d_.skinned ? " skinned" : "", d_.mesh ? " mesh" : "", d_.count, (unsigned long long)d_.name,
+                     d_.ntex ? TexturePackName(d_.texs[0]).c_str() : "",
                      vsc[kCamera][0], vsc[kCamera][1], vsc[kCamera][2], vsc[kCamera][3], vsc[kCamera + 1][0],
                      vsc[kCamera + 1][1], vsc[kCamera + 1][2], vsc[kCamera + 1][3], vsc[kCamera + 2][0],
                      vsc[kCamera + 2][1], vsc[kCamera + 2][2], vsc[kCamera + 2][3], vsc[kCamera + 3][0],
@@ -1475,6 +1514,8 @@ private:
     // a 4:3 picture over the whole frame
     static constexpr uint32_t kWorld = 1000;
     uint64_t frame_ = ~0ull;
+    uint32_t pool_draws_ = 0;      // the frame's draws of a save room's pool (kSavePool)
+    uint64_t pool_frame_ = ~0ull;  // the last frame with kSavePoolDraws of them
     uint32_t guest_w_ = 640, guest_h_ = 480;
     uint32_t trace_rt_ = 0;  // the target's address, for the trace
     bool trace_device_ = false;

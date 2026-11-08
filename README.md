@@ -351,15 +351,18 @@ background first); the size pictures load at applies from the next start.
   touch the floor (`ambient_occlusion`: 0 off, 1 low, 2 high). It is worked out from the 3D's depth before the
   anti-aliasing smooths it, so it needs anti-aliasing on.
 - **Ray Tracing** - Off by default. On a graphics card with DirectX ray tracing (DXR 1.1: NVIDIA GeForce RTX, AMD
-  Radeon RX 6000 or newer, Intel Arc), on Windows, rays through the room itself (`ray_tracing`: 0 off, 1 ambient occlusion, 5 lighting; bits 1 and
-  4; launcher Graphics page or the in-game menu; anti-aliasing on). Reflections (bit 2) are no longer offered: an
+  Radeon RX 6000 or newer, Intel Arc), on Windows, rays through the room itself (`ray_tracing`: 0 off, 1 ambient
+  occlusion, 5 ray tracing, the path traced lighting below; bits 1 and 4; launcher Graphics page or the in-game menu;
+  anti-aliasing on). Reflections (bit 2) are no longer offered: an
   older setting of 7, lighting and reflections, is read as 5. Each frame, the vertices the game's own draws put on
   the screen are gathered into an acceleration structure (the world as drawn, characters posed as they are), with
   each draw's picture and texture pack material. Cut-outs (railings, leaves, grates) are seen through where their
   pictures are.
   - *Ambient occlusion* is traced instead of guessed from the screen: each pixel sends rays over its surface, so what
     is off screen or behind something still shades, and an edge's shadow does not end where the screen's view of it
-    does.
+    does. It is off in the save rooms whatever the setting (the port tells one by its pool's glowing water): every
+    pixel's rays there meet the statues' facets or the throne, and their grain changed with the camera's every turn on
+    the walls and the statues, which no gathering of it over the frames settled.
   - *Lighting*: the light the room's surfaces throw onto each other. Each pixel, at half the 3D's size, sends two
     rays over its surface, takes on the colour of what they meet as the game drew and lit it, and throws it back in
     its own colour: the courtyard's water lights the carved wall and gargoyle above it in blue, a torchlit wall warms
@@ -369,8 +372,9 @@ background first); the size pictures load at applies from the next start.
     gets the light it gets above the room's average (the room's over the frames since it came in, so a turn of the
     camera does not pump it), raised in the light's own hue against the room's (a surface that gets more of the room's own
     light is raised in white: the room's colour is in its fill already), and gives up a share of the game's own as it
-    gets less, so a room keeps the brightness the game gave it while its light comes from where the rays say: the
-    glow by the water, the shade in a corner. **Lighting
+    gets less (by the square of how far short it falls, so what the rays reach little, a corner or a cliff, keeps its
+    picture's detail rather than going to black), so a room keeps the brightness the game gave it while its light
+    comes from where the rays say: the glow by the water, the shade in a corner. **Lighting
     strength** (`ray_tracing_lighting`, 0% to 200%, 100% by default) sets how strongly it shows. Reflections take the
     place of the share of a surface's own colour they stand for (its Fresnel share: little head on, most at a glancing
     angle) rather than adding to it, too.
@@ -381,17 +385,30 @@ background first); the size pictures load at applies from the next start.
       light grows in over about half a second once it has been there a third of one, so a sword's swing, a hit's
       sparks and a spell's burst throw none while a torch, a lamp and a lava golem's glow throw all of theirs; the
       point a pixel settled on follows its light as others come and go; and a light that leaves the screen goes on
-      lighting what is in view for twenty seconds, so a torch just out of view still lights the wall beside it.
+      lighting what is in view for twenty seconds, so a torch just out of view still lights the wall beside it (the
+      twelve brightest of those remembered: every pixel weighs each of them, and a save room's hundreds of sparkles
+      drifting out of view had filled all 128 and made the lights most of the lighting's cost there).
       Flames and glows the game draws as flat sprites are put back into the room at their own depth (the game depth
       tests them against the room, so that is where they are: a flame at its bracket, a brazier's fire on its stand),
       four fifths as bright as the room's own (an effect more than a lamp: a cloud of motes tints the wall behind it);
       a haze over the whole view is no light, and the glow a character is drawn with (the embroidery on Hector's coat)
       is its look, not a lamp. Their light is light above the room's own, so the room's average leaves it out: a torch
-      brightens its wall without the rest of the room dimming to make up for it.
+      brightens its wall without the rest of the room dimming to make up for it. Which light each of a pixel's
+      candidates is on is picked for a tile of 8 x 8 pixels together, the point on it for the pixel (each pixel keeps
+      its own choice from frame to frame): a wave of pixels then reads one light's vertices and picture rather than
+      one each, which in the save room, 94 lights listed, was half of the lighting's cost. The bounce rays gather
+      the light of the glows they pass through on their way (the save room's water glowing on the stone around its
+      pools); of a picture drawn as hundreds of sprites the scene holds 48, the listed and then every so many-th of
+      the rest, each standing for those between (the 800 sprites overlapped over the pools, and a ray through them
+      visited most of their acceleration structure).
     - *Sky*: outdoors, a ray that leaves the room upward brings the sky's colour as the frame shows it (the more the
       higher it heads, as much as the frame shows sky: none indoors), so the open air lights what faces it and an
-      arch or a ledge shades what lies under it. It is light above the room's own too, left out of the room's average
-      as the lights' is.
+      arch or a ledge shades what lies under it. The sky as the frame last showed it is held through a room's
+      change and fades out over a minute while none is in view (the bridge before the courtyard, entered from the
+      courtyard, has its sky from the first frame: measured afresh in each room, its planks were dark looking along
+      the bridge and bright once the camera had tilted up past the sky cards to the open sky). It is the open air's
+      light over the whole room, so it counts in the room's average (left out, every surface open to the sky lay
+      above the average and a drawbridge or a canyon was raised to twice its brightness).
     - *Light shafts*: the air catches the lights' light on its way to the eye: a torch's glow in the air, cut by the
       bars before it. Only lights drawn in 3D light the air (a fountain's spray, motes and a glow's sprite drawn flat
       filled whole rooms with a grainy, sparkling haze). Marched at a quarter of the frame's size, smoothed, gathered
@@ -411,7 +428,9 @@ background first); the size pictures load at applies from the next start.
   - *Character shadows*: Hector, the enemies and the Innocent Devils cast soft shadows on the floor and the walls
     around them (the game drew none), from a light above and a little to one side, the same way in every room, which
     only the characters block, so the ceiling does not shade the room. They come with the ray traced ambient
-    occlusion.
+    occlusion. A character to the rays is a draw by a skinned program, and Hector's sash and the tails of his coat
+    besides, cloth the game moves itself and draws as plain meshes: as meshes of the room's they threw red light on
+    the floor under him and trailed it as he walked.
   - *Denoising*: with anti-aliasing on NVIDIA DLSS (any GeForce RTX), DLSS Ray Reconstruction takes over from it and
     cleans the rays' grain as it anti-aliases. Each frame it is given what every pixel's surface is, traced through
     the room at the 3D's full size: its picture's colour, its normal (bent by a texture pack's normal map), roughness
@@ -420,8 +439,11 @@ background first); the size pictures load at applies from the next start.
     It needs Streamline's DLSS-RR files (`sl.dlss_d.dll`, `nvngx_dlssd.dll`), which the launcher's DLSS download now
     brings with the rest (a download from before asks to be made again).
     With AMD FSR (any card), or DLSS without those files, the port's own denoiser takes all three before the
-    anti-aliasing. The bounce lighting goes through the port's own with Ray Reconstruction too: the lights' samples
-    left to it alone flickered on the walls they lit. Each surface's light is gathered over the frames, followed to where the frame's motion says it was
+    anti-aliasing. The bounce lighting and the ambient occlusion go through the port's own with Ray Reconstruction
+    too: the lights' samples left to it alone flickered on the walls they lit, and the ambient occlusion's grain (8
+    rays a pixel at half size) changed with the camera's every turn in the Abandoned Castle's save room, where every
+    ray meets a statue or the throne (`XBE_RT_AO_GATHER=0` leaves it to Ray Reconstruction, as before). Each
+    surface's light is gathered over the frames, followed to where the frame's motion says it was
     a frame before (taken only from the same surface: what a character or the camera uncovers starts afresh, so
     nothing trails behind them):
     - the bounce lighting over up to 24 frames, then smoothed across its neighbours on the same surface by how much
@@ -445,10 +467,33 @@ background first); the size pictures load at applies from the next start.
 
   All of it costs about 3 ms a frame at 1080p on a GeForce RTX 5080 (the screen space ambient occlusion 0.4 ms), and
   about 3.7 ms at 4K with DLSS Balanced.
-  **Ray tracing quality** (`ray_tracing_quality`: 0 low, 1 medium, 2 high, the default) is for slower graphics cards
+  The settings' **Ray tracing** choice is the path traced lighting (`ray_tracing_quality` 3, the default). The key
+  in `castlevania.toml` alone, not a control, also takes 0 low, 1 medium and 2 high, for slower graphics cards
   (AMD's, Intel's, a handheld's): low lights the room with one ray a pixel at a third of the frame's size, reaches
-  less far, sends fewer ambient occlusion rays, reflects only the smoothest surfaces and leaves the light shafts out
-  (about 2 ms on the RTX 5080); medium is between.
+  less far, sends fewer ambient occlusion rays at half the frame's size, reflects only the smoothest surfaces and
+  leaves the light shafts out (about 1.1 ms on the RTX 5080 at a handheld's 1920x1200); medium is between; high is
+  the bounce lighting above, one bounce. **Path traced** does all High does and lights the room as a path tracer
+  would: one path a pixel at 0.71 of the frame's size, each followed two bounces through the room. At each place a
+  path lands it takes the light of one of the room's lights (a torch, a brazier, a glow, picked by how strongly it
+  lights that place, with a ray toward it for its shadow) and of the sky where a ray leaves the room, and where it
+  ends it takes the light the game's artists painted there, standing for every bounce after (at the second surface
+  it meets, or the first where the second ray leaves the room). The game's own flat light is then kept only an
+  artists' share (0.45 at Lighting strength 100%, less as the strength rises), and the rest of each surface's
+  brightness is what the paths brought set against the room's average, in the light's own hue: a brazier's purple
+  spreads over the floor around it and fades with the distance, a corner that nothing reaches goes dark, and the
+  light falls off from the lamps as light does. About 4 ms a frame at 4K with DLSS Balanced on the RTX 5080 in the
+  castle's rooms (High's 3.5), 6.5 in the Abandoned Castle's save room, the costliest room (a 4K frame there 11 ms;
+  it was 19.5 before the lights' sample picked per tile and the glows' sprites were thinned, above). A room the
+  rays find no light in at all (one whose walls are skinned meshes, which the bounce rays pass) is left as the game
+  drew it, at every quality.
+  The frame's scene goes into the acceleration structure as a few merged geometries (the world's solid draws, its
+  cut-outs, its glows, the characters', the water), built back to back: a thousand geometries a frame had cost the
+  build more than its triangles. `perf-run.bat` beside the game starts it with the SDK's timings on and leaves
+  `logs\perf-report.log` when it is quit: how long each part of a frame takes on that machine, the frames the
+  ray tracing's scene was built for, and the room's average the bounce lighting holds. That average is eased from
+  frame to frame, so one pixel of one frame that came out not a number would have held it there, and the lighting
+  off, until the ray tracing was turned off and on: the passes keep such pixels out, and the average is read back
+  each frame and the lighting started over should it ever go bad (said in the log).
   The shaders are compiled to DXIL by the Windows SDK's `dxc` when the port is built; a build without it, or a card
   without DXR 1.1, keeps the screen space ambient occlusion.
 - **Field of View** - 100% (the game's, which each room's camera sets) to 200%, a wider view as the number goes up;
@@ -865,7 +910,16 @@ Changes this game needed beyond the generated config:
 - `perf.json` stands 5 s in the heaviest rooms with the SDK's timings (`XBE_PERF`) and ends its report with them:
   the frame rate, the renderer's milliseconds a frame, the game thread's in D3D calls and waiting on the renderer,
   the draws. A scenario's `"perf": true` times any run; `"shader_cache": "<name>"` keeps its compiled shaders for
-  the next run with that name (a test starts cold otherwise).
+  the next run with that name (a test starts cold otherwise). `saveroom.json` stands ten seconds in the Abandoned
+  Castle's save room, the costliest room the ray tracing has met (its hundreds of glow sprites), and `saveflick.json`
+  shoots it six times two frames apart for its flicker; `flesh.json` takes the Garibaldi Temple's flesh room and
+  two beside it, which the bounce rays find no light in; `f10room.json` and `qualityswap.json` open the settings
+  menu while playing (the latter changes the ray tracing quality in it) and go on to the next rooms. The save room
+  in motion: `savemove.json` (Hector walks each way), `savepan.json` (the camera panned left and right on the right
+  stick, eight shots two frames apart each way), `saveslow.json` (panned at a sixth of the stick) and `saveslow1.json`
+  (the same, the shots one frame apart); `cmp\noise\savecells.py`, `savesame.py` (two runs of the same path at the
+  same frames: their difference is the lighting's randomness) and `saveboil.py` (the motion taken out block by block)
+  read them.
 - A step's `"ask"` puts a question about its screenshot to GPT-6 Luna, with named answers an `expect` can check.
   `buttons.json` asks which controller's icons show at the courtyard door and on the controller settings page;
   `--set button_layout=1` runs it with the PS2 layout (`--set` changes any setting for a run).

@@ -57,8 +57,9 @@ uint32_t g_ray_tracing = 0;
 // how strongly ray tracing's bounce lighting shows, percent (gpu::g_rt_lighting_strength): 100 keeps each room as bright
 // as the game made it, its light from where the rays say; 0 none of it
 uint32_t g_rt_lighting = 100;
-// how much ray tracing does a frame (gpu::g_rt_quality): 0 low, 1 medium, 2 high
-uint32_t g_rt_quality = 2;
+// how much ray tracing does a frame (gpu::g_rt_quality): 0 low, 1 medium, 2 high, 3 path traced (High, and the lighting
+// as a path tracer's: two bounces at the frame's full size, the game's own light kept only an artists' share)
+uint32_t g_rt_quality = 3;
 extern bool g_menu_spread;       // widescreen.cpp: the pause menu's columns toward the screen's sides
 extern bool g_hd_movies;         // movies.cpp: a movie pack's HD movies drawn
 extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture whole as large as it goes, 2 filled
@@ -69,6 +70,7 @@ extern bool g_title_combo;          // keyboard.cpp: Back and Start held go back
 extern bool g_texture_pack;         // texpack.cpp: an HD texture pack's pictures drawn
 bool ViewFov(double& game, double& drawn);  // game/view.cpp: the field of view in degrees, the game's and as drawn
 extern std::atomic<bool> g_wide_trace_frame;  // widescreen.cpp: log the next frame's draws
+extern std::atomic<bool> g_save_room;         // widescreen.cpp: the frame is a save room's (its ambient occlusion off)
 
 namespace {
 
@@ -388,12 +390,13 @@ void GraphicsTab(bool& save) {
     Row("Ray tracing", "On a graphics card with ray tracing (DXR 1.1: NVIDIA RTX, AMD Radeon RX 6000 and later), rays "
                        "through the room's own 3D. Ambient occlusion: traced rather than worked out from the screen, "
                        "so what is off screen or behind something shades too, and characters cast soft shadows "
-                       "(needs ambient occlusion on). Lighting: with it, the light the room's surfaces throw onto each "
-                       "other, water's on the stone beside it, a torch's on its wall, the sky's outdoors, and the light "
-                       "the air catches. Needs anti-aliasing on.");
+                       "(needs ambient occlusion on). Ray tracing: with it, the room lit as a path tracer would, each "
+                       "pixel's light followed through the room, lit by the torches, the braziers and the sky: "
+                       "water's glow on the stone beside it, a torch's on its wall, the sky's outdoors, and the light "
+                       "the air catches. Needs anti-aliasing on, and a fast card.");
     {
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
-        save |= Choice<uint32_t>("##rt", g_ray_tracing, {0, 1, 5}, {"Off", "Ambient occlusion", "Lighting"});
+        save |= Choice<uint32_t>("##rt", g_ray_tracing, {0, 1, 5}, {"Off", "Ambient occlusion", "Ray tracing"});
         if (g_ray_tracing && !gpu::g_ray_tracing_ready.load(std::memory_order_relaxed)) {
             ImGui::SameLine();
             ImGui::TextDisabled("not on this graphics card");
@@ -417,18 +420,11 @@ void GraphicsTab(bool& save) {
         }
         if (!(g_ray_tracing & 4)) {
             ImGui::SameLine();
-            ImGui::TextDisabled("needs ray tracing's Lighting");
+            ImGui::TextDisabled("needs Ray tracing");
         }
     }
-    Row("Ray tracing quality", "How much ray tracing does each frame, for slower graphics cards (AMD's, Intel's, a handheld's). Low lights the room with fewer rays at a smaller size, reaches less far and reflects only the smoothest surfaces; High does all of it.");
-    {
-        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
-        save |= Choice<uint32_t>("##rtq", g_rt_quality, {0, 1, 2}, {"Low", "Medium", "High"});
-        if (!g_ray_tracing) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("ray tracing is off");
-        }
-    }
+    // (ray_tracing_quality, g_rt_quality, is castlevania.toml's alone: Ray tracing is the path traced lighting, 3; a
+    // handheld sets the key to 0, Low, by hand)
     Row("Anisotropic filtering", "Sharper textures at an angle.");
     save |= Choice<uint32_t>("##aniso", s.aniso, {0, 2, 4, 8, 16}, {"Off", "2x", "4x", "8x", "16x"});
     Row("Render scale", "Of the output height. Above 100% supersamples for a sharper, smoother picture.");
@@ -686,7 +682,7 @@ void Defaults() {
     g_ambient_occlusion = 0;
     g_ray_tracing = 0;
     g_rt_lighting = 100;
-    g_rt_quality = 2;
+    g_rt_quality = 3;
     app::ApplyDisplay();
 }
 
@@ -809,10 +805,12 @@ void MenuToRenderer() {
     gpu::g_antialias.store(std::min<uint32_t>(g_antialias, 2), std::memory_order_relaxed);
     gpu::g_upscale.store(std::min<uint32_t>(g_upscale, 3), std::memory_order_relaxed);
     gpu::g_aa_sharpness.store(std::min<uint32_t>(g_sharpening, 100), std::memory_order_relaxed);
-    gpu::g_ambient_occlusion.store(std::min<uint32_t>(g_ambient_occlusion, 2), std::memory_order_relaxed);
+    // (off in a save room whatever the setting: widescreen.cpp's g_save_room)
+    gpu::g_ambient_occlusion.store(g_save_room.load(std::memory_order_relaxed) ? 0u : std::min<uint32_t>(g_ambient_occlusion, 2),
+                                   std::memory_order_relaxed);
     gpu::g_ray_tracing.store(g_ray_tracing & (gpu::kRtAmbientOcclusion | gpu::kRtLighting), std::memory_order_relaxed);
     gpu::g_rt_lighting_strength.store(float(std::min<uint32_t>(g_rt_lighting, 200)) / 100.0f, std::memory_order_relaxed);
-    gpu::g_rt_quality.store(std::min<uint32_t>(g_rt_quality, 2), std::memory_order_relaxed);
+    gpu::g_rt_quality.store(std::min<uint32_t>(g_rt_quality, 3), std::memory_order_relaxed);
 }
 
 void MenuUi(double fps) {
