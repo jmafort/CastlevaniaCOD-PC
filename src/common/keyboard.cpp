@@ -79,6 +79,7 @@ namespace kernel {
 }
 
 extern std::atomic<bool> g_closing;  // below: the window is closing
+extern std::atomic<bool> g_wide_trace_frame;  // widescreen.cpp: log the next frame's draws
 std::string GameStateJson();         // telemetry.cpp
 std::string RoomListJson();          // telemetry.cpp
 void TelemetryFrame(const input::Pad& p);        // telemetry.cpp
@@ -461,7 +462,7 @@ void LiveWait() {
                 if (s.map >= 0) RequestWarp(s.map, s.room, s.entry);
                 if (s.heal) HealPlayer();
                 if (s.play_time >= 0) SetPlayTime(uint32_t(s.play_time));
-                if (s.capture) gpu::g_capture = true;
+                if (s.capture) gpu::g_capture = true, g_wide_trace_frame = true;  // as the F10 menu's capture
                 if (s.plug >= 0) input::VirtualPlug(s.plug == 1);
                 if (!s.click.empty()) MenuClick(s.click);
                 if (s.menu_scroll) MenuScrollEnd();

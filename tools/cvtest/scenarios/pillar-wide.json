@@ -1,0 +1,104 @@
+{
+  "name": "pillar-wide",
+  "after": "newgame.json",
+  "telemetry": 10,
+  "note": "Room 5.19's breakable pillar: the game draws it into a 640x480 target of its own and lays that picture over the frame lit green. Since 1.8.10 the 3D drawn into such a target was left at the console's 4:3 and its picture squeezed over the frame to match (enemies' after-images), so as the camera turned the pillar was cut at the 4:3 edge, past it only its light shaft. Now a target whose picture was laid over the whole frame takes its 3D at the screen's shape the frames after, and the picture is laid over as it is (telemetry wide.apart: such pictures laid over wide, and squeezed: the first frame only).",
+  "settings": {
+    "width": 1920,
+    "height": 1080
+  },
+  "steps": [
+    {
+      "press": "0:warp=5.19,10f:wait:20f",
+      "note": "room 5.19: a pillar right of the skull candles past the entry, broken for a ramp to come down"
+    },
+    {
+      "until": "map == 5 and room == 19 and player.active and not loading and not cutscene",
+      "timeout": 40,
+      "poll_by": [
+        [
+          "cutscene",
+          "0:start,45f:wait"
+        ],
+        [
+          "menu",
+          "0:b,30f:wait"
+        ]
+      ]
+    },
+    {
+      "press": "0f:wait:120f",
+      "shot": "in"
+    },
+    {
+      "until": "wide.apart.wide > 0",
+      "timeout": 10,
+      "poll": "10f:wait",
+      "note": "the pillar is drawn into a target of its own and laid over the frame lit green: its 3D there at the screen's shape"
+    },
+    {
+      "press": "0f:rsl:3f,0f:wait:20f",
+      "shot": "l0",
+      "judge": false
+    },
+    {
+      "press": "0f:rsl:3f,0f:wait:20f",
+      "shot": "l1",
+      "judge": false
+    },
+    {
+      "press": "0f:rsl:3f,0f:wait:20f",
+      "shot": "l2",
+      "judge": false
+    },
+    {
+      "press": "0f:rsl:3f,0f:wait:20f",
+      "shot": "l3",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r0",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r1",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r2",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r3",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r4",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r5",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r6",
+      "judge": false
+    },
+    {
+      "press": "0f:rsr:2f,0f:wait:20f",
+      "shot": "r7",
+      "judge": false,
+      "expect": [
+        "wide.apart.squeezed == 0"
+      ],
+      "note": "turned until the pillar stands at the 4:3 edge (r6, r7): drawn past it, not cut there"
+    }
+  ]
+}

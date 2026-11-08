@@ -138,6 +138,8 @@ uint64_t g_frame = 0;
 uint32_t g_sky_fogged = 0, g_sky_held = 0;
 uint32_t g_sky_cards = 0;  // and the doors' arrows held back, parked past the far plane (kSkyCards)
 uint32_t g_sky_arrows = 0;  // the doors' arrows drawn (kSkyCards)
+// pictures of the 3D drawn apart laid over the whole frame in the frame before: at the screen's shape, squeezed
+uint32_t g_apart_wide = 0, g_apart_squeezed = 0;
 
 // a widescreen draw's width as a part of its own: the console's 4:3 over the frame's 16:9 (3/4) or 16:10 (5/6)
 float Squeeze() { return (4.0f / 3.0f) / app::WideAspect(); }
@@ -398,8 +400,10 @@ public:
                 g_sky_held = sky_held_;
                 g_sky_cards = sky_cards_;
                 g_sky_arrows = sky_arrows_;
+                g_apart_wide = apart_wide_;
+                g_apart_squeezed = apart_squeezed_;
             }
-            sky_fogged_ = sky_held_ = sky_cards_ = sky_arrows_ = 0;
+            sky_fogged_ = sky_held_ = sky_cards_ = sky_arrows_ = apart_wide_ = apart_squeezed_ = 0;
             if (TexturePackCensus() && frame_ % 300 == 0) TexturePackCensusFlush();
             pack_epoch_ = TexturePackEpoch();
             MoviesFrame(frame_);
@@ -552,15 +556,34 @@ public:
         // knight (Julian: "it spawns 4:3, then 16:9 a moment later"). CV_WIDE_AFTERIMAGE=0: laid over whole, as before
         static const bool afterimages =
             !(std::getenv("CV_WIDE_AFTERIMAGE") && std::atoi(std::getenv("CV_WIDE_AFTERIMAGE")) == 0);
-        if (d_.world && !back_buffer_ && rt && rt->gw == guest_w_ && rt->gh == guest_h_ && !rt->depth)
-            offscreen3d_[rt->data] = frame_;
+        const bool offscreen3d = d_.world && !back_buffer_ && rt && rt->gw == guest_w_ && rt->gh == guest_h_ && !rt->depth;
+        if (offscreen3d) offscreen3d_[rt->data] = frame_;
+        // such a target whose picture was laid over the whole frame lately takes its 3D squeezed as the frame's own,
+        // at the screen's shape, and its picture is then laid over the whole frame as it is: what lies past the
+        // console's 4:3 is in it too (5.19's breakable pillar, drawn there and laid over the frame lit green, stopped
+        // at the 4:3 edge as the camera turned; an enemy's after-images were cut there). The first frame a target is
+        // laid over, its 3D is as the game drew it and its picture squeezed, as above
+        if (offscreen3d && afterimages && d_.squeeze && app::Widescreen()) {
+            auto laid = laid_whole_.find(rt->data);
+            if (laid != laid_whole_.end() && frame_ - laid->second <= kLaidHold) {
+                squeeze = true;
+                wide3d_[rt->data] = frame_;
+            }
+        }
         auto drawn3d = d_.target && d_.src_data ? offscreen3d_.find(d_.src_data) : offscreen3d_.end();
         bool afterimage = afterimages && drawn3d != offscreen3d_.end() && frame_ - drawn3d->second <= 2;
+        auto wide3d = afterimage ? wide3d_.find(d_.src_data) : wide3d_.end();
+        bool wide_picture = wide3d != wide3d_.end() && wide3d->second == drawn3d->second;
+        if (afterimage && d_.whole && back_buffer_) {
+            laid_whole_[d_.src_data] = frame_;
+            (wide_picture ? apart_wide_ : apart_squeezed_)++;
+        }
         if (d_.whole && (flat || (d_.target && !afterimage))) squeeze = false;
+        if (wide_picture && back_buffer_) squeeze = false;
         static int afterimages_said = 0;
         if (afterimage && d_.whole && afterimages_said < 4 && ++afterimages_said)
-            LOGR("wide: a picture of the 3D drawn apart (%08x) laid over the frame, squeezed as the frame's 3D",
-                 d_.src_data);
+            LOGR("wide: a picture of the 3D drawn apart (%08x) laid over the frame, %s", d_.src_data,
+                 wide_picture ? "its 3D at the screen's shape" : "squeezed as the frame's 3D");
         // a backdrop's edge pieces reach the screen's edges on a screen of their own: not over the 3D world or a
         // 4:3 picture drawn before them in the frame. In the pause menu the world is not drawn, and the 3D there is
         // the menu's own (an Innocent Devil's model on its page, 1600 vertices before the backdrop)
@@ -740,6 +763,10 @@ public:
     int odd_traces_ = 0;
     // the targets the console frame's size, not the frame, that the 3D was drawn into, by address, and the frame
     std::unordered_map<uint32_t, uint64_t> offscreen3d_;
+    // of those, the ones whose picture was laid over the whole frame, by the frame it last was (their 3D squeezed for
+    // kLaidHold frames after), and the frame their 3D was last drawn squeezed
+    static constexpr uint64_t kLaidHold = 60;
+    std::unordered_map<uint32_t, uint64_t> laid_whole_, wide3d_;
     void Odd(const gpu::Target* rt, float sx) {
         int kind = d_.world && !back_buffer_                                     ? 1
                    : back_buffer_ && !d_.world && d_.program && d_.count > 32    ? 2
@@ -1553,6 +1580,7 @@ private:
     uint32_t sky_fogged_ = 0, sky_held_ = 0;  // this frame's sky draws, Backdrop's
     uint32_t sky_cards_ = 0;                  // and the doors' arrows held back, SkyCard's
     uint32_t sky_arrows_ = 0;                 // and the ones drawn
+    uint32_t apart_wide_ = 0, apart_squeezed_ = 0;  // g_apart_wide's, g_apart_squeezed's
     uint32_t pack_epoch_ = 0;                 // TexturePackEpoch's at the frame's first draw
     // backdrops (Backdrop): the room's own fog coefficients and far plane, the fog drawn, the backdrops' textures
     bool backdrop_ = false;
@@ -1576,7 +1604,8 @@ private:
 
 // "wide" for telemetry.cpp: {"marker": {"x": [lo, hi], "move": m, "ago": frames since drawn}, "hud": {...}}, each
 // once drawn, and "sky": the frame before's draws of a sky given back the room's own fog, those held back, the doors'
-// arrows held back (parked past the far plane) and the doors' arrows drawn
+// arrows held back (parked past the far plane) and the doors' arrows drawn; "apart": the frame before's pictures of
+// the 3D drawn apart laid over the whole frame, at the screen's shape and squeezed
 std::string WideJson() {
     std::lock_guard lock(g_seen_m);
     std::string out;
@@ -1589,9 +1618,12 @@ std::string WideJson() {
         out += b;
     }
     if (g_frame) {
-        char b[128];
-        std::snprintf(b, sizeof(b), "%s\"sky\":{\"fogged\":%u,\"held\":%u,\"cards\":%u,\"arrows\":%u}",
-                      out.empty() ? "" : ",", g_sky_fogged, g_sky_held, g_sky_cards, g_sky_arrows);
+        char b[192];
+        std::snprintf(b, sizeof(b),
+                      "%s\"sky\":{\"fogged\":%u,\"held\":%u,\"cards\":%u,\"arrows\":%u},"
+                      "\"apart\":{\"wide\":%u,\"squeezed\":%u}",
+                      out.empty() ? "" : ",", g_sky_fogged, g_sky_held, g_sky_cards, g_sky_arrows, g_apart_wide,
+                      g_apart_squeezed);
         out += b;
     }
     return out.empty() ? out : "{" + out + "}";

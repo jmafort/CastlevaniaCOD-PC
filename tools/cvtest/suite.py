@@ -216,6 +216,8 @@ def tests():
         scenario("speed-door"),
         # 1.9.2: the doors' arrows drawn with the draw distance and fog pushed out (1.8.4 to 1.9.1 hid them)
         scenario("door-arrows"),
+        # 1.9.2: 5.19's breakable pillar, drawn apart and laid over the frame, drawn past the 4:3 edge
+        scenario("pillar-wide"),
         # 1.9.1: Back + Start (Select + Start) held a second, the setting on: the game started again at its title
         scenario("title-combo"),
         # 1.9.2: the play time by the PC's clock (any speed, any frame rate), up to 999:59:59, its hours drawn whole
