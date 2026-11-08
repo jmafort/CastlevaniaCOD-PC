@@ -57,6 +57,8 @@ On top of Pazzi7054's port:
 - **The European release too** - with everything below, at 60 FPS, in its five languages (English, French, German,
   Spanish, Italian, set on the launcher's Game page). It has an executable of its own, `CastlevaniaEU.exe`, which
   `Castlevania.exe` starts by itself for a European copy: a player just puts their disc image in `assets`.
+- **Fan translations** - a translation pack in a `mods` folder, chosen in the launcher: Brazilian Portuguese, with
+  its dub, from the PS2's fan translation. See [Translations](#translations).
 - **Hector's shadow** - drawn by the Xbox with 4X multisampling, it is back under his feet.
 - **Widescreen menus** - the pause menu, the map, the save screens and the panels behind messages fill a 16:9
   screen, and an area's name card keeps its left end.
@@ -264,6 +266,36 @@ To add it:
 On Windows they are decoded by Windows' own Media Foundation, on the graphics card where it can; the N editions of
 Windows lack it until Microsoft's Media Feature Pack is installed. On Linux FFmpeg decodes them, from the release's
 `lib`.
+
+## Translations
+
+Optional. The game has English and Japanese (the European release French, German, Spanish and Italian too); fans have
+translated it into other languages. A translation pack goes in a `mods` folder beside the game, one folder each, and
+is chosen on the launcher's Game page (**Translation**) or in the settings menu (F10, Game). It applies from the
+game's next start. These are their makers' work, made from the game: they are not part of this project, and are
+linked here with thanks.
+
+| Translation | Made by | Notes |
+|---|---|---|
+| Português (Brasil): `PTBR-PS2` in [Neguchads' packs folder](https://drive.google.com/drive/folders/14RMjeEP5_lL7bLUTY70CBQKBv3nOjcJk) | HNNEWGAMES, STR Brasil, MATTH dubs and Os Aristocratas do Giz Vermelho, the PS2 game's translation and dub; Neguchads, who made them into the Xbox game's files for [his port](https://github.com/Neguchads/Castlevania-COD-Recomp) | On Google Drive. The texts, menus and pictures, and the dub of the movies and story scenes. The USA release only. |
+
+To add it:
+
+1. Download `PTBR-PS2` from that folder and extract it beside `Castlevania.exe` (on Linux beside `Castlevania`), so
+   there is a `mods\PTBR-PS2\ptbr_strings.bin` with a `files` folder beside it.
+2. On the launcher's Game page, set **Translation** to **Português (Brasil)**, then play.
+3. **Dubbed voices**, under it, is on: the movies and the story scenes speak Portuguese. Off keeps the game's own
+   English voices, with the texts in Portuguese.
+
+The game's own Options, Language, still picks its English or Japanese: Japanese shows the Japanese texts and voices,
+not the translation.
+
+The pack is the one Neguchads made for his port, read as it is: its `files` are read in place of the disc's files of
+the same name (its menus, its pictures, its voices), and `ptbr_strings.bin` gives each of the game's texts in place of
+the English one, by its number. Its `textures` folder, his port's HD pictures of the title screen, is left out: HD
+textures come from the texture packs above, which draw a translated picture as the pack has it. Nothing on your disc
+or in your saves changes, and with **Translation** off the game is as it was. The pack's files are the USA release's,
+so the European release plays without it.
 
 ## Features
 
@@ -935,6 +967,10 @@ Changes this game needed beyond the generated config:
   its format, size and what the pack made of it (a picture, none, or not looked for: the pack has P8 pictures only).
   `CV_TEXTURES=<folder>;<folder>` reads pictures from those folders instead of `textures`, a picture in an earlier
   one in place of one with the same name in a later one: pictures tried out beside a pack without changing it.
+- `CV_MODS=<folder>` looks for the translations in that folder instead of `mods` beside the game (the suite's
+  `translation`, `translation-nodub` and `translation-eu` play the Brazilian Portuguese pack from the folder
+  `out\test\suite.json` names as `translation`). The game logs the pack's files as each is first read in place of
+  the disc's, and where its texts went.
 - `tools\texpack\upscale.py make` makes a picture for each texture `CV_TEXPACK_MISSES` saved: upscaled 4x, the
   pack's scale, by an AI model (RealESRGAN_x4plus; Python with PyTorch, its docstring has the setup). Where the pack
   has the PS2's picture of a texture the Xbox changed in part, as for the save screens' HARD DISK and the HUD's
@@ -1059,7 +1095,10 @@ Each release has the licences of everything else in it in `THIRD_PARTY.txt`, and
   fork of.
 - [Xbox XBE Recomp](https://github.com/TGP482/XboxXBE-Recomp) by TGP482, the recompiler and runtime this is built on.
 - [Castlevania-COD-Recomp](https://github.com/Neguchads/Castlevania-COD-Recomp) by Neguchads, for its findings in the
-  game: Hector's shadow on the 4X multisample grid, and the addresses of the camera, maps, rooms and enemies.
+  game: Hector's shadow on the 4X multisample grid, and the addresses of the camera, maps, rooms and enemies; and for
+  the Brazilian Portuguese pack and its layout, which [Translations](#translations) reads, and the game's text lookup.
+- HNNEWGAMES, STR Brasil, MATTH dubs and Os Aristocratas do Giz Vermelho for the PS2 game's Brazilian Portuguese
+  translation and dub.
 - Calm-Consideration41 (PlatinumMimic) for the field of view, draw distance and fog settings, the HUD at the screen's
   corners, the PS2 stick response, the inverted camera and the rumble; and for the HD movies and their pack, the
   material maps and surface depth and the textures v4, HDR, AMD FSR and NVIDIA DLSS anti-aliasing, upscaling and frame

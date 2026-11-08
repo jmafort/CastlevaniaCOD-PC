@@ -16,6 +16,7 @@ and the game on a virtual X display of their own), with each disc linked into it
   - every page in every language: each opens (--page) with its controls, a picture of each for the report
   - settings: the display mode, widescreen, render scale, filtering, the FPS counter and the button layout clicked
     and saved as the game reads them; Reset to defaults puts them back, the language and the release kept
+  - a fan translation in mods (a catalog of no texts, as PTBR-PS2): listed on the Game page, chosen, its dub off
   - the HD texture pack's row: none in the textures folder, then three pictures found and in use, switched off
   - the Game files page: each copy's verdict (the USA release's patched xiso, the European one, another release's
     with --other, a file that is no Xbox disc)
@@ -444,6 +445,26 @@ def main():
     la.close()
     set_settings(pkg, display_mode="windowed", width=960, height=540, release="")
     results.append(result("settings clicked are saved as the game reads them; Reset to defaults keeps the language and release",
+                          errors))
+
+    # a fan translation in mods: listed, chosen, its dub switched off (src/common/translation_packs.h)
+    errors = []
+    pack = pkg / "mods" / "PTBR-PS2"
+    pack.mkdir(parents=True, exist_ok=True)
+    (pack / "ptbr_strings.bin").write_bytes(b"CODPTBR1" + bytes(4))  # a catalog of no texts
+    la = Launcher(pkg, env, out, ["--page", "game"])
+    # its list opened (a closed list's choices are no controls yet), then the pack chosen
+    if not la.click_until("translation", lambda: la.control("translation.1", timeout=1)):
+        errors.append("the Translation list did not open with the pack in it")
+    elif not la.set_by_click("translation.1", lambda: settings(pkg).get("translation") == "PTBR-PS2"):
+        errors.append(f"translation.1: translation is {settings(pkg).get('translation')!r}, not 'PTBR-PS2'")
+    elif not la.set_by_click("dub", lambda: settings(pkg).get("translation_dub") is False):
+        errors.append(f"dub: translation_dub is {settings(pkg).get('translation_dub')!r}, not False")
+    la.shot("translation")
+    la.close()
+    shutil.rmtree(pkg / "mods", ignore_errors=True)
+    set_settings(pkg, translation="", translation_dub=True)
+    results.append(result("a translation in mods: listed on the Game page, chosen, its dub switched off (translation.png)",
                           errors))
 
     # the HD texture pack's row

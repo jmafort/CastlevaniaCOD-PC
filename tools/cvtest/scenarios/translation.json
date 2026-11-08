@@ -1,0 +1,22 @@
+{
+  "name": "translation",
+  "after": "newgame.json",
+  "needs": [
+    "env:CV_MODS"
+  ],
+  "settings": {"translation": "PTBR-PS2"},
+  "note": "A fan translation (src/common/translation.cpp): Neguchads' port's Brazilian Portuguese pack, mods\\PTBR-PS2 in the mods folder CV_MODS names, chosen in the settings. A new game played through: the title's menu, the name screen and the pause menu read from the pack's files in place of the disc's (titleue.dar, nameue.dar, statusue.dar), the opening movie's voices from its dub (movie_sound_E.cv2), and every text the game looks up by its ID drawn from its catalog (ptbr_strings.bin) while the string table is the English one. The pause menu's words asked of the judge.",
+  "steps": [
+    {"press": "0:start,1500:wait", "shot": "pause",
+     "ask": {"question": "Are the words of this pause menu's labels English (Player, Item, Equip, Options, Gold, Time) or Portuguese (Jogador, Item, Equipar, Opções, Ouro, Tempo)? Abbreviations such as HP and EXP are the same in both.",
+             "choices": {"english": "English", "portuguese": "Portuguese"}},
+     "expect": ["menu", "screen.ask.answer == 'portuguese'",
+                "found(runlog, r'translation: PTBR-PS2, \\d+ files in place of the disc.s \\(voices its own, \\d+ of them\\), 2479 texts')",
+                "found(runlog, r'translation: 2479 texts placed at')",
+                "found(runlog, r'translation: the string table at 0x[0-9A-F]+, English: translated')",
+                "found(runlog, r'translation: data.titleue.dar from the pack')",
+                "found(runlog, r'translation: data.statusue.dar from the pack')",
+                "found(runlog, r'translation: movie.movie_sound_e.cv2 from the pack')"]},
+    {"press": "0:b,1500:wait", "expect": ["not menu", "player.active"]}
+  ]
+}

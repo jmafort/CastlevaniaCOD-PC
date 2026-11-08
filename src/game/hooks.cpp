@@ -35,6 +35,17 @@ void Scale(uint8_t* base, uint32_t va, float k) {
 
 }  // namespace
 
+// A text by its ID (sub_003681B0: the string table's address for it): a translation's in its place (translation.cpp)
+uint32_t TranslatedText(uint8_t* base, uint32_t id, uint32_t original);
+
+X86_EXTERN_FUNC(CV_ORIGINAL(CV_TEXT));
+X86_FUNC(CV_HOOK(CV_TEXT)) {
+    uint32_t id;
+    std::memcpy(&id, base + ctx.esp + 4, 4);
+    CV_ORIGINAL(CV_TEXT)(ctx, base);
+    ctx.eax = TranslatedText(base, id, ctx.eax);
+}
+
 // The camera's matrices, made again when the camera changed (a PS2 style libvu0 camera: sceVu0ViewScreenMatrix and
 // clip matrices). Widescreen draws more at the sides (widescreen.cpp), so the clip data objects are culled against
 // is made wider by the same 4:3 to 16:9 (or 16:10); the matrices the scene is drawn with are left alone.

@@ -1,0 +1,16 @@
+{
+  "name": "translation-eu",
+  "release": "eu",
+  "needs": [
+    "env:CV_MODS"
+  ],
+  "settings": {"translation": "PTBR-PS2"},
+  "note": "The Brazilian Portuguese pack chosen with the European release: its files and catalog are the USA release's, so the European one plays as it is (src/common/translation.cpp), to its title screen with none of the pack's files read.",
+  "steps": [
+    {"press": "0:wait:11000", "note": "the logos to the title"},
+    {"until": "frame >= 640", "timeout": 60, "shot": "title",
+     "expect": ["not player.active", "not screen.flat",
+                "found(runlog, r'translation: PTBR-PS2 is made for the USA release: the European one plays as it is')",
+                "not found(runlog, r'from the pack')", "not found(runlog, r'texts placed')"]}
+  ]
+}

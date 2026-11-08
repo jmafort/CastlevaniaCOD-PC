@@ -26,7 +26,8 @@ This PC's own paths are in out/test/suite.json (out/ is not in the repository):
            "env": {"CV_BUILD": "<the Linux build>", "VK_DRIVER_FILES": "<a Vulkan driver's manifest>"}},
    "movies": "<an HD movie pack's folder (movies.toml)>",
    "materials": "<an HD texture pack's textures folder with material maps (PlatinumMimic's v4)>",
-   "vendor": "<AMD's FSR DLLs and a streamline folder, as the launcher downloads them>"}
+   "vendor": "<AMD's FSR DLLs and a streamline folder, as the launcher downloads them>",
+   "translation": "<a mods folder with a fan translation in it: Neguchads' PTBR-PS2 pack>"}
 On Linux the discs' and folders' paths are the Windows ones, read through /mnt (or given apart as "linux_discs").
 """
 import hashlib
@@ -222,6 +223,11 @@ def tests():
         # traced, settings_version written); one this release saved left as it is
         scenario("settings-migrate", quick=True),
         scenario("settings-current"),
+        # 1.10.0: a fan translation from mods (Neguchads' Brazilian Portuguese pack): its files, texts and dub; its
+        # dub off; the European release left as it is
+        scenario("translation", needs=["translation"], env=folder_env("translation", "CV_MODS")),
+        scenario("translation-nodub", needs=["translation"], env=folder_env("translation", "CV_MODS")),
+        scenario("translation-eu", needs=["translation", "eu"], env=folder_env("translation", "CV_MODS")),
         # 1.9.1: Back + Start (Select + Start) held a second, the setting on: the game started again at its title
         scenario("title-combo"),
         # 1.9.2: the play time by the PC's clock (any speed, any frame rate), up to 999:59:59, its hours drawn whole
@@ -301,7 +307,7 @@ def lacks(test):
             return "no HD texture pack in textures"
         if need in ("usa", "eu", "other", "folder") and need not in d:
             return f"no {need} disc in {CONFIG}"
-        if need in ("movies", "materials", "vendor") and not folder(need):
+        if need in ("movies", "materials", "vendor", "translation") and not folder(need):
             return f"no {need} folder in {CONFIG}"
         if need == "rtx" and not any("GeForce RTX" in g for g in gpus()):
             return "no GeForce RTX for NVIDIA DLSS"
@@ -434,6 +440,9 @@ def check():
 
 
 def main():
+    # a test's why may hold what the console's code page has no letter for (a judge's words): written as "?" then
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(errors="replace")
     args = sys.argv[1:]
     if "--check" in args:
         return check()

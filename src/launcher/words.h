@@ -759,6 +759,55 @@ inline constexpr Row kRows[] = {
       "La langue des textes de la version européenne, dès son prochain lancement. La version américaine n'a que "
       "l'anglais.",
       "Die Sprache der Texte der europäischen Version, ab dem nächsten Start. Die US-Version hat nur Englisch."}},
+    {{"Translation",
+      "Tradução",
+      "Traducción",
+      "Traduzione",
+      "Перевод",
+      "Traduction",
+      "Übersetzung"}},
+    {{"A fan translation from the mods folder beside the game, for the USA release, from its next start. The README "
+      "says where to get one.",
+      "Uma tradução feita por fãs, da pasta mods ao lado do jogo, para a versão americana, a partir da próxima vez que "
+      "o jogo iniciar. O README diz onde conseguir uma.",
+      "Una traducción hecha por fans, de la carpeta mods junto al juego, para la versión estadounidense, desde su "
+      "próximo inicio. El README dice dónde conseguir una.",
+      "Una traduzione dei fan, dalla cartella mods accanto al gioco, per la versione USA, dal prossimo avvio. Il README "
+      "dice dove trovarne una.",
+      "Фанатский перевод из папки mods рядом с игрой, для американской версии, со следующего запуска. Где его взять, "
+      "написано в README.",
+      "Une traduction de fans, du dossier mods à côté du jeu, pour la version américaine, dès son prochain lancement. "
+      "Le README indique où en trouver une.",
+      "Eine Fanübersetzung aus dem Ordner mods neben dem Spiel, für die US-Version, ab dem nächsten Start. Wo es eine "
+      "gibt, steht in der README."}},
+    {{"{} (not in the mods folder)",
+      "{} (fora da pasta mods)",
+      "{} (no está en la carpeta mods)",
+      "{} (non è nella cartella mods)",
+      "{} (нет в папке mods)",
+      "{} (absent du dossier mods)",
+      "{} (nicht im Ordner mods)"}},
+    {{"Dubbed voices",
+      "Vozes dubladas",
+      "Voces dobladas",
+      "Voci doppiate",
+      "Дубляж",
+      "Voix doublées",
+      "Synchronisation"}},
+    {{"The translation's voices in the movies and story scenes. Off keeps the game's own voices, with the translated "
+      "text.",
+      "As vozes da tradução nos filmes e nas cenas da história. Desligado mantém as vozes do próprio jogo, com o texto "
+      "traduzido.",
+      "Las voces de la traducción en los vídeos y las escenas de la historia. Desactivado mantiene las voces del propio "
+      "juego, con el texto traducido.",
+      "Le voci della traduzione nei filmati e nelle scene della storia. Disattivato tiene le voci del gioco, con il "
+      "testo tradotto.",
+      "Голоса перевода в роликах и сюжетных сценах. Если выключено, остаются собственные голоса игры, а текст "
+      "переведён.",
+      "Les voix de la traduction dans les films et les scènes de l'histoire. Désactivé garde les voix du jeu, avec le "
+      "texte traduit.",
+      "Die Stimmen der Übersetzung in den Filmen und Story-Szenen. Aus behält die Stimmen des Spiels, mit dem "
+      "übersetzten Text."}},
     {{"FPS counter",
       "Contador de FPS",
       "Contador de FPS",

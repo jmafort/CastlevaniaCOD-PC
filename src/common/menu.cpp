@@ -23,6 +23,7 @@
 
 #include "app/app.h"
 #include "common/marks.h"
+#include "common/translation_packs.h"
 #include "core/log.h"
 #include "core/input.h"
 #include "gpu/backend.h"
@@ -61,6 +62,8 @@ uint32_t g_rt_lighting = 100;
 // as a path tracer's: two bounces at the frame's full size, the game's own light kept only an artists' share)
 uint32_t g_rt_quality = 3;
 extern bool g_menu_spread;       // widescreen.cpp: the pause menu's columns toward the screen's sides
+extern std::string g_translation;  // translation.cpp: a fan translation's folder in mods, empty none
+extern bool g_translation_dub;     // translation.cpp: its voices too
 extern bool g_hd_movies;         // movies.cpp: a movie pack's HD movies drawn
 extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture whole as large as it goes, 2 filled
 extern uint32_t g_button_layout;    // texpack.cpp
@@ -555,6 +558,28 @@ void GameTab(bool& save) {
     Row("Pause on focus loss", "Stops the game while another window is in front.");
     save |= Check("##pause", &g_pause_on_focus_loss);
     ImGui::EndTable();
+    // a fan translation in mods (translation.cpp), the folders there looked at when the menu first draws this
+    if (Section("Translation", "translation")) {
+        static const std::vector<cv::TranslationPack> packs = cv::TranslationPacks(cv::ModsFolder(app::ExeDir()));
+        std::vector<std::string> values{""}, names{"Off"};
+        bool listed = g_translation.empty();
+        for (const cv::TranslationPack& p : packs) {
+            values.push_back(p.folder);
+            names.push_back(p.english);
+            listed |= p.folder == g_translation;
+        }
+        if (!listed) {
+            values.push_back(g_translation);
+            names.push_back(g_translation + " (not in the mods folder)");
+        }
+        Row("Translation", "A fan translation from the mods folder beside the game, for the USA release, from the "
+                           "game's next start. The README says where to get one.");
+        save |= Choice<std::string>("##translation", g_translation, values, names);
+        Row("Dubbed voices", "The translation's voices in the movies and story scenes, from the next start. Off keeps "
+                             "the game's own voices, with the translated text.");
+        save |= Check("##dub", &g_translation_dub);
+        ImGui::EndTable();
+    }
     if (!Section("Bonus", "bonus")) return;
     Row("Lament of Innocence save", "As the PS2 game with a Lament of Innocence save on the memory card: a Moai "
                                     "at the far end of the room behind the first courtyard, beside the potion.");
@@ -683,6 +708,7 @@ void Defaults() {
     g_ray_tracing = 0;
     g_rt_lighting = 100;
     g_rt_quality = 3;
+    g_translation_dub = true;  // the translation itself kept, a language as the game's
     app::ApplyDisplay();
 }
 

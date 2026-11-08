@@ -5,7 +5,7 @@
   "note": "The in-game settings menu (src/common/menu.cpp), opened as from a controller (both sticks clicked) and clicked where it says its controls are: a switch, a drop-down opened and a choice taken, each saved at once with the keys the game does not know kept (the launcher's language), Reset to defaults, Close; and the FPS counter it shows in the corner.",
   "steps": [
     {"press": "0f:l3+r3:5f,10f:wait:20f", "shot": "open", "expect": ["settings_menu", "'tab.Display' in menu_controls"]},
-    {"click": "tab.Game", "press": "0f:wait:10f", "expect": ["'fpsc' in menu_controls"]},
+    {"click": "tab.Game", "press": "0f:wait:10f", "expect": ["'fpsc' in menu_controls", "'translation' in menu_controls", "'dub' in menu_controls"]},
     {"click": "fpsc", "press": "0f:wait:10f", "expect": ["saved.fps_counter == True"]},
     {"click": "tab.Graphics", "press": "0f:wait:10f", "expect": ["'aniso' in menu_controls"]},
     {"click": "aniso", "press": "0f:wait:10f", "shot": "list", "expect": ["'aniso.4x' in menu_controls"]},

@@ -1,0 +1,18 @@
+{
+  "name": "translation-nodub",
+  "after": "newgame.json",
+  "needs": [
+    "env:CV_MODS"
+  ],
+  "settings": {"translation": "PTBR-PS2", "translation_dub": false},
+  "note": "The Brazilian Portuguese pack (translation.json) with its dub off (translation_dub = false): its texts and pictures, the game's own voices. Through a new game: the pack's title and pause menu files read, none of its voices (the opening movie's movie_sound_E.cv2 the disc's), the texts translated.",
+  "steps": [
+    {"press": "0:start,1500:wait", "shot": "pause",
+     "expect": ["menu",
+                "found(runlog, r'translation: PTBR-PS2, \\d+ files in place of the disc.s \\(voices the game.s, \\d+ of them\\), 2479 texts')",
+                "found(runlog, r'translation: the string table at 0x[0-9A-F]+, English: translated')",
+                "found(runlog, r'translation: data.statusue.dar from the pack')",
+                "not found(runlog, r'translation: (movie|sound).* from the pack')"]},
+    {"press": "0:b,1500:wait", "expect": ["not menu", "player.active"]}
+  ]
+}

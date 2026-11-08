@@ -74,6 +74,7 @@ extern char** environ;
 #include "../common/crest.h"
 #include "../common/marks.h"
 #include "../common/settings_version.h"
+#include "../common/translation_packs.h"
 #include "words.h"
 
 #ifdef _WIN32
@@ -2038,6 +2039,8 @@ struct Settings {
     std::string gpu;                    // the graphics card by its name, empty the fastest (the SDK's)
     std::string release;                // the release played, by its executable's name, when there are more (the SDK's)
     bool update_check = true;           // the launcher's own: the port's newest release looked up on GitHub at its start
+    std::string translation;            // a fan translation's folder in mods, empty none (common/translation.cpp)
+    bool translation_dub = true;        // its voices with its texts
     uint32_t settings_version = 0;      // the file's, 0 none: saved by a release before 1.9.3 (settings_version.h)
     bool older = false;                 // the file there, saved by an older release: migrated, saved at the start (Launcher)
     toml::table rest;
@@ -2103,6 +2106,8 @@ struct Settings {
         gpu = rest["gpu"].value_or(gpu);
         release = rest["release"].value_or(release);
         update_check = rest["update_check"].value_or(update_check);
+        translation = rest["translation"].value_or(translation);
+        translation_dub = rest["translation_dub"].value_or(translation_dub);
         settings_version = rest["settings_version"].value_or(0u);
         older = found && settings_version < cv::kSettingsVersion;
         if (older) cv::MigrateSettings(settings_version, rt_quality);
@@ -2156,6 +2161,8 @@ struct Settings {
         rest.insert_or_assign("gpu", gpu);
         rest.insert_or_assign("release", release);
         rest.insert_or_assign("update_check", update_check);
+        rest.insert_or_assign("translation", translation);
+        rest.insert_or_assign("translation_dub", translation_dub);
         // a newer release's number kept, so going back to this one does not have it migrate the file again
         rest.insert_or_assign("settings_version", int64_t(std::max(settings_version, cv::kSettingsVersion)));
         std::ofstream f(File());
@@ -2171,6 +2178,7 @@ struct Settings {
         d.game_language = game_language;
         d.release = release;  // which game, not how it plays
         d.update_check = update_check;
+        d.translation = translation;  // a language, as the game's
         d.settings_version = settings_version;
         *this = std::move(d);
     }
@@ -3356,6 +3364,7 @@ public:
         if (settings_.older) settings_.Save();  // an older release's file migrated: kept so, whatever is chosen next
         saved_ = Snapshot();
         files_.Scan();
+        packs_ = cv::TranslationPacks(cv::ModsFolder(ExeDir()));
         g_activated = false;  // the window's first time in front, just looked at
         gpus_ = Gpus();
         auto_gpu_ = Automatic();
@@ -3386,6 +3395,7 @@ public:
         if (rescan_ && !import_.running) {
             rescan_ = false;
             files_.Scan();
+            packs_ = cv::TranslationPacks(cv::ModsFolder(ExeDir()));
             LoadArt();
             if (!import_.result.empty()) Note(import_.result);
         }
@@ -3448,6 +3458,7 @@ private:
                std::to_string(s.texture_pack_size) + std::to_string(s.texture_pack_materials) + "|" +
                std::to_string(s.button_layout) +
                std::to_string(s.lament_save) + "|" + s.gpu + "|" + s.language + "|" + std::to_string(s.game_language) +
+               "|" + s.translation + std::to_string(s.translation_dub) +
                "|" + std::to_string(s.ps2_stick) + std::to_string(s.invert_camera_x) + std::to_string(s.invert_camera_y) +
                "|" + std::to_string(s.sprint) + std::to_string(s.speed_up) + std::to_string(s.title_combo) + "|" +
                std::to_string(s.hud_edges) + "|" + std::to_string(s.fov) + "|" + std::to_string(s.draw_distance) + "|" +
@@ -4302,6 +4313,30 @@ private:
             Combo<uint32_t>("##gamelanguage", settings_.game_language, values, names);
         }
         EndSetting();
+        // a fan translation in mods, of the USA release's texts, pictures and voices (common/translation.cpp)
+        BeginSetting(T("Translation"), T("A fan translation from the mods folder beside the game, for the USA release, "
+                                         "from its next start. The README says where to get one."), true);
+        {
+            std::vector<std::string> values{""}, names{T("Off")};
+            bool listed = settings_.translation.empty();
+            for (const cv::TranslationPack& p : packs_) {
+                values.push_back(p.folder);
+                names.push_back(p.name);
+                listed |= p.folder == settings_.translation;
+            }
+            if (!listed) {  // chosen, then taken out of mods
+                values.push_back(settings_.translation);
+                names.push_back(F("{} (not in the mods folder)", {settings_.translation}));
+            }
+            Combo<std::string>("##translation", settings_.translation, values, names);
+        }
+        EndSetting();
+        if (!settings_.translation.empty()) {
+            BeginSetting(T("Dubbed voices"), T("The translation's voices in the movies and story scenes. Off keeps the "
+                                               "game's own voices, with the translated text."));
+            ToggleRight("dub", settings_.translation_dub);
+            EndSetting();
+        }
         BeginSetting(T("FPS counter"), T("Shows the frame rate in the corner."));
         ToggleRight("fps", settings_.fps_counter);
         EndSetting();
@@ -4621,6 +4656,7 @@ private:
     std::string status_, saved_, shown_language_;
     double status_time_ = -100;
     bool rescan_ = false;
+    std::vector<cv::TranslationPack> packs_;  // the fan translations in mods (common/translation_packs.h)
     int page_ = 0;
     int page_scrolled_ = 0;  // the page the page area's scroll belongs to
 };

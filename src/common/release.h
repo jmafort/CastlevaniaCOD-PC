@@ -39,6 +39,7 @@
 #define CV_SCREEN_DISTANCE CV_PICK(00012B30, 00012AC0)  // the camera's screen distance set (view.cpp)
 #define CV_FAR_Z CV_PICK(00012B90, 00012B20)            // its far plane set
 #define CV_PLAY_TIME CV_PICK(002F7250, 002F8A00)        // the play time's tick, each frame played (hooks.cpp)
+#define CV_TEXT CV_PICK(003681B0, 0036A1C0)             // a text by its ID from the string table (hooks.cpp, translation)
 #define CV_MENU_NUMBER CV_PICK(0030F960, 00311170)      // a number drawn in the pause menu (hooks.cpp, the hours)
 #define CV_SAVE_NUMBER CV_PICK(0033E670, 00340200)      // a number drawn in a save slot (hooks.cpp, the hours)
 #define CV_FOG CV_PICK(00012A90, 00012A20)              // the fog set
@@ -48,6 +49,8 @@ namespace cv {
 inline constexpr bool kEurope = CV_PICK(false, true);
 
 // the camera's clip matrices (hooks.cpp)
+// the string table loaded, strdata<language>.dar's: its texts' addresses from +0x10, by ID (translation.cpp)
+inline constexpr uint32_t kStringTable = CV_PICK(0x00C7B710, 0x00C83080);
 inline constexpr uint32_t kClipScreenX = CV_PICK(0x012FC500, 0x01303E80);  // clip screen matrix, x scale
 inline constexpr uint32_t kViewClipX = CV_PICK(0x012FC5C0, 0x01303F40);    // view clip matrix, x scale
 inline constexpr uint32_t kViewClipXv = CV_PICK(0x012FC640, 0x01303FC0);   // its x scale as a vector

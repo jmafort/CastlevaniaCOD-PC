@@ -16791,10 +16791,23 @@ index 6ee0fa3..e128ff1 100644
  constexpr uint32_t kVolume = 32 * kSector;
  constexpr char kMagic[] = "MICROSOFT*XBOX*MEDIA";
 diff --git a/runtime/kernel/files.cpp b/runtime/kernel/files.cpp
-index 5644ea7..55bfdf1 100644
+index 5644ea7..6a5dd70 100644
 --- a/runtime/kernel/files.cpp
 +++ b/runtime/kernel/files.cpp
-@@ -299,6 +299,7 @@ uint32_t OpenOnDisc(const Disc::Entry* e, const std::string& name, uint32_t hand
+@@ -271,6 +271,12 @@ Target Resolve(const std::string& xbox_path, uint32_t root_handle) {
+     // no Xbox name holds ':', and fs::path would take "D:" as a host drive
+     for (auto& part : parts)
+         if (part.find(':') != std::string::npos) return {};
++    if (best->first == kCdRom && g_disc_file && !parts.empty()) {
++        std::string disc_path;
++        for (const std::string& part : parts) disc_path += (disc_path.empty() ? "" : "\\") + part;
++        std::string host = g_disc_file(disc_path);
++        if (!host.empty()) return {host};
++    }
+     if (best->first == kCdRom)
+         if (const Disc* disc = MountedDisc()) return {{}, true, disc->Find(parts)};
+     return {MatchCase(best->second, parts).string()};
+@@ -299,6 +305,7 @@ uint32_t OpenOnDisc(const Disc::Entry* e, const std::string& name, uint32_t hand
      W32(handle_out, NewHandle(f));
      IoStatus(iosb, kSuccess, 1);
      LOG_FIRST(400, "open %s", name.c_str());
@@ -16802,7 +16815,7 @@ index 5644ea7..55bfdf1 100644
      return kSuccess;
  }
  
-@@ -421,6 +422,7 @@ KERNEL_EXPORT(190, NtCreateFile, 9) {
+@@ -421,6 +428,7 @@ KERNEL_EXPORT(190, NtCreateFile, 9) {
      W32(handle_out, NewHandle(f));
      IoStatus(iosb, kSuccess, info);
      LOG_FIRST(400, "open %s", name.c_str());
@@ -16810,7 +16823,7 @@ index 5644ea7..55bfdf1 100644
      return kSuccess;
  }
  
-@@ -484,6 +486,7 @@ static uint32_t Transfer(const Args& a, bool write, uint32_t pages) {
+@@ -484,6 +492,7 @@ static uint32_t Transfer(const Args& a, bool write, uint32_t pages) {
          size_t done = f->entry ? MountedDisc()->Read(*f->entry, pos + n, HostPtr(at), chunk)
                        : write  ? std::fwrite(HostPtr(at), 1, chunk, f->fp)
                                 : std::fread(HostPtr(at), 1, chunk, f->fp);
@@ -16819,10 +16832,10 @@ index 5644ea7..55bfdf1 100644
          if (done < chunk) break;
      }
 diff --git a/runtime/kernel/kernel.h b/runtime/kernel/kernel.h
-index 163ea09..6c33632 100644
+index 163ea09..428f093 100644
 --- a/runtime/kernel/kernel.h
 +++ b/runtime/kernel/kernel.h
-@@ -188,6 +188,11 @@ bool DeleteSymbolicLink(const std::string& link);
+@@ -188,6 +188,15 @@ bool DeleteSymbolicLink(const std::string& link);
  std::string QuerySymbolicLink(const std::string& link);
  std::string ResolvePath(const std::string& xbox_path, uint32_t root_handle);  // host path or empty
  bool ReadGameFile(const std::string& xbox_path, std::vector<uint8_t>& out);  // from a host folder or the disc image
@@ -16831,6 +16844,10 @@ index 163ea09..6c33632 100644
 +// a game's hook: each read's bytes as they arrive in the title's buffer, by the file's Xbox path and their offset in
 +// it, to change what a file says (Castlevania's own messages that named the Xbox); NtReadFile's thread
 +inline std::function<void(const std::string& path, uint64_t offset, uint8_t* data, size_t size)> g_file_read;
++// a game's hook: a host file opened in place of one of the game disc's (D:), by its path on the disc as the title
++// names it ("data\title.dar"), empty for the disc's own: a mod's or a translation's files. Asked at each open of a
++// path on D:, the disc image's or the game folder's alike; it must not open files itself
++inline std::function<std::string(const std::string& disc_path)> g_disc_file;
  
  // boot
  bool Boot(std::vector<uint8_t> xbe, const std::string& xbe_name, const std::string& game_dir, const std::string& data_dir);

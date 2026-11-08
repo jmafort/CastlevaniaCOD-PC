@@ -43,6 +43,8 @@ extern uint32_t g_ambient_occlusion;          // menu.cpp, read by the SDK's ren
 extern uint32_t g_ray_tracing;                // menu.cpp, read by the SDK's renderer (gpu::g_ray_tracing)
 extern uint32_t g_rt_lighting;                // menu.cpp, read by the SDK's renderer (gpu::g_rt_lighting_strength)
 extern uint32_t g_rt_quality;                 // menu.cpp, read by the SDK's renderer (gpu::g_rt_quality)
+extern std::string g_translation;             // translation.cpp: the translation's folder in mods, empty none
+extern bool g_translation_dub;                // translation.cpp: its voices too
 void GameInit();                              // setup.cpp
 bool GameIcon(const std::vector<uint8_t>& xbe, std::vector<uint8_t>& bgra, int& size);  // icon.cpp
 extern const app::GameInfo::Release kReleases[];  // each release's xbe and executable, written by CMake
@@ -62,7 +64,9 @@ uint32_t Language() { return cv::kEurope ? g_game_language : 1; }
 uint32_t g_settings_version = 0;
 
 void SettingsLoad(const void* table) {
-    g_settings_version = (*static_cast<const toml::table*>(table))["settings_version"].value_or(0u);
+    const toml::table& t = *static_cast<const toml::table*>(table);
+    g_translation = t["translation"].value_or(std::string());
+    g_settings_version = t["settings_version"].value_or(0u);
     if (g_settings_version >= cv::kSettingsVersion) return;
     uint32_t quality = g_rt_quality;
     cv::MigrateSettings(g_settings_version, g_rt_quality);
@@ -75,6 +79,7 @@ void SettingsLoad(const void* table) {
 void SettingsSave(void* table) {
     static_cast<toml::table*>(table)->insert_or_assign(
         "settings_version", int64_t(std::max(g_settings_version, cv::kSettingsVersion)));
+    static_cast<toml::table*>(table)->insert_or_assign("translation", g_translation);
 }
 
 }  // namespace
@@ -120,7 +125,8 @@ const app::GameInfo app::kGame = {
                 {"ambient_occlusion", nullptr, &g_ambient_occlusion},
                 {"ray_tracing", nullptr, &g_ray_tracing},
                 {"ray_tracing_lighting", nullptr, &g_rt_lighting},
-                {"ray_tracing_quality", nullptr, &g_rt_quality}},
+                {"ray_tracing_quality", nullptr, &g_rt_quality},
+                {"translation_dub", &g_translation_dub, nullptr}},
     .load = SettingsLoad,                 // reads more from the settings file's toml::table: its version, migrated
     .save = SettingsSave,                 // writes more into it: the version
     .init = GameInit,                     // after the settings load, before the window and boot: game files, game code, renderer extension
