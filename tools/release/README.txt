@@ -62,6 +62,19 @@ HD TEXTURE PACKS (optional)
     PlatinumMimic (Calm-Consideration41), 4K Texture Packs:
       https://buymeacoffee.com/platinummin/castlevania-ps2-4k-texture-packs
 
+FAN TRANSLATIONS (optional)
+  A fan translation pack goes in a mods folder beside Castlevania.exe, one folder each. Choose it
+  on the launcher's Game page (Translation) or in the settings (F10, Game); it applies from the
+  game's next start. Packs, their makers' own work (not included here):
+    Brazilian Portuguese: the PS2 game's fan translation and dub by HNNEWGAMES, STR Brasil, MATTH
+    dubs and Os Aristocratas do Giz Vermelho, made into the Xbox game's files by Neguchads. For the
+    USA release. Download Castlevania-COD-Recomp-PTBR-PS2.zip from
+      https://drive.google.com/drive/folders/14RMjeEP5_lL7bLUTY70CBQKBv3nOjcJk
+    and extract it into this folder: it makes mods\PTBR-PS2\ptbr_strings.bin
+    (if your unzip tool puts it in a folder named after the zip, move the mods folder out of
+    that one). Dubbed voices, under Translation, is on; off keeps the game's English voices
+    with the texts in Portuguese.
+
 Saves are in hdd\E\UDATA\4b4e002d. Logs, including logs\compile.log from the first start, are in logs.
 
 The compiler folder holds what builds the game code on your PC: the recompiler, and Clang and

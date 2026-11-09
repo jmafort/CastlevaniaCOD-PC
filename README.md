@@ -277,12 +277,14 @@ linked here with thanks.
 
 | Translation | Made by | Notes |
 |---|---|---|
-| Português (Brasil): `PTBR-PS2` in [Neguchads' packs folder](https://drive.google.com/drive/folders/14RMjeEP5_lL7bLUTY70CBQKBv3nOjcJk) | HNNEWGAMES, STR Brasil, MATTH dubs and Os Aristocratas do Giz Vermelho, the PS2 game's translation and dub; Neguchads, who made them into the Xbox game's files for [his port](https://github.com/Neguchads/Castlevania-COD-Recomp) | On Google Drive. The texts, menus and pictures, and the dub of the movies and story scenes. The USA release only. |
+| Português (Brasil): `Castlevania-COD-Recomp-PTBR-PS2.zip` in [Neguchads' packs folder](https://drive.google.com/drive/folders/14RMjeEP5_lL7bLUTY70CBQKBv3nOjcJk) | HNNEWGAMES, STR Brasil, MATTH dubs and Os Aristocratas do Giz Vermelho, the PS2 game's translation and dub; Neguchads, who made them into the Xbox game's files for [his port](https://github.com/Neguchads/Castlevania-COD-Recomp) | On Google Drive. The texts, menus and pictures, and the dub of the movies and story scenes. The USA release only. |
 
 To add it:
 
-1. Download `PTBR-PS2` from that folder and extract it beside `Castlevania.exe` (on Linux beside `Castlevania`), so
-   there is a `mods\PTBR-PS2\ptbr_strings.bin` with a `files` folder beside it.
+1. Download its zip, `Castlevania-COD-Recomp-PTBR-PS2.zip`, from that folder and extract it into the game's folder,
+   the one with `Castlevania.exe` (on Linux `Castlevania`): it makes `mods\PTBR-PS2`, with `ptbr_strings.bin` and a
+   `files` folder in it. If your unzip tool puts it in a folder named after the zip, move the `mods` folder out of
+   that one, next to `Castlevania.exe`.
 2. On the launcher's Game page, set **Translation** to **Português (Brasil)**, then play.
 3. **Dubbed voices**, under it, is on: the movies and the story scenes speak Portuguese. Off keeps the game's own
    English voices, with the texts in Portuguese.
