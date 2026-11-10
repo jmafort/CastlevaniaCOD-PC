@@ -93,6 +93,7 @@ def main():
         (game / rel).parent.mkdir(parents=True, exist_ok=True)
         (game / rel).write_bytes(data)
     before = sha256(game / LAUNCHER)
+    before_file = (game / LAUNCHER).stat()  # its file: a release whose launcher did not change has the same bytes
 
     code, fields = run(game, "--update-check", 180)
     newest = fields[2] if len(fields) > 2 else ""
@@ -111,7 +112,11 @@ def main():
     check(version == newest, f"version.txt says {version or 'nothing'}")
     previous = game / "update" / "previous" / LAUNCHER
     check(previous.exists() and sha256(previous) == before, "the launcher before kept in update/previous")
-    check((game / LAUNCHER).exists() and sha256(game / LAUNCHER) != before, "the launcher replaced")
+    # replaced: other bytes, or (the new release's launcher the same as this one's, as 1.10.1's on Linux) another file
+    now = (game / LAUNCHER).stat() if (game / LAUNCHER).exists() else None
+    same = now is not None and sha256(game / LAUNCHER) == before
+    check(now is not None and (not same or (now.st_ino, now.st_mtime_ns) != (before_file.st_ino, before_file.st_mtime_ns)),
+          "the launcher replaced" + (" (by the same bytes: this release's launcher did not change)" if same else ""))
     if LINUX:
         check(os.access(game / LAUNCHER, os.X_OK) and os.access(game / "Castlevania", os.X_OK),
               "the new programs can run")
