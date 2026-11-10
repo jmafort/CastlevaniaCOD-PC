@@ -12,6 +12,10 @@ library = "CastlevaniaEU.dll"  # <exe>.dll, which the executable delay loads
 
 # extra entry points
 [functions]
+# called in the Dullahan's fight (Infinite Corridor, room 9.14), a callback pushed at 0x220D61, the USA release's
+# sub_0021F610. A value in .data (0x528B58) that happens to point inside it, 0x22001F, is seeded first and its decode
+# takes the function's bytes, so the analysis never made it an entry and the call trapped: the game closed
+0x21FE40 = "dullahan_fight_callback"
 
 # functions the host replaces or calls by name, 0 where the image has none
 [symbols]

@@ -228,6 +228,10 @@ def tests():
         scenario("translation", needs=["translation"], env=folder_env("translation", "CV_MODS")),
         scenario("translation-nodub", needs=["translation"], env=folder_env("translation", "CV_MODS")),
         scenario("translation-eu", needs=["translation", "eu"], env=folder_env("translation", "CV_MODS")),
+        # 1.10.1: the Dullahan's fight (the Infinite Corridor's boss) in both releases: the European one closed at
+        # its sword's blue glow, a callback its recompiled code lacked
+        scenario("dullahan"),
+        scenario("dullahan", *eu, test="dullahan-eu"),
         # 1.9.1: Back + Start (Select + Start) held a second, the setting on: the game started again at its title
         scenario("title-combo"),
         # 1.9.2: the play time by the PC's clock (any speed, any frame rate), up to 999:59:59, its hours drawn whole

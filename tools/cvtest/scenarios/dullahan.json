@@ -1,0 +1,13 @@
+{
+  "name": "dullahan",
+  "after": "newgame.json",
+  "note": "The Dullahan, the Infinite Corridor's boss (room 9.14, its shelves of heads in jars): Hector, kept healed, stands in its fight two and a half minutes while it attacks him, its sword's blue glow among them. Through 1.10.0 the European release closed at that attack (the log's \"indirect call to 0021FE40 has no recompiled function\"): config/game_eu.toml names the callback its analysis missed.",
+  "steps": [
+    {"press": "0:warp=9.14,10f:wait:20f", "note": "into the Dullahan's room: its entrance plays"},
+    {"until": "map == 9 and room == 14 and player.active and not loading and not modal and not cutscene", "timeout": 90,
+     "poll": "0:heal,30f:wait", "poll_by": [["cutscene", "0:start,45f:wait"], ["menu", "0:b,30f:wait"]], "shot": "arena"},
+    {"until": "frame >= prev.frame + 9000", "poll": "0:heal,0f:wait:10f", "timeout": 240, "shot": "fought",
+     "note": "150 s of its attacks, Hector healed every 10 frames",
+     "expect": ["map == 9 and room == 14", "player.active", "found(runlog, r\"a boss's health bar up\")"]}
+  ]
+}
