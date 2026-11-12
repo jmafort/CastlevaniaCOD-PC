@@ -1640,7 +1640,7 @@ index 200d6b4..cdb1efa 100644
  inline const std::filesystem::path& CaptureDir() {
      static const std::filesystem::path dir = [] {
 diff --git a/runtime/core/input.cpp b/runtime/core/input.cpp
-index bb7f3a9..0f9561a 100644
+index bb7f3a9..ba98ca1 100644
 --- a/runtime/core/input.cpp
 +++ b/runtime/core/input.cpp
 @@ -2,6 +2,8 @@
@@ -1652,7 +1652,7 @@ index bb7f3a9..0f9561a 100644
  #include <iterator>
  #include <mutex>
  #include <utility>
-@@ -20,14 +22,92 @@ std::mutex g_lock;
+@@ -20,14 +22,112 @@ std::mutex g_lock;
  bool g_sdl = false;
  SDL_Gamepad* g_pads[4] = {};
  
@@ -1689,15 +1689,24 @@ index bb7f3a9..0f9561a 100644
 +// tests: a virtual controller (XBE_VIRTUAL_PAD=1), attached at the start and read through SDL as a real one is; its
 +// buttons and sticks set by VirtualSet, the motors the game drives kept for VirtualState. Its joystick's buttons and
 +// axes are SDL's gamepad buttons and axes in their own order, so SDL maps it as a gamepad of all of them.
++// XBE_VIRTUAL_PAD=2 attaches a twin beside it, set to the same report: one controller seen twice, as a PlayStation
++// controller is beside the Xbox controller DS4Windows makes of it. A game that reads the first port before a test's
++// presses are set and the twin after sees each press on the twin a frame early: its GameInfo::pad can hand the twin
++// the report the first port got.
 +struct Virtual {
-+    SDL_JoystickID id = 0;
++    SDL_JoystickID id = 0, twin_id = 0;
 +    SDL_Joystick* js = nullptr;
++    SDL_Joystick* twin = nullptr;
 +    std::atomic<uint16_t> low{0}, high{0}, peak_low{0}, peak_high{0};
 +    std::atomic<uint32_t> rumbles{0};
 +} g_virtual;
 +const bool kVirtual = [] {
 +    const char* v = std::getenv("XBE_VIRTUAL_PAD");
 +    return v && *v && *v != '0';
++}();
++const bool kVirtualTwin = [] {
++    const char* v = std::getenv("XBE_VIRTUAL_PAD");
++    return v && std::atoi(v) == 2;
 +}();
 +// tests: XBE_NO_PADS, no controller at all; with the virtual one, no other (a controller plugged into the PC would
 +// press its buttons into the run)
@@ -1706,7 +1715,9 @@ index bb7f3a9..0f9561a 100644
 +    return v && *v && *v != '0';
 +}();
 +
-+bool IsVirtual(SDL_JoystickID id) { return g_virtual.id && id == g_virtual.id; }
++bool IsVirtual(SDL_JoystickID id) {
++    return (g_virtual.id && id == g_virtual.id) || (g_virtual.twin_id && id == g_virtual.twin_id);
++}
 +bool LeftOut(SDL_JoystickID id) { return kVirtual ? !IsVirtual(id) : kNoPads; }
 +
 +bool SDLCALL VirtualRumble(void*, Uint16 low, Uint16 high) {
@@ -1728,25 +1739,34 @@ index bb7f3a9..0f9561a 100644
 +    desc.axis_mask = (1u << desc.naxes) - 1;
 +    desc.name = "Virtual test controller";
 +    desc.Rumble = VirtualRumble;
-+    g_virtual.id = SDL_AttachVirtualJoystick(&desc);
-+    g_virtual.js = g_virtual.id ? SDL_OpenJoystick(g_virtual.id) : nullptr;
 +    // the triggers at rest: a trigger axis reads from its most negative
-+    if (g_virtual.js)
-+        for (SDL_GamepadAxis a : {SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER})
-+            SDL_SetJoystickVirtualAxis(g_virtual.js, a, -32768);
++    auto attach = [&](SDL_JoystickID& id, SDL_Joystick*& js) {
++        id = SDL_AttachVirtualJoystick(&desc);
++        js = id ? SDL_OpenJoystick(id) : nullptr;
++        if (js)
++            for (SDL_GamepadAxis a : {SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER})
++                SDL_SetJoystickVirtualAxis(js, a, -32768);
++    };
++    attach(g_virtual.id, g_virtual.js);
 +    LOGR("input: virtual controller %s", g_virtual.js ? "attached" : SDL_GetError());
++    if (!kVirtualTwin) return;
++    desc.name = "Virtual test controller twin";
++    attach(g_virtual.twin_id, g_virtual.twin);
++    LOGR("input: its twin %s", g_virtual.twin ? "attached" : SDL_GetError());
 +}
 +
 +void DetachVirtual() {
-+    if (g_virtual.js) SDL_CloseJoystick(g_virtual.js);
-+    if (g_virtual.id) SDL_DetachVirtualJoystick(g_virtual.id);
-+    g_virtual.js = nullptr;
-+    g_virtual.id = 0;
++    for (auto [id, js] : {std::pair{&g_virtual.id, &g_virtual.js}, std::pair{&g_virtual.twin_id, &g_virtual.twin}}) {
++        if (*js) SDL_CloseJoystick(*js);
++        if (*id) SDL_DetachVirtualJoystick(*id);
++        *js = nullptr;
++        *id = 0;
++    }
 +    LOGR("input: virtual controller detached");
  }
  
  void RemovePad(SDL_JoystickID id) {
-@@ -45,12 +125,17 @@ void UpdatePads() {
+@@ -45,12 +145,17 @@ void UpdatePads() {
      uint64_t now = SDL_GetTicks();
      if (!g_sdl || now == last) return;
      last = now;
@@ -1764,7 +1784,7 @@ index bb7f3a9..0f9561a 100644
  }
  
  }  // namespace
-@@ -73,6 +158,7 @@ void Init() {
+@@ -73,6 +178,7 @@ void Init() {
      LOGI("input: SDL %d.%d.%d", SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v));
      std::lock_guard lock(g_lock);
      g_sdl = true;
@@ -1772,7 +1792,7 @@ index bb7f3a9..0f9561a 100644
      int count = 0;
      if (SDL_JoystickID* ids = SDL_GetGamepads(&count)) {
          for (int i = 0; i < count; i++) AddPad(ids[i]);
-@@ -80,7 +166,8 @@ void Init() {
+@@ -80,7 +186,8 @@ void Init() {
      }
  }
  
@@ -1782,7 +1802,7 @@ index bb7f3a9..0f9561a 100644
      Pad p;
      {
          std::lock_guard lock(g_lock);
-@@ -109,6 +196,11 @@ Pad Poll(int port) {
+@@ -109,6 +216,11 @@ Pad Poll(int port) {
              p.ry = int16_t(-1 - axis(SDL_GAMEPAD_AXIS_RIGHTY));
          }
      }
@@ -1794,7 +1814,7 @@ index bb7f3a9..0f9561a 100644
      if (app::kGame.pad) app::kGame.pad(port, p);
      return p;
  }
-@@ -126,11 +218,78 @@ uint16_t HeldOnAnyController() {
+@@ -126,11 +238,86 @@ uint16_t HeldOnAnyController() {
      return held;
  }
  
@@ -1817,11 +1837,10 @@ index bb7f3a9..0f9561a 100644
 +
 +bool VirtualOn() { return kVirtual; }
 +
++namespace {
++
 +// the controller's report as SDL's buttons and axes, which Poll reads back (the frame after)
-+void VirtualSet(const Pad& p) {
-+    std::lock_guard lock(g_lock);
-+    SDL_Joystick* js = g_virtual.js;
-+    if (!js) return;
++void VirtualSetOne(SDL_Joystick* js, const Pad& p) {
 +    constexpr SDL_GamepadButton kButtons[] = {
 +        SDL_GAMEPAD_BUTTON_DPAD_UP,   SDL_GAMEPAD_BUTTON_DPAD_DOWN,  SDL_GAMEPAD_BUTTON_DPAD_LEFT,
 +        SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_BUTTON_START,     SDL_GAMEPAD_BUTTON_BACK,
@@ -1838,6 +1857,15 @@ index bb7f3a9..0f9561a 100644
 +    SDL_SetJoystickVirtualAxis(js, SDL_GAMEPAD_AXIS_LEFTY, int16_t(-1 - p.ly));  // SDL's sticks have y down
 +    SDL_SetJoystickVirtualAxis(js, SDL_GAMEPAD_AXIS_RIGHTX, p.rx);
 +    SDL_SetJoystickVirtualAxis(js, SDL_GAMEPAD_AXIS_RIGHTY, int16_t(-1 - p.ry));
++}
++
++}  // namespace
++
++// the virtual controller and its twin set to the same report
++void VirtualSet(const Pad& p) {
++    std::lock_guard lock(g_lock);
++    for (SDL_Joystick* js : {g_virtual.js, g_virtual.twin})
++        if (js) VirtualSetOne(js, p);
 +}
 +
 +// the virtual controller unplugged, or plugged in again

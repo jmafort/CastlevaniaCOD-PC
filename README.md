@@ -587,6 +587,13 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   the camera and R1 guarding, L2 and R2 locking on (the launcher's or the in-game menu's Controls page;
   `button_layout = 1`; it changes at once, in game too). The PS2 icons come from an HD texture pack made from the PS2
   game (HD Texture Packs, above), and the launcher says whether yours has them; without one the Xbox icons stay.
+  Every controller takes the layout (1.10.2). The game takes the buttons of all four controllers together, and a
+  controller seen twice, a PlayStation controller and the Xbox controller DS4Windows or DualSenseX makes of it, used
+  to press both layouts at once: R1 guarded and turned the lock-on off, L1 reset the camera and changed the target.
+- **A controller seen twice** - `logs\castlevania.log` names each controller plugged in. Two for one (the controller
+  and a program's copy of it) still give the game each press twice, sometimes a frame apart, which can turn a toggle
+  such as Lock-On ON/OFF on and off again: hide the controller from games in that program (DS4Windows: Hide DS4
+  Controller, with HidHide).
 - **Stick Response** - PS2 (the default), or Xbox. The Xbox release cuts each stick axis to 0 by itself under a
   third of its throw, before the game makes the stick a direction, so near up, down, left or right Hector walks
   straight along them (within 20 degrees at full tilt, 42 at half), and a walk starts at a third of his speed. The
@@ -1013,6 +1020,9 @@ Changes this game needed beyond the generated config:
 - `lockon.json` locks on (Black, the game's Lock-On ON/OFF) to the Executioner of room 5.2 with him off the middle of
   a widescreen: its marker, drawn from the HUD's sheet at him, stays where the game puts it while the HUD goes to the
   screen's corners. The telemetry's `wide` says how far widescreen moved the marker and the HUD as last drawn.
+- `lock-twin.json` plays one controller seen twice in the PS2 layout (the SDK's virtual controller and its twin,
+  `XBE_VIRTUAL_PAD=2`) against the two knights of room 5.12: locked on, R1 and L1 keep the enemy locked on (the
+  telemetry's `lock`, the actor), L2 changes it and R2 lets it go.
 - `python -I tools\cvtest\launcher_test.py <release .zip or .tar.xz, or a build folder> <USA disc> <European disc>`
   installs a release as `install.py` does, with one disc and then both, and drives the launcher by window messages (on
   Linux, on a virtual display) where it says its controls are (`CV_LAUNCHER_STATE`): with one disc no list beside

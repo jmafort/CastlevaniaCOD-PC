@@ -33,7 +33,8 @@
 //   0:menuscroll                      the settings menu's page scrolled to its end (telemetry menu_scroll)
 // With XBE_VIRTUAL_PAD=1 the presses go to the SDK's virtual controller (core/input.cpp), which the game reads through
 // SDL as it reads a real one: SDL's mapping, the PS2 layout and the stick response take them, a frame later, and the
-// rumble the game sends reaches it (telemetry "vpad").
+// rumble the game sends reaches it (telemetry "vpad"). XBE_VIRTUAL_PAD=2 adds its twin, one controller seen twice
+// (Twin).
 //   0:walk=<x>/<z>[/<r>]:<hold>       the bot (bot.cpp) walks him there; fight[=<r>] fights the enemies near
 //                                     him. The command ends once its goals are done, or at the hold at most
 //   0:guard=<r>                       on those walks, the bot fights an enemy that comes within r first
@@ -687,8 +688,36 @@ void KeyboardWindow(void* hwnd) {
     MenuWindow();
 }
 
+// tests: one controller seen twice, the SDK's virtual controller and its twin (XBE_VIRTUAL_PAD=2). The game reads
+// the first port before a test's presses are set (Scripted, below) and the twin's after, which would see each press a
+// frame early: the twin gets the report the first port got, as a controller's two copies do
+const bool kTwin = [] {
+    const char* v = std::getenv("XBE_VIRTUAL_PAD");
+    return v && std::atoi(v) == 2;
+}();
+
+void Twin(int port, input::Pad& p) {
+    static std::mutex m;
+    static input::Pad first;
+    if (!kTwin) return;
+    std::lock_guard lock(m);
+    if (port == 0) first = p;
+    else if (port == 1) p = first;
+}
+
 void KeyboardPad(int port, input::Pad& p) {
     RumbleFrame(port, false);
+    Twin(port, p);
+    // the PS2 layout: a controller's shoulders do what the Xbox's triggers do and its triggers what white and black
+    // do, as on the PS2 (L1 resets the camera, R1 guards) and as its icons say (texpack.cpp); the keyboard keeps its
+    // own keys. Every controller's: the game takes the buttons of all four ports together, and one controller seen
+    // twice (a PlayStation controller and the Xbox controller DS4Windows or DualSenseX makes of it) pressed both
+    // layouts at once, R1 guarding and turning the lock-on off, L1 resetting the camera and changing the lock-on
+    // (through 1.10.1, when only the first port's were swapped)
+    if (g_button_layout == 1) {
+        std::swap(p.analog[kWhite], p.analog[kLT]);
+        std::swap(p.analog[kBlack], p.analog[kRT]);
+    }
     if (port != 0) return;
     // pause on focus loss: the game stops at its pad read until the window is in front again; not in scripted runs,
     // which go on behind other windows
@@ -701,13 +730,6 @@ void KeyboardPad(int port, input::Pad& p) {
     }
     if (LiveOn()) LiveWait();
     p.connected = true;
-    // the PS2 layout: a controller's shoulders do what the Xbox's triggers do and its triggers what white and black
-    // do, as on the PS2 (L1 resets the camera, R1 guards) and as its icons say (texpack.cpp); the keyboard keeps its
-    // own keys
-    if (g_button_layout == 1) {
-        std::swap(p.analog[kWhite], p.analog[kLT]);
-        std::swap(p.analog[kBlack], p.analog[kRT]);
-    }
     // the PS2's sticks (hooks.cpp) reach the game as they are: a stick at rest, a few hundred off centre, is centred
     if (g_ps2_stick) {
         Rest(p.lx, p.ly);

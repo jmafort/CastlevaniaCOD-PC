@@ -1,0 +1,26 @@
+{
+  "name": "lock-twin",
+  "after": "newgame.json",
+  "env": {"XBE_VIRTUAL_PAD": "2"},
+  "settings": {"button_layout": 1},
+  "note": "One controller seen twice in the PS2 layout, as a PlayStation controller is beside the Xbox controller DS4Windows or DualSenseX makes of it (the SDK's virtual controller and its twin, XBE_VIRTUAL_PAD=2: presses are a controller's, black R1, white L1, lt L2, rt R2). Locked on among the two knights of room 5.12, R1 guards and L1 resets the camera without touching the lock-on; L2 changes it, R2 lets it go (lock, the actor locked on). The game takes all four ports' buttons together and only the first port's were swapped: through 1.10.1 R1 also turned the lock-on off and L1 changed it (Reddit).",
+  "steps": [
+    {"press": "0f:wait:10f", "expect": ["found(runlog, 'controller 2 plugged in')"]},
+    {"press": "0:warp=5.12,10f:wait:20f", "note": "the armoured knights"},
+    {"until": "room == 12 and player.active and not loading and not cutscene", "timeout": 30,
+     "poll_by": [["cutscene", "0:start,45f:wait"], ["menu", "0:b,30f:wait"]]},
+    {"press": "0:walk=-23000/-2000/120:4000", "note": "into the room: at its door a knight's blow knocks Hector out of it"},
+    {"until": "room == 12 and len(enemies) >= 2 and enemies[1].dist < 800", "poll": "0:heal,20f:wait", "timeout": 30,
+     "shot": "near", "note": "both knights near: they walk up to Hector"},
+    {"press": "0:heal,0f:rt:5f,5f:wait:20f", "shot": "locked", "note": "R2: Lock-On ON/OFF",
+     "expect": ["lock != 0", "prev.lock == 0"]},
+    {"press": "0:heal,0f:black:30f,0f:wait:30f", "shot": "guarded", "note": "R1: guard, the lock-on kept",
+     "expect": ["room == 12", "lock == prev.lock"]},
+    {"press": "0:heal,0f:white:5f,0f:wait:40f", "shot": "camera", "note": "L1: the camera reset, the lock-on kept",
+     "expect": ["room == 12", "lock == prev.lock"]},
+    {"press": "0:heal,0f:lt:5f,0f:wait:40f", "shot": "changed", "note": "L2: Change Lock-On, the other knight",
+     "expect": ["room == 12", "lock != 0", "lock != prev.lock"]},
+    {"press": "0:heal,0f:rt:5f,5f:wait:20f", "shot": "released", "note": "R2: Lock-On ON/OFF, let go",
+     "expect": ["lock == 0"]}
+  ]
+}

@@ -16,6 +16,7 @@
 //   menus                u32 0xB25518 is not 0 while the pause or inventory menu is up; a modal box sets bit 16 of the
 //                        word at u32 [0x548C10]
 //   scene                u32 0xB23410 (found here, by comparing memory in play and in a story scene)
+//   lock                 the actor locked on, u32 at Hector's record + 0xB4 (found here; 0xB41350 in the USA release)
 //   game                 0xB23700, what sub_002F7180 returns: the mode u32 at +0 (0 Hector, 1 Crazy, 2 Trevor), the
 //                        play time at +8 (1/300 s, the pause menu's Time: sub_002F7250 adds 5 a frame played) and the
 //                        save's name at +0x10, which sub_002F7240 returns
@@ -294,6 +295,13 @@ std::string GameStateJson() {
         if (const char* name = AreaName(map)) j.Str("area", name);
     }
     Player(j);
+    // the enemy locked on, its actor as in "enemies"; 0 none. Hector's record has his lock-on at +0x90 (the game's
+    // getters at sub_00333AE0 on) and its target at +0x24 there (sub_0032D320), found here: it took a knight of room
+    // 5.12 at Lock-On ON/OFF, the other at Change Lock-On, 0 at Lock-On ON/OFF again
+    uint32_t h = 0, record = 0, lock = 0;
+    if (Read(cv::kPlayer, h) && h && Read(h, record) && record < 128 &&
+        Read(cv::kRecords + record * 0x1210 + 0xB4, lock))
+        j.Int("lock", lock);
     Camera(j);
     // u32 0xB23410, seen in play: 0x20000 for a story scene (the room 5.11 tombstone, from its start until Start skips
     // it), 0x8000 while a room change loads, 0 in play, menus and the title
