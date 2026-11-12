@@ -236,6 +236,19 @@ void HealPlayer() {
     if (Read(hp_max, max) && max > 0 && mem::IsCommitted(hp)) std::memcpy(mem::Base() + hp, &max, 4);
 }
 
+// a test's "poke" and "memcopy": guest memory written, where it is committed
+void PokeGuest(uint32_t va, uint32_t value) {
+    if (va >= 0x10000 && va <= 0xFFFFFFFBu && mem::IsCommitted(va) && mem::IsCommitted(va + 3))
+        std::memcpy(mem::Base() + va, &value, 4);
+}
+
+void CopyGuest(uint32_t to, uint32_t from, uint32_t bytes) {
+    auto ok = [&](uint32_t va) {
+        return bytes && va >= 0x10000 && va <= 0xFFFFFFFFu - bytes && mem::IsCommitted(va) && mem::IsCommitted(va + bytes - 1);
+    };
+    if (bytes <= 0x100000 && ok(to) && ok(from)) std::memmove(mem::Base() + to, mem::Base() + from, bytes);
+}
+
 // a test's "playtime=<seconds>": the pause menu's play time set (game/hooks.cpp), in its 1/300 of a second
 void SetPlayTime(uint32_t seconds) {
     uint32_t t = seconds * 300;

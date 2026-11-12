@@ -24,6 +24,8 @@
 //   0:warp=<map>.<room>[.<entry>]     Hector sent to that room at the command's start (game/warp.cpp)
 //   0:heal                            his HP back to full at the command's start
 //   0:playtime=<seconds>              the pause menu's play time set to that (game/hooks.cpp)
+//   0:poke=<va>/<value>               a 32-bit value written to guest memory (va in hex, the value as C reads it)
+//   0:memcopy=<to>/<from>/<bytes>     guest memory copied (all in hex): a state a test needs that its save lacks
 //   0:capture                         the frame after the command's start into XBE_CAPTURE_DIR, as F3 captures one:
 //                                     each draw's state and textures (the SDK's gpu/d3d12.cpp)
 //   0:unplug, 0:plug                  the virtual controller unplugged, plugged in again
@@ -86,6 +88,8 @@ void TelemetryFrame(const input::Pad& p);        // telemetry.cpp
 void RequestWarp(int map, int room, int entry);  // game/warp.cpp
 void HealPlayer();                               // telemetry.cpp
 void SetPlayTime(uint32_t seconds);              // telemetry.cpp
+void PokeGuest(uint32_t va, uint32_t value);     // telemetry.cpp
+void CopyGuest(uint32_t to, uint32_t from, uint32_t bytes);
 void MenuClick(const std::string& name);         // menu.cpp
 void MenuScrollEnd();                            // menu.cpp
 struct BotGoal {                                 // bot.cpp
@@ -171,6 +175,8 @@ struct Step {
     int map = -1, room = 0, entry = 0;  // warp=<map>.<room>[.<entry>]: live commands send Hector there at their start
     bool goal = false, heal = false;    // walk=, fight (bot.cpp) and heal, live commands too
     int64_t play_time = -1;             // playtime=<seconds>: the pause menu's play time set
+    std::vector<uint32_t> pokes;        // poke=<va>/<value>: va, value pairs
+    std::vector<uint32_t> copies;       // memcopy=<to>/<from>/<bytes>: triples
     bool capture = false;               // capture, a live command's too
     int plug = -1;                      // unplug 0, plug 1: the virtual controller
     std::string click;                  // click=<control>: the settings menu's
@@ -237,6 +243,14 @@ std::vector<Step> ParseScript(std::string text) {
             else if (b.rfind("rs=", 0) == 0) Stick(b.substr(3), s.rx, s.ry);
             else if (b == "heal") s.heal = true;
             else if (b.rfind("playtime=", 0) == 0) s.play_time = std::strtoll(b.c_str() + 9, nullptr, 10);
+            else if (b.rfind("poke=", 0) == 0) {
+                char* end = nullptr;
+                uint32_t va = std::strtoul(b.c_str() + 5, &end, 16);
+                if (end && *end == '/') s.pokes.insert(s.pokes.end(), {va, uint32_t(std::strtoul(end + 1, nullptr, 0))});
+            } else if (b.rfind("memcopy=", 0) == 0) {
+                unsigned to = 0, from = 0, n = 0;
+                if (std::sscanf(b.c_str() + 8, "%x/%x/%x", &to, &from, &n) == 3) s.copies.insert(s.copies.end(), {to, from, n});
+            }
             else if (b == "capture") s.capture = true;
             else if (b == "menuscroll") s.menu_scroll = true;
             else if (b.rfind("click=", 0) == 0) s.click = b.substr(6);
@@ -461,6 +475,8 @@ void LiveWait() {
             for (const Step& s : l.steps) {
                 if (s.map >= 0) RequestWarp(s.map, s.room, s.entry);
                 if (s.heal) HealPlayer();
+                for (size_t i = 0; i + 1 < s.pokes.size(); i += 2) PokeGuest(s.pokes[i], s.pokes[i + 1]);
+                for (size_t i = 0; i + 2 < s.copies.size(); i += 3) CopyGuest(s.copies[i], s.copies[i + 1], s.copies[i + 2]);
                 if (s.play_time >= 0) SetPlayTime(uint32_t(s.play_time));
                 if (s.capture) gpu::g_capture = true, g_wide_trace_frame = true;  // as the F10 menu's capture
                 if (s.plug >= 0) input::VirtualPlug(s.plug == 1);
