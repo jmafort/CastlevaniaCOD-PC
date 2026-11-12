@@ -15831,7 +15831,7 @@ index 0000000..94b3b9f
 +    return o2;
 +}
 diff --git a/runtime/gpu/shaders.cpp b/runtime/gpu/shaders.cpp
-index 6d263d6..57bb2e6 100644
+index 6d263d6..3c29fa6 100644
 --- a/runtime/gpu/shaders.cpp
 +++ b/runtime/gpu/shaders.cpp
 @@ -32,8 +32,13 @@ struct VOut {
@@ -16149,7 +16149,7 @@ index 6d263d6..57bb2e6 100644
 +}
 +float4 HookPos(float4 pin) {
 +    VOut o = (VOut)0;
-+    float4 oT0 = 0;
++    float4 oT0 = 0, oT1 = 0, oT2 = 0, oT3 = 0;
 +    o.pos = pin;
 +)";
 +    s += Hooks().Position();

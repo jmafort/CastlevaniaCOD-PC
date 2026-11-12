@@ -220,11 +220,18 @@ public:
     // left a line of the picture under it at the left and top of the screen)
     // ext.x and ext.y otherwise scale across and down, ext.w and ext2.x then move across and down, in clip space (the
     // frame pass placed pixel for pixel: Placement)
+    // ext2.z n: stage n - 1 reads the target drawn into (the "Level up" letters' glass, the frame behind them bent):
+    // its texture coordinates across, made by the game for where the vertex was, scaled and moved as the vertex is,
+    // about ext2.w, the frame's middle in them, so it reads the frame where it now draws
     std::string Position() const override {
         // a vertex at the console frame's edge (within a few pixels: the PS2's grid puts a backdrop's left edge a pixel
         // in) goes exactly to the screen's, or the screen's first columns stay as they were under it (a bright line at
         // the left edge of the pause menu)
-        return "    bool sides = ext.z > 1.5 && ext.z < 2.5;\n"
+        return "    if (abs(ext2.z - 1) < 0.5) oT0.x = ext2.w + (oT0.x - ext2.w) * ext.x + ext.w * ext2.w;\n"
+               "    if (abs(ext2.z - 2) < 0.5) oT1.x = ext2.w + (oT1.x - ext2.w) * ext.x + ext.w * ext2.w;\n"
+               "    if (abs(ext2.z - 3) < 0.5) oT2.x = ext2.w + (oT2.x - ext2.w) * ext.x + ext.w * ext2.w;\n"
+               "    if (abs(ext2.z - 4) < 0.5) oT3.x = ext2.w + (oT3.x - ext2.w) * ext.x + ext.w * ext2.w;\n"
+               "    bool sides = ext.z > 1.5 && ext.z < 2.5;\n"
                "    bool strip = ext.z > 2.5 && ext.z < 3.5;\n"
                "    bool fill = ext.z > 3.5;\n"
                "    if (sides) oT0.x = ext.w + (oT0.x - ext.w) / ext.x;\n"
@@ -413,7 +420,12 @@ public:
         return false;
     }
 
+    // the stage about to be bound, for Sampled (the backend asks Sample and then Sampled for each)
+    void Sample(uint32_t, bool, int stage, uint64_t&, float&, bool&) override { stage_ = stage; }
+
     void Sampled(const gpu::TextureDesc& d, const gpu::Target* t, uint8_t, gpu::TexInfo&) override {
+        if (stage_ >= 0 && stage_ < 4) d_.stages[stage_] = {t, d.linear, float(d.width)};
+        stage_ = -1;
         // a target the GPU drew: the frame, or a pass over it. One whose picture the CPU wrote is a picture (the
         // European release's intro decodes every other frame of its movie into a target of the game's).
         d_.target |= t != nullptr && !t->cpu;
@@ -704,6 +716,19 @@ public:
         if (Backdrop(vsc) || SkyCard()) ext[0] = ext[1] = ext[3] = ext[4] = 0;  // not drawn: every vertex at the centre
         else if (hide_water && Water()) ext[0] = ext[1] = 0;
         else if (back_buffer_ && d_.world && d_.mesh && vsc) SeeWorld(vsc, ext[0]);
+        // a draw that reads the target it draws into, scaled or moved across (the "Level up" letters, squeezed with
+        // the rest of the 2D: their glass read the frame a quarter further out from the middle than they stood, and
+        // showed it as copies of the letters beside them): that stage's coordinates go with its vertices (Hooks).
+        // CV_WIDE_FEEDBACK=0: as before
+        static const bool feedback =
+            !(std::getenv("CV_WIDE_FEEDBACK") && std::atoi(std::getenv("CV_WIDE_FEEDBACK")) == 0);
+        if (feedback && rt && ext[2] == 0 && (std::fabs(ext[0] - 1) > 1e-4f || ext[3] != 0))
+            for (int i = 0; i < 4; i++)
+                if (d_.stages[i].target == rt) {
+                    ext[6] = float(i + 1);
+                    ext[7] = d_.stages[i].linear ? d_.stages[i].width * 0.5f : 0.5f;
+                    break;
+                }
         // XBE_FG_TRACE=2: each 3D program once (what it reads, its first draw), and every 3D draw of the three
         // frames after one whose world draws had several cameras
         static const int trace_lvl = std::getenv("XBE_FG_TRACE") ? std::atoi(std::getenv("XBE_FG_TRACE")) : 0;
@@ -1536,8 +1561,15 @@ private:
         bool at_point = false;  // a 2D draw placed at a point of the world, by that point's depth
         Span box_u, box_v;  // a quad's texture coordinates, on the frame or not (TexelBox)
         gpu::TextureDesc tex;
+        struct Stage {
+            const gpu::Target* target = nullptr;  // the target it reads, null for a texture
+            bool linear = false;                  // its coordinates in texels
+            float width = 0;
+        };
+        Stage stages[4];
     };
     Draw d_;
+    int stage_ = -1;  // the stage Sample named, until its Sampled
     bool back_buffer_ = false;
     // the frame so far: vertices of textured 3D drawn (the world's thousands; the map screen's rooms are flat colour),
     // a 4:3 picture over the whole frame

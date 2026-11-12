@@ -1,0 +1,17 @@
+{
+  "name": "levelup-text",
+  "after": "newgame.json",
+  "settings": {"width": 1920, "height": 1080},
+  "note": "The \"Level up\" words in 16:9, fought for against the armoured knights of room 5.12. Their letters are glass: a pass reads the frame behind them, bent (the target drawn into, as a texture). Squeezed with the rest of the 2D, that pass read the frame a quarter further out from the middle than the letters stood, and showed it as copies of them beside each other (issue 1, through 1.10.1; 4:3 was clean). Its coordinates now go with its vertices (widescreen.cpp, ext2.z).",
+  "steps": [
+    {"press": "0:warp=5.12,10f:wait:20f", "note": "the armoured knights"},
+    {"until": "room == 12 and player.active and not loading and not cutscene", "timeout": 30,
+     "poll_by": [["cutscene", "0:start,45f:wait"], ["menu", "0:b,30f:wait"]]},
+    {"press": "0f:black:5f,5f:wait:10f", "note": "locked on (Black)"},
+    {"until": "modal and player.hp_max > 100", "poll": "0:heal,0:fight:1000", "timeout": 120, "note": "fought until Hector's level up"},
+    {"press": "0f:wait:50f", "shot": "levelled", "note": "the words settled in the middle",
+     "ask": {"question": "Look at the words \"Level up\" near the middle of the screen. Do they read cleanly, each letter once (a glassy, silvery look is normal), or are the letters doubled into several overlapping copies side by side so the words are hard to read?",
+             "choices": {"clean": "they read cleanly, each letter once", "copies": "the letters are doubled into overlapping copies", "none": "no \"Level up\" words are shown"}},
+     "expect": ["screen.ask.answer == 'clean'"]}
+  ]
+}

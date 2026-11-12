@@ -189,6 +189,7 @@ def tests():
         # in a game of its own: Hector's level up comes from the knights only at his first level (a session's game may
         # have him at his second)
         scenario("hud-levelup"),
+        scenario("levelup-text"),  # 1.10.2: the "Level up" words in 16:9, not in copies
         scenario("shadow", quick=True),
         scenario("texpack", needs=["textures"]),
         scenario("texpack", "--set", "texture_pack=false", test="texpack-off"),
