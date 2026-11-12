@@ -1,0 +1,12 @@
+{
+  "name": "pctext-eu",
+  "settings": {"game_language": 1},
+  "note": "The European release's save messages say PC, not Xbox, in its game_language (1 English, 3 German, 4 French, 5 Spanish, 6 Italian: --set game_language=5 --release eu): Continue with no save on the hard disk shows its no-data message (src/common/pc_text.cpp, data\\global2e?.dar). Through 1.10.1 they named the Xbox in all five.",
+  "steps": [
+    {"press": "0:wait:11000", "note": "the logos to the title"},
+    {"until": "frame >= 640", "timeout": 60, "shot": "title"},
+    {"press": "600:down,1500:wait", "note": "Continue"},
+    {"press": "0:a,2500:wait", "shot": "load", "note": "the load screen: no game data present on the PC, in the game's language",
+     "expect": ["found(runlog, r'pc text: 9 of the save messages say .{1,20}global2e' + {1: 'e', 3: 'g', 4: 'f', 5: 'p', 6: 'i'}[settings.game_language] + r'\\.dar')"]}
+  ]
+}
