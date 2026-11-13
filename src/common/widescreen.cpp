@@ -21,8 +21,9 @@
 // wrapped (the program makes its coordinates, so the renderer cannot tell they stay in it) its far side showed at
 // each edge, the "Tip" heading again at the right.
 //
-// HUD at the edges (hud_edges): the HUD's draws, from the first of the frame that takes one of its textures (kHud: the
-// sheet of the health bar's frame, digits and icons, the bar's fill, the icon at the bottom left) to the frame pass, go
+// HUD at the edges (hud_edges): the HUD's draws, from the first of the frame that takes one of its textures (kHudSheet:
+// the sheet of the health bar's frame, digits and icons, one per language; kHud: the bar's fill, the icon at the
+// bottom left) to the frame pass, go
 // to the screen's left or right edge, rather than the 4:3 middle's: as on a 4:3 screen, the same way from the screen's
 // corner. They go by the piece of the HUD they are part of, the draws that touch one another (the health bar's frame,
 // its fill, its digits that reach past the middle of the frame; a message's box at the bottom right and its text),
@@ -163,9 +164,15 @@ constexpr uint64_t kSkyCards[] = {
 };
 constexpr int kFrameTexCoord = 2;  // the frame pass's texture coordinates, in texels
 constexpr int kTexCoord = 2;       // a 2D draw's, as the game's programs take them
-// the HUD's textures by their Name (CV_WIDE_TRACE shows them): its sheet, the health bar's fill, the icon at the
-// bottom left
-constexpr uint64_t kHud[] = {0x3ff08a280ddd7171ull, 0x9d83fce80f5f78f6ull, 0x8d0b7015b1ee08baull};
+// the HUD's textures by their Name (CV_WIDE_TRACE shows them): the health bar's fill, the icon at the bottom left
+constexpr uint64_t kHud[] = {0x9d83fce80f5f78f6ull, 0x8d0b7015b1ee08baull};
+// and its sheet (the health bar's frame, digits and icons, the Innocent Devil's panel), one per language since its
+// labels are in the picture: English (the USA release, the European in English), then the European release's German,
+// French, Spanish and Italian. Through 1.10.2 only the English one was known, so in another language the devil's
+// panel at the bottom left went back to the 4:3 middle once the health bar had faded (issue 15)
+constexpr uint64_t kHudSheet[] = {0x3ff08a280ddd7171ull, 0x8c4e862ec618c8d1ull, 0x4861efdb951737bfull,
+                                  0x54fa81eeabbeac29ull, 0x1a59c855d8a3b444ull};
+bool HudSheet(uint64_t name) { return std::find(std::begin(kHudSheet), std::end(kHudSheet), name) != std::end(kHudSheet); }
 // an area's name card's effects drawn apart from the picture the game composed of it: the red flame it scrolls over
 // the crest as the card burns away. They go with the card
 constexpr uint64_t kCardFx[] = {0xe8728269d4380016ull};
@@ -629,7 +636,7 @@ public:
         bool card_fx = (card_now_seen_ || card_before_seen_) && !d_.target && d_.name &&
                        std::find(std::begin(kCardFx), std::end(kCardFx), d_.name) != std::end(kCardFx);
         if (squeeze && hud_free_ && !d_.world && !d_.whole && !d_.target && !card_fx && !edges && !d_.at_point) {
-            bool named = std::find(std::begin(kHud), std::end(kHud), d_.name) != std::end(kHud);
+            bool named = HudSheet(d_.name) || std::find(std::begin(kHud), std::end(kHud), d_.name) != std::end(kHud);
             hud_ |= named;
             bool inside = !d_.x.Empty() && !d_.y.Empty() && d_.x.lo >= -2 && d_.x.hi <= d_.gw + 2;
             if (hud_ && inside && BossBar(named)) {
@@ -751,7 +758,7 @@ public:
                      vsc[kScreenScale][1], vsc[kScreenScale][2], vsc[kScreenOffset][0], vsc[kScreenOffset][1],
                      vsc[kScreenOffset][2]);
         }
-        if (back_buffer_ && d_.name == kHud[0] && !d_.x.Empty() && !boss_bar) {
+        if (back_buffer_ && HudSheet(d_.name) && !d_.x.Empty() && !boss_bar) {
             if (d_.at_point) {
                 std::lock_guard lock(g_seen_m);
                 g_marker = {frame_, d_.x.lo, d_.x.hi, ext[3]};
@@ -1180,7 +1187,7 @@ private:
     bool BossBar(bool named) {
         if (!named) return false;
         float w = d_.x.hi - d_.x.lo, h = d_.y.hi - d_.y.lo;
-        bool label = d_.name == kHud[0] && !d_.u.Empty() && std::fabs(d_.u.lo - 0.8125f) < 0.004f && d_.u.hi > 0.996f &&
+        bool label = HudSheet(d_.name) && !d_.u.Empty() && std::fabs(d_.u.lo - 0.8125f) < 0.004f && d_.u.hi > 0.996f &&
                      w > 50 && w < 70 && h > 13 && h < 22 && d_.y.lo > d_.gh * 0.6f;
         if (label) {
             static int said = 0;

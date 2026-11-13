@@ -186,6 +186,9 @@ def tests():
         scenario("qol"),
         scenario("lockon", quick=True),
         scenario("lockon", *eu, test="lockon-eu"),
+        # 1.10.3: the HUD's sheet has its words drawn in, one per language; only the English one was known, so in
+        # Spanish the marker and the Innocent Devil's panel were not the HUD's (issues 5, 15)
+        scenario("lockon", *eu, "--set", "game_language=5", test="lockon-eu-es"),
         # in a game of its own: Hector's level up comes from the knights only at his first level (a session's game may
         # have him at his second)
         scenario("hud-levelup"),

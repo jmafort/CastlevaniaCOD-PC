@@ -1019,7 +1019,8 @@ Changes this game needed beyond the generated config:
   in the shots. `newgame.json` checks that a plain name gives mode 0.
 - `lockon.json` locks on (Black, the game's Lock-On ON/OFF) to the Executioner of room 5.2 with him off the middle of
   a widescreen: its marker, drawn from the HUD's sheet at him, stays where the game puts it while the HUD goes to the
-  screen's corners. The telemetry's `wide` says how far widescreen moved the marker and the HUD as last drawn.
+  screen's corners. The telemetry's `wide` says how far widescreen moved the marker and the HUD as last drawn. With
+  `--release eu --set game_language=5` it plays in Spanish, whose HUD sheet ("PS" for HP) is a picture of its own.
 - `lock-twin.json` plays one controller seen twice in the PS2 layout (the SDK's virtual controller and its twin,
   `XBE_VIRTUAL_PAD=2`) against the two knights of room 5.12: locked on, R1 and L1 keep the enemy locked on (the
   telemetry's `lock`, the actor), L2 changes it and R2 lets it go.
