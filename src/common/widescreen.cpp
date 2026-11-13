@@ -105,6 +105,7 @@ uint32_t TexturePackEpoch();  // texpack.cpp: moves on when the pack is switched
 // the game's movies (movies.cpp): their frames from a movie pack's HD versions, and drawn larger
 void MoviesFrame(uint64_t presents);
 uint64_t MoviesReplace(const gpu::TextureDesc& d, const uint8_t* guest);
+bool MoviesGuestPicture(const gpu::TextureDesc& d);
 bool MoviesOwn(uint64_t id);
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id);
 bool MoviesScale(const gpu::TextureDesc& d, float squeeze, float qx, float qy, float& sx, float& sy);
@@ -429,6 +430,7 @@ public:
 
     // the stage about to be bound, for Sampled (the backend asks Sample and then Sampled for each)
     void Sample(uint32_t, bool, int stage, uint64_t&, float&, bool&) override { stage_ = stage; }
+    bool GuestPicture(const gpu::TextureDesc& d) override { return MoviesGuestPicture(d); }
 
     void Sampled(const gpu::TextureDesc& d, const gpu::Target* t, uint8_t, gpu::TexInfo&) override {
         if (stage_ >= 0 && stage_ < 4) d_.stages[stage_] = {t, d.linear, float(d.width)};

@@ -7,7 +7,7 @@
     "width": 1600,
     "height": 900
   },
-  "note": "HD movies (src/common/movies.cpp) from a movie pack (CV_MOVIES: PlatinumMimic's): a new game whose opening text plays rather than being skipped, drawn from the pack's HD video (Windows decodes it with Media Foundation, Linux with FFmpeg; telemetry movies.hd_frames), the game's own frames with HD movies off (live) and the HD video's again with it on; the movie's size: Original and Fit leave the bands at the screen's sides black, Fill reaches them.",
+  "note": "HD movies (src/common/movies.cpp) from a movie pack (CV_MOVIES: PlatinumMimic's): a new game whose opening text plays rather than being skipped, drawn from the pack's HD video (Windows decodes it with Media Foundation, Linux with FFmpeg; telemetry movies.hd_frames), the game's own frames with HD movies off (live) and the HD video's again with it on; the movie's size: Original and Fit leave the bands at the screen's sides black, Fill reaches them. Each of the movie's frames at Fit's size, a few shots a few frames apart: the European release decodes every other frame into a target of its own, which through 1.10.2 drew at the game's size between the HD ones (issue 17), the band at the screen's right black in every other shot.",
   "steps": [
     {
       "press": "0:wait:11000",
@@ -86,6 +86,82 @@
     },
     {
       "press": "0:set=movie_view=1,0f:wait:10f"
+    },
+    {
+      "press": "0f:wait:3f",
+      "shot": "fit-1",
+      "luma": {
+        "right": [
+          0.92,
+          0.3,
+          0.98,
+          0.7
+        ]
+      },
+      "expect": [
+        "screen.luma.right > 20"
+      ],
+      "note": "Fit, frame after frame: the picture reaches the band at the right"
+    },
+    {
+      "press": "0f:wait:4f",
+      "shot": "fit-2",
+      "luma": {
+        "right": [
+          0.92,
+          0.3,
+          0.98,
+          0.7
+        ]
+      },
+      "expect": [
+        "screen.luma.right > 20"
+      ]
+    },
+    {
+      "press": "0f:wait:5f",
+      "shot": "fit-3",
+      "luma": {
+        "right": [
+          0.92,
+          0.3,
+          0.98,
+          0.7
+        ]
+      },
+      "expect": [
+        "screen.luma.right > 20"
+      ]
+    },
+    {
+      "press": "0f:wait:6f",
+      "shot": "fit-4",
+      "luma": {
+        "right": [
+          0.92,
+          0.3,
+          0.98,
+          0.7
+        ]
+      },
+      "expect": [
+        "screen.luma.right > 20"
+      ]
+    },
+    {
+      "press": "0f:wait:7f",
+      "shot": "fit-5",
+      "luma": {
+        "right": [
+          0.92,
+          0.3,
+          0.98,
+          0.7
+        ]
+      },
+      "expect": [
+        "screen.luma.right > 20"
+      ]
     }
   ]
 }

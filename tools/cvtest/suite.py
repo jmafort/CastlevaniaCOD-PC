@@ -252,6 +252,9 @@ def tests():
         scenario("taa"),  # Linux's anti-aliasing, on Windows by XBE_TAA
         scenario("wide-1610", quick=True),
         scenario("movies-hd", needs=["movies"], env=folder_env("movies", "CV_MOVIES")),
+        # 1.10.3: the European release decodes every other movie frame into a target of its own: each frame at Fit's
+        # size, none at the game's between them (issue 17)
+        scenario("movies-hd", "--release", "eu", test="movies-hd-eu", needs=["movies"], env=folder_env("movies", "CV_MOVIES")),
         scenario("surface", needs=["materials"], env=folder_env("materials", "CV_TEXTURES")),
         scenario("aa", needs=["vendor"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
         scenario("aa-dlss", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),

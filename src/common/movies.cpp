@@ -661,6 +661,16 @@ public:
         return kTag | (uint64_t(serial_) << 32) | (uint64_t(frame_) + 1);
     }
 
+    // a target of the game's whose picture its CPU wrote, a movie's frame while one plays: read as the texture it is
+    // in memory, so Replace sees it. The European release decodes every other frame of its movies into a target
+    // (83768000), which through 1.10.2 drew as the game's own frame at the game's size between the HD ones at Fit's or
+    // Fill's: the picture flickered between the two (issue 17)
+    bool GuestPicture(const gpu::TextureDesc& d) {
+        if (!MovieTexture(d)) return false;
+        std::lock_guard lock(m_);
+        return active_;
+    }
+
     // telemetry's "movies" (telemetry.cpp): the movie playing (its name, empty when none) and the frames drawn from its
     // HD video so far
     std::string Telemetry() {
@@ -830,6 +840,7 @@ void MoviesInit() {
 }
 void MoviesFrame(uint64_t presents) { g_movies.Frame(presents); }
 uint64_t MoviesReplace(const gpu::TextureDesc& d, const uint8_t* guest) { return g_movies.Replace(d, guest); }
+bool MoviesGuestPicture(const gpu::TextureDesc& d) { return g_movies.GuestPicture(d); }
 bool MoviesOwn(uint64_t id) { return (id & kTag) != 0; }
 std::string MoviesJson() { return g_movies.Telemetry(); }
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id) { return g_movies.Replaced(id); }
