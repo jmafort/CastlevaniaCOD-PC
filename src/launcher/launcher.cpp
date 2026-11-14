@@ -40,6 +40,7 @@ extern char** environ;
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <atomic>
@@ -72,6 +73,7 @@ extern char** environ;
 #include "app/window_icon.h"
 #include "kernel/disc.h"
 #include "../common/crest.h"
+#include "../common/keys.h"
 #include "../common/marks.h"
 #include "../common/settings_version.h"
 #include "../common/translation_packs.h"
@@ -88,6 +90,12 @@ extern const unsigned kReleaseCount;
 namespace {
 
 namespace fs = std::filesystem;
+
+// the keyboard's key last pressed down, as the game reads keys (common/keys.h: a virtual key code, Shift, Ctrl and Alt
+// by their side), 0 none: the window's messages (Windows) and SDL's events (Linux) set it, the Controls page takes
+// it for the key it waits for (Launcher::TakeKey)
+std::atomic<uint32_t> g_key_pressed{0};
+bool g_key_waiting = false;  // the Controls page waits for a key: F11 and Alt+Enter are its, not full screen's
 using words::F;
 using words::T;
 // a phrase as each system has it: Windows's, Linux's (Vulkan for Direct3D 12, no .exe, / in paths)
@@ -176,7 +184,19 @@ bool CreateDevice(HWND hwnd) {
     return true;
 }
 
+// a key message's key as GetAsyncKeyState knows it (the game's keyboard.cpp): Shift, Ctrl and Alt by their side
+uint32_t KeyOfMessage(WPARAM wp, LPARAM lp) {
+    bool extended = (lp >> 24) & 1;
+    switch (wp) {
+        case VK_SHIFT: return MapVirtualKeyW(UINT(lp >> 16) & 0xFF, MAPVK_VSC_TO_VK_EX);
+        case VK_CONTROL: return extended ? VK_RCONTROL : VK_LCONTROL;
+        case VK_MENU: return extended ? VK_RMENU : VK_LMENU;
+        default: return uint32_t(wp);
+    }
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if ((msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN) && !(lp & (1 << 30))) g_key_pressed = KeyOfMessage(wp, lp);
     if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return 1;
     switch (msg) {
         case WM_SIZE:
@@ -221,7 +241,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
             // F11, or Alt+Enter as games have it: full screen and back
-            if ((wp == VK_F11 && msg == WM_KEYDOWN) || (wp == VK_RETURN && msg == WM_SYSKEYDOWN && (lp & (1 << 29)))) {
+            if (!g_key_waiting &&
+                ((wp == VK_F11 && msg == WM_KEYDOWN) || (wp == VK_RETURN && msg == WM_SYSKEYDOWN && (lp & (1 << 29))))) {
                 if (!(lp & (1 << 30))) ToggleFullScreen();  // not again while held
                 return 0;
             }
@@ -1991,6 +2012,15 @@ struct Updater {
 
 // settings: the keys the game reads, the rest of the file kept
 
+using KeyMap = std::array<std::array<uint16_t, 2>, cv::kKeyInputCount>;
+
+// the keyboard's keys at first (common/keys.h)
+KeyMap DefaultKeys() {
+    KeyMap k{};
+    for (int i = 0; i < cv::kKeyInputCount; i++) k[i] = {cv::kKeyInputs[i].keys[0], cv::kKeyInputs[i].keys[1]};
+    return k;
+}
+
 struct Settings {
     std::string display_mode = "borderless";
     uint32_t width = 0, height = 0;
@@ -2006,6 +2036,7 @@ struct Settings {
     bool fps_counter = false;
     bool pause_on_focus_loss = true;
     uint32_t menu_key = VK_F10;
+    KeyMap keys = DefaultKeys();   // the keyboard's two keys of each input (common/keys.h: key_<name>), 0 none
     bool keep_open = false;        // the launcher's own
     std::string language = "en";   // the launcher's own too, a code of words.h
     uint32_t game_language = 1;    // the European release's, as the console's (XGetLanguage): kGameLanguages
@@ -2070,6 +2101,12 @@ struct Settings {
         fps_counter = rest["fps_counter"].value_or(fps_counter);
         pause_on_focus_loss = rest["pause_on_focus_loss"].value_or(pause_on_focus_loss);
         menu_key = rest["menu_key"].value_or(menu_key);
+        for (int i = 0; i < cv::kKeyInputCount; i++)
+            if (const toml::array* a = rest[std::string("key_") + cv::kKeyInputs[i].name].as_array())
+                for (size_t j = 0; j < 2; j++) {
+                    int64_t vk = j < a->size() ? (*a)[j].value_or(int64_t(0)) : 0;
+                    keys[i][j] = uint16_t(vk > 0 && vk <= 255 ? vk : 0);
+                }
         keep_open = rest["launcher_keep_open"].value_or(keep_open);
         language = rest["launcher_language"].value_or(language);
         game_language = rest["game_language"].value_or(GameLanguageFor(language));
@@ -2129,6 +2166,12 @@ struct Settings {
         rest.insert_or_assign("fps_counter", fps_counter);
         rest.insert_or_assign("pause_on_focus_loss", pause_on_focus_loss);
         rest.insert_or_assign("menu_key", int64_t(menu_key));
+        // the keyboard's keys changed from their defaults; those at them not written, so a later release's reach them
+        for (int i = 0; i < cv::kKeyInputCount; i++) {
+            std::string key = std::string("key_") + cv::kKeyInputs[i].name;
+            if (keys[i][0] == cv::kKeyInputs[i].keys[0] && keys[i][1] == cv::kKeyInputs[i].keys[1]) rest.erase(key);
+            else rest.insert_or_assign(key, toml::array{int64_t(keys[i][0]), int64_t(keys[i][1])});
+        }
         rest.insert_or_assign("launcher_keep_open", keep_open);
         rest.insert_or_assign("launcher_language", language);
         rest.insert_or_assign("game_language", int64_t(game_language));
@@ -2252,9 +2295,17 @@ std::string ResName(Res r) {
 std::string KeyName(uint32_t vk) {
     wchar_t name[64] = {};
     LONG scan = LONG(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)) << 16;
-    if ((vk >= VK_PRIOR && vk <= VK_DOWN) || vk == VK_INSERT || vk == VK_DELETE) scan |= 1 << 24;
+    if (cv::KeyExtended(vk)) scan |= 1 << 24;  // the arrows and the block above them, right Ctrl and Alt, numpad /
     if (!GetKeyNameTextW(scan, name, 64)) return F("Key {}", {std::to_string(vk)});
     return Utf8(name);
+}
+
+// an input's keys by their names, "K / Space"; "-" for none
+std::string KeysName(const std::array<uint16_t, 2>& keys) {
+    std::string out;
+    for (uint16_t vk : keys)
+        if (vk) out += (out.empty() ? "" : " / ") + KeyName(vk);
+    return out.empty() ? "-" : out;
 }
 
 // the look: the game's own. Its menus are deep navy, a teal band along the top and steel-blue fog at the right; a
@@ -3432,6 +3483,7 @@ public:
         ImGui::EndChild();
         ImGui::PopStyleVar();
         ImGui::End();
+        KeyNavigation();
         AutoSave();
         g_marks.Write(page_);
         // the update is in place: the new launcher takes over and this one closes
@@ -3467,7 +3519,13 @@ private:
                std::to_string(s.frame_generation) + "|" + std::to_string(s.menu_spread) + std::to_string(s.antialiasing) +
                std::to_string(s.upscaling) + std::to_string(s.ambient_occlusion) + std::to_string(s.surface_depth) + std::to_string(s.ray_tracing) + "|" + std::to_string(s.rt_lighting) + std::to_string(s.rt_quality) + "|" +
                std::to_string(s.sharpening) + "|" + std::to_string(s.hd_movies) + std::to_string(s.movie_view) + "|" +
-               std::to_string(s.update_check);
+               std::to_string(s.update_check) + "|" + KeysSnapshot();
+    }
+
+    std::string KeysSnapshot() const {
+        std::string out;
+        for (const auto& k : settings_.keys) out += std::to_string(k[0]) + "," + std::to_string(k[1]) + ";";
+        return out;
     }
 
     void AutoSave() {
@@ -4392,48 +4450,156 @@ private:
                                             "straight along it."), true);
         Segmented<bool>("stick", settings_.ps2_stick, {true, false}, {"PS2", "Xbox"});
         EndSetting();
-        BeginSetting(T("Invert camera left / right"), T("The right stick and the arrow keys turn the camera the other way."));
+        BeginSetting(T("Invert camera left / right"), T("The right stick and the camera's keys turn the camera the other way."));
         ToggleRight("invx", settings_.invert_camera_x);
         EndSetting();
-        BeginSetting(T("Invert camera up / down"), T("The right stick and the arrow keys move the camera the other way up "
+        BeginSetting(T("Invert camera up / down"), T("The right stick and the camera's keys move the camera the other way up "
                                                      "and down."));
         ToggleRight("invy", settings_.invert_camera_y);
         EndSetting();
-        BeginSetting(T("Sprint"), T("Click the left stick in (L3), or press Left Shift, while Hector walks: he sprints "
-                                    "at this speed until you let go of the stick. Only his walk is faster: enemies, his "
-                                    "dodge, jumps and attacks keep their speed."));
+        std::string sprint = F("Click the left stick in (L3), or press {}, while Hector walks: he sprints at this speed "
+                               "until you let go of the stick. Only his walk is faster: enemies, his dodge, jumps and "
+                               "attacks keep their speed.", {KeysName(settings_.keys[cv::kKeySprint])});
+        BeginSetting(T("Sprint"), sprint.c_str());
         Segmented<uint32_t>("sprint", settings_.sprint, {0, 125, 150, 200}, {T("Off"), "1.25x", "1.5x", "2x"});
         EndSetting();
-        BeginSetting(T("Speed-up"), T("Click the right stick in (R3), or press Tab: the whole game runs at this speed "
-                                      "until you click it again. A sign at the screen's top right shows it is on."));
+        std::string speed = F("Click the right stick in (R3), or press {}: the whole game runs at this speed until you "
+                              "click it again. A sign at the screen's top right shows it is on.",
+                              {KeysName(settings_.keys[cv::kKeySpeedUp])});
+        BeginSetting(T("Speed-up"), speed.c_str());
         Segmented<uint32_t>("speedup", settings_.speed_up, {0, 2, 4}, {T("Off"), "2x", "4x"});
         EndSetting();
+        std::string title = F("Hold both for a second ({} and {} on the keyboard): the game starts again at its title "
+                              "screen, as a console's reset does. Anything not saved is lost.",
+                              {KeysName(settings_.keys[cv::kKeyStart]), KeysName(settings_.keys[cv::kKeyBack])});
         BeginSetting(settings_.button_layout == 1 ? T("Select + Start: back to the title") : T("Back + Start: back to the title"),
-                     T("Hold both for a second (Enter and Backspace on the keyboard): the game starts again at its title "
-                       "screen, as a console's reset does. Anything not saved is lost."));
+                     title.c_str());
         ToggleRight("title", settings_.title_combo);
         EndSetting();
         EndCard();
         BeginCard("keys");
-        // the keys by their names on a keyboard, the controller's buttons (B, Y, Start, Back) by the Xbox's
-        std::string menu = KeyName(settings_.menu_key);
-        const char* kKeys[][2] = {
-            {"W A S D", T("Move")},       {T("Arrows"), T("Camera")}, {T("K / Space"), T("Jump (A)")}, {"J", T("Attack (X)")},
-            {"L", "B"},                   {"I", "Y"},                 {"Q / E", T("Triggers")},        {"Z / C", T("White / Black")},
-            {T("Enter"), "Start"},        {T("Backspace"), "Back"},   {"Num 8 2 4 6", T("D-pad")},     {menu.c_str(), T("Settings menu")},
-            {T("Left Shift"), T("Sprint")}, {"Tab", T("Speed-up")},
-        };
-        if (ImGui::BeginTable("keys", 4, ImGuiTableFlags_SizingStretchProp)) {
-            for (auto& k : kKeys) {
-                ImGui::TableNextColumn();
-                Keycap(k[0]);
-                ImGui::TableNextColumn();
-                ImGui::SetCursorPosY(ImGui::GetCursorPosY() + S(3));
-                ImGui::TextUnformatted(k[1]);
-            }
-            ImGui::EndTable();
-        }
+        KeysCard();
         EndCard();
+    }
+
+    // the keyboard's keys (common/keys.h): each input's two as keycaps; one clicked waits for the key to put there
+    // (TakeKey), one right-clicked is cleared
+    void KeysCard() {
+        Text(g_semi, kText, T("Keyboard"));
+        Wrapped(g_small, kMuted, T("Click a key, then press the one to use instead. Escape cancels, a right-click clears "
+                                   "it, and a key given to one action leaves the one that had it. The buttons are named by "
+                                   "what the game's own controller settings (in its Options) have them do at first: "
+                                   "change those there, and each key keeps its button."));
+        ImGui::Dummy({0, S(6)});
+        if (key_input_ >= 0) TakeKey();
+        // the labels of the inputs, as words.h has them (a label without a row there does not compile)
+        static constexpr words::Key kLabels[cv::kKeyInputCount] = {
+            "Move up", "Move down", "Move left", "Move right", "Camera up", "Camera down", "Camera left", "Camera right",
+            "Jump (A)", "Attack (X)", "Ability (Y)", "Final attack / Confirm (B)", "Guard (RT)", "Camera reset (LT)",
+            "Change lock-on (LB)", "Lock-on on / off (RB)", "Start", "Back", "D-pad up", "D-pad down", "D-pad left",
+            "D-pad right", "Sprint (L3)", "Speed-up (R3)"};
+        bool over_key = false;  // the pointer over a keycap: a click elsewhere stops the wait
+        float slot = S(150), gap = S(8);
+        for (const auto& column : cv::kKeyColumns) {
+            for (cv::KeyInput in : column) {
+                const char* label = in == cv::kKeyBack && settings_.button_layout == 1 ? "Select" : T(kLabels[in]);
+                float y = ImGui::GetCursorPosY();
+                ImGui::SetCursorPosY(y + S(5));
+                ImGui::TextUnformatted(label);
+                ImGui::SameLine(ImGui::GetContentRegionMax().x - 2 * slot - gap);
+                ImGui::SetCursorPosY(y);
+                over_key |= KeySlot(in, 0, slot);
+                ImGui::SameLine(0, gap);
+                ImGui::SetCursorPosY(y);
+                over_key |= KeySlot(in, 1, slot);
+            }
+            ImGui::Dummy({0, S(8)});
+        }
+        if (key_input_ >= 0 && !over_key && (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right)))
+            key_input_ = -1;
+        // the settings menu's own key, the Game page's
+        float y = ImGui::GetCursorPosY();
+        ImGui::SetCursorPosY(y + S(3));
+        ImGui::TextUnformatted(T("Settings menu"));
+        ImGui::SameLine(ImGui::GetContentRegionMax().x - 2 * slot - gap);
+        ImGui::SetCursorPosY(y);
+        Keycap((KeyName(settings_.menu_key) + "  |  L3 + R3").c_str());
+        ImGui::Dummy({0, S(4)});
+        if (Button(T("Default keys"), {0, 0}, Kind::Secondary)) {
+            settings_.keys = DefaultKeys();
+            key_input_ = -1;
+        }
+    }
+
+    // one of an input's keys as a keycap: its name, "-" for none, and the green bar while it waits for a key; true
+    // when the pointer is over it
+    bool KeySlot(cv::KeyInput in, int which, float width) {
+        uint16_t vk = settings_.keys[in][which];
+        bool waiting = key_input_ == in && key_slot_ == which;
+        std::string id = std::string("key.") + cv::kKeyInputs[in].name + "." + std::to_string(which);
+        std::string text = waiting ? T("Press a key") : vk ? KeyName(vk) : "-";
+        ImVec2 size{width, S(30)};
+        ImVec2 a = ImGui::GetCursorScreenPos();
+        bool clicked = ImGui::InvisibleButton(id.c_str(), size);
+        g_marks.Mark(id);
+        bool hover = ImGui::IsItemHovered();
+        float t = Ease(ImGui::GetItemID(), waiting, 16);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        dl->AddRectFilled(a + ImVec2(0, S(2)), a + size + ImVec2(0, S(2)), Rgb(0, 2, 12));
+        dl->AddRectFilledMultiColor(a, a + size, hover ? kCardHi : Rgb(8, 22, 66), hover ? kCardHi : Rgb(8, 22, 66),
+                                    Rgb(4, 14, 50), Rgb(4, 14, 50));
+        if (t > 0.01f) dl->AddRectFilled(a, a + size, Fade(Mix(kAccentLo, kAccent, 0.5f), 0.85f * t));
+        dl->AddRect(a, a + size, waiting ? kAccentHi : hover ? kLineHi : kLine);
+        ImGui::PushFont(g_semi);
+        ImVec2 ts = ImGui::CalcTextSize(text.c_str());
+        ImVec2 tp = a + ImVec2(std::max(S(6), (size.x - ts.x) * 0.5f), (size.y - ts.y) * 0.5f);
+        dl->PushClipRect(a, a + size, true);
+        dl->AddText(tp, vk || waiting ? kText : kMuted, text.c_str());
+        dl->PopClipRect();
+        ImGui::PopFont();
+        if (clicked) {
+            key_input_ = in;
+            key_slot_ = which;
+            g_key_pressed = 0;  // a key from before the click is not the one
+        }
+        if (hover && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            settings_.keys[in][which] = 0;
+            if (waiting) key_input_ = -1;
+        }
+        return hover;
+    }
+
+    // the key pressed for the one waiting: Escape stops the wait, the settings menu's key is not taken, a key another
+    // input has leaves it
+    void TakeKey() {
+        uint32_t vk = g_key_pressed.exchange(0);
+        if (!vk) return;
+        if (vk == VK_ESCAPE) {
+            key_input_ = -1;
+            return;
+        }
+        if (!cv::KeyBindable(vk)) return;
+        if (vk == settings_.menu_key) {
+            Note(F("{} opens the settings menu: choose another key.", {KeyName(vk)}));
+            return;
+        }
+        for (auto& keys : settings_.keys)
+            for (uint16_t& k : keys)
+                if (k == vk) k = 0;
+        settings_.keys[key_input_][key_slot_] = uint16_t(vk);
+        key_input_ = -1;
+        key_held_ = vk;
+    }
+
+    // the keyboard is the page's to move through and press with, but while a key is waited for and while the one
+    // just taken is still held (Space and Enter would press the keycap again, the arrows move off it)
+    void KeyNavigation() {
+        if (page_ != kControls) key_input_ = -1;  // another page: the wait is over
+        if (key_held_ && !(GetAsyncKeyState(int(key_held_)) & 0x8000)) key_held_ = 0;
+        g_key_waiting = key_input_ >= 0;
+        ImGuiIO& io = ImGui::GetIO();
+        if (g_key_waiting || key_held_) io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
+        else io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
     }
 
     void FilesPage() {
@@ -4659,6 +4825,8 @@ private:
     std::vector<cv::TranslationPack> packs_;  // the fan translations in mods (common/translation_packs.h)
     int page_ = 0;
     int page_scrolled_ = 0;  // the page the page area's scroll belongs to
+    int key_input_ = -1, key_slot_ = 0;  // the key the Controls page waits for: its input (common/keys.h), which of its two
+    uint32_t key_held_ = 0;              // the key just taken, while it is held (KeyNavigation)
 };
 
 Launcher* g_launcher = nullptr;
@@ -4927,7 +5095,8 @@ int main(int argc, char** argv) {
             linuxapp::ImGuiEvent(e);
             if (e.type == SDL_EVENT_QUIT || e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) running = false;
             if (e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) g_activated = true;
-            if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
+            if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) g_key_pressed = uint32_t(linuxapp::VirtualKey(e.key.scancode));
+            if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && !g_key_waiting &&
                 (e.key.key == SDLK_F11 || (e.key.key == SDLK_RETURN && (e.key.mod & SDL_KMOD_ALT))))
                 g_toggle_full = true;
             if (e.type == SDL_EVENT_GAMEPAD_ADDED && !pad) pad = SDL_OpenGamepad(e.gdevice.which);

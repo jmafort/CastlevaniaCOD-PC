@@ -103,6 +103,8 @@ On top of Pazzi7054's port:
 - **Play time by the clock** - the pause menu's Time counts the real time played at any speed and frame rate (the
   game counted frames), up to 999:59:59 rather than 99:59:59, with its hours shown whole.
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
+- **Keyboard keys of your choice** - every key the keyboard plays with can be changed on the launcher's Controls page,
+  two keys for each action. See [Keyboard](#keyboard).
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
 - **Launcher in seven languages** - English, Deutsch, Español, Français, Italiano, Português (Brasil) and Русский,
@@ -308,7 +310,7 @@ European `default.xbe` by its hash, or a disc image, each copy named by its rele
 you (a hard link on the same drive, otherwise a copy), and has every setting: the graphics card (Automatic, the
 fastest, or any with Direct3D 12: on a laptop the one in the processor saves battery), display mode, resolution,
 v-sync, widescreen, render scale, anisotropic filtering with quick presets, the HD texture pack, FPS counter, pause on
-focus loss, the settings menu key, the button layout and the European release's language. Changes are saved as you
+focus loss, the settings menu key, the button layout, the keyboard's keys and the European release's language. Changes are saved as you
 make them; **Play** starts the game, with the executable of the release it found. With copies of both releases in
 `assets`, a list beside **Play** chooses which one it starts (`release = "CastlevaniaEU"` or `"Castlevania"` in
 `castlevania.toml`, which `Castlevania` and `CastlevaniaEU` started by themselves follow too, handing the game to the
@@ -599,19 +601,19 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   straight along them (within 20 degrees at full tilt, 42 at half), and a walk starts at a third of his speed. The
   PS2 setting lets the axes through as the PS2 did, and the game's own round dead zone counts: he walks any way the
   stick points, from a slow walk up (the in-game menu's Controls page; `ps2_stick = false` for the Xbox's).
-- **Invert Camera** - Left / right and up / down apart: the right stick (and the arrow keys) move the camera the other
-  way (`invert_camera_x`, `invert_camera_y`).
+- **Invert Camera** - Left / right and up / down apart: the right stick (and the camera's keys) move the camera the
+  other way (`invert_camera_x`, `invert_camera_y`).
 - **Rumble** - As on the PS2: the game drives a PS2 controller's two motors, the large one at 256 speeds and the
   small one on or off. The Xbox release made both of the controller's motors one value from either, so the small
   motor's "on" (1 of 255) that the game sends right after the large one's speed left nearly nothing; on the console
   the large one's still got out first, as its requests were slower. Here the large motor drives the left (heavy)
   motor and the small one the right, and the controller gets the motors as each frame leaves them.
-- **Sprint** - Click the left stick in (L3), or press Left Shift, while Hector walks: he sprints until you let go of
+- **Sprint** - Click the left stick in (L3), or press its key (Left Shift at first), while Hector walks: he sprints until you let go of
   the stick, at 1.25, 1.5 or 2 times his walk (off by default; the launcher's or the in-game menu's Controls page;
   `sprint = 150`). Only his walk speeds up, its animation with it, so his steps keep up with the ground: his guarded
   walk, the dodge, jumps and attacks, every enemy and the game's clock keep their pace. The game has no use of its own
   for the stick's click, in either button layout; L3 with R3 is still the settings menu.
-- **Speed-up** - Click the right stick in (R3), or press Tab: the whole game runs at 2x (the default) or 4x until you
+- **Speed-up** - Click the right stick in (R3), or press its key (Tab at first): the whole game runs at 2x (the default) or 4x until you
   click it again (the launcher's or the in-game menu's Controls page; `speed_up = 4`, or `0` for no speed-up). A
   fast-forward sign and the speed show at the screen's top right while it is on, and every start begins at the game's
   own speed. The game steps two or four times for each frame the screen shows: the frames in between are worked out
@@ -630,24 +632,40 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   not saved is lost. While both are held the game gets neither button, so its pause menu and map do not open first.
 
 ### Keyboard
-The keyboard plays as player 1 while the window is in front:
+The keyboard plays as player 1 while the window is in front, alongside a controller. Its keys at first:
 
-| Keys | Pad |
-|---|---|
-| W A S D | left stick (move) |
-| arrow keys | right stick (camera) |
-| K or Space | A (jump) |
-| J | X (attack) |
-| L | B |
-| I | Y |
-| Q / E | left / right trigger |
-| Z / C | white / black |
-| Enter / Backspace | Start / Back |
-| numpad 8 2 4 6 | d-pad |
-| Left Shift | sprint (L3 on a controller) |
-| Tab | speed-up (R3 on a controller) |
-| Enter + Backspace, held | back to the title, with the setting on (Start + Back on a controller) |
-| F10 (changeable) | settings menu (L3 + R3 on a controller) |
+| Keys | Pad | What the game has the button do at first |
+|---|---|---|
+| W A S D | left stick | move |
+| arrow keys | right stick | camera |
+| K or Space | A | jump |
+| J | X | attack |
+| I | Y | ability |
+| L | B | final attack, confirm |
+| E | right trigger | guard |
+| Q | left trigger | camera reset |
+| Z | white (LB) | change lock-on |
+| C | black (RB) | lock-on on / off |
+| Enter / Backspace | Start / Back | |
+| numpad 8 2 4 6 | d-pad | |
+| Left Shift | L3 | sprint |
+| Tab | R3 | speed-up |
+| Enter + Backspace, held | Start + Back | back to the title, with the setting on |
+| F10 (changeable on the Game page) | L3 + R3 | settings menu |
+
+Every one of them can be changed on the launcher's Controls page, two keys for each: click a key, then press the one
+to use instead (Escape cancels, a right-click clears a key). A key given to one action leaves the action that had it,
+**Default keys** puts them all back, and **Reset to defaults** does too. The settings menu's key is not taken: it
+stays the menu's. The settings menu's Controls page lists the keys as they are. A key changed is saved in
+`castlevania.toml` as `key_<name> = [first, second]` (Windows virtual key codes, the same numbers on Linux; 0 for
+none), the ones left at their defaults not written: `key_move_up`, `key_move_down`, `key_move_left`, `key_move_right`,
+`key_camera_up` (and down, left, right), `key_a`, `key_x`, `key_y`, `key_b`, `key_rt`, `key_lt`, `key_white`,
+`key_black`, `key_start`, `key_back`, `key_dpad_up` (and down, left, right), `key_sprint` and `key_speed_up`. With the
+launcher kept open beside the game, a key changed there reaches the game at once.
+
+The keys press the controller's buttons, and the game's own Controller Config (in its Options) decides what each
+button does: change an action's button there, and its key goes with the button. That menu is also where a controller's
+buttons are changed.
 
 ### Miscellaneous
 - **Boot Splash** - Place a `splash.png` (or `.bmp`) beside the exe to display a splash screen at launch.

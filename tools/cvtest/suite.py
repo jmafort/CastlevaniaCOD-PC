@@ -211,6 +211,9 @@ def tests():
         scenario("lock-twin"),
         scenario("menu", quick=True),
         scenario("menu-pad"),
+        # 1.11.0: the keyboard's keys the launcher changed (common/keys.h): read at the start, listed in the settings
+        # menu, changed while the game runs, kept when the menu saves; pressed, on Linux (keys-remap, below)
+        scenario("keys-menu"),
         # Hector's sprint, by a controller in both button layouts and both releases, and by the keyboard (Linux)
         scenario("sprint", quick=True),
         scenario("sprint", "--set", "button_layout=1", test="sprint-ps2"),
@@ -272,6 +275,7 @@ def tests():
         # Linux only: on Windows they would take the PC's own screen and keyboard
         scenario("display", env={"CV_WAYLAND": "1"}, platforms=["linux"]),
         scenario("keyboard", platforms=["linux"]),
+        scenario("keys-remap", platforms=["linux"]),
         scenario("wayland", env={"CV_WAYLAND": "1"}, platforms=["linux"]),
         scenario("fps"),
         scenario("fps", "--set", "fps_cap=0", "--set", "vsync=false", test="fps-uncapped"),

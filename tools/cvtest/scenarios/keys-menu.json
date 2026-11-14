@@ -1,0 +1,107 @@
+{
+  "name": "keys-menu",
+  "after": "newgame.json",
+  "settings": {
+    "key_a": [
+      74,
+      32
+    ],
+    "key_x": [
+      75,
+      0
+    ],
+    "key_y": [
+      0,
+      0
+    ],
+    "key_lt": [
+      164,
+      0
+    ]
+  },
+  "note": "The keyboard's keys the launcher changed (src/common/keys.h: key_<name> = [first, second] in the settings file, those not there at their defaults), on both platforms: read at the game's start and logged; listed on the settings menu's Controls page as they are (J and Space jump, K attacks, Y has none, Left Alt the left trigger, the rest their defaults); changed in the file while the game runs, as the launcher kept open beside it changes them (one changed, one put back to its defaults by its line taken out), at once in the menu; a setting changed in the menu saves the file with the keys kept. The keys pressed are keys-remap's (Linux).",
+  "steps": [
+    {
+      "press": "0f:wait:5f",
+      "note": "the keys read at the start",
+      "expect": [
+        "found(runlog, r'keyboard: key_a = 74, 32$')",
+        "found(runlog, r'keyboard: key_x = 75, 0$')",
+        "found(runlog, r'keyboard: key_y = 0, 0$')",
+        "found(runlog, r'keyboard: key_lt = 164, 0$')",
+        "not found(runlog, r'keyboard: key_b ')"
+      ]
+    },
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "expect": [
+        "settings_menu"
+      ]
+    },
+    {
+      "click": "tab.Controls",
+      "press": "0f:wait:10f",
+      "shot": "controls",
+      "expect": [
+        "'key.a=j / space' in [c.lower() for c in menu_controls]",
+        "'key.x=k' in [c.lower() for c in menu_controls]",
+        "'key.y=' in menu_controls",
+        "any(c.startswith('key.lt=') and 'alt' in c.lower() for c in menu_controls)",
+        "'key.b=l' in [c.lower() for c in menu_controls]",
+        "'key.move_up=w' in [c.lower() for c in menu_controls]",
+        "'key.white=z' in [c.lower() for c in menu_controls]"
+      ]
+    },
+    {
+      "settings_file": {
+        "key_x": [
+          80,
+          0
+        ],
+        "key_a": null
+      },
+      "press": "0f:wait:90f",
+      "shot": "changed",
+      "note": "the launcher kept open: attack to P, jump back to its defaults",
+      "expect": [
+        "found(log, r'keyboard: key_x = 80, 0$')",
+        "found(log, r'keyboard: key_a = 75, 32 \\(its defaults\\)')",
+        "'key.x=p' in [c.lower() for c in menu_controls]",
+        "'key.a=k / space' in [c.lower() for c in menu_controls]"
+      ]
+    },
+    {
+      "press": "0:menuscroll,0f:wait:10f",
+      "shot": "keys-list",
+      "note": "the list of keys, the page scrolled to its end",
+      "expect": [
+        "settings_menu"
+      ]
+    },
+    {
+      "click": "tab.Game",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'fpsc' in menu_controls"
+      ]
+    },
+    {
+      "click": "fpsc",
+      "press": "0f:wait:10f",
+      "expect": [
+        "saved.fps_counter == True",
+        "saved.key_x == [80, 0]",
+        "saved.key_lt == [164, 0]",
+        "saved.key_y == [0, 0]",
+        "saved.key_a is None"
+      ]
+    },
+    {
+      "click": "Close",
+      "press": "0f:wait:20f",
+      "expect": [
+        "not settings_menu"
+      ]
+    }
+  ]
+}

@@ -16,6 +16,9 @@ and the game on a virtual X display of their own), with each disc linked into it
   - every page in every language: each opens (--page) with its controls, a picture of each for the report
   - settings: the display mode, widescreen, render scale, filtering, the FPS counter and the button layout clicked
     and saved as the game reads them; Reset to defaults puts them back, the language and the release kept
+  - the keyboard's keys (Controls): a key clicked takes the next key pressed, saved as the game reads it; a key
+    another action had leaves it; Escape stops the wait; the settings menu's key is not taken; Shift by its side; a
+    right-click clears a key; another page ends the wait; Default keys, and Reset to defaults, put them all back
   - a fan translation in mods (a catalog of no texts, as PTBR-PS2): listed on the Game page, chosen, its dub off
   - the HD texture pack's row: none in the textures folder, then three pictures found and in use, switched off
   - the Game files page: each copy's verdict (the USA release's patched xiso, the European one, another release's
@@ -24,7 +27,8 @@ and the game on a virtual X display of their own), with each disc linked into it
   - the game executables follow the setting (the SDK's Settings::release): Castlevania with the European release
     chosen hands the game to CastlevaniaEU, CastlevaniaEU with the USA one chosen to Castlevania, and with none chosen
     Castlevania plays the USA disc itself
-The launcher is driven with window messages (Windows) or the virtual display's pointer (Linux), never the real mouse;
+The launcher is driven with window messages (Windows) or the virtual display's pointer and keys (Linux), never the
+real mouse or keyboard;
 it says where its controls are through CV_LAUNCHER_STATE. A game started is ended once its log says which disc it
 plays, at its first start, before it builds anything. The report is in out/test/launcher-<time>; the install is deleted after a run that passed,
 unless --keep.
@@ -177,6 +181,39 @@ class Launcher:
     def close(self):
         end_family(self.proc.pid)
         self.proc.wait(timeout=10)
+
+
+def press_key(win, vk, scan, xname):
+    """a key pressed and let go in the launcher's window: its messages posted (Windows: the virtual key and scan code
+    a keyboard sends), the virtual display's key (Linux: its X11 name)"""
+    if LINUX:
+        subprocess.run(["xdotool", "windowfocus", "--sync", str(win)], capture_output=True)
+        subprocess.run(["xdotool", "key", "--window", str(win), xname], capture_output=True)
+        return
+    import ctypes
+    user32 = ctypes.WinDLL("user32")
+    user32.PostMessageW(win, 0x0100, vk, (scan << 16) | 1)  # WM_KEYDOWN
+    user32.PostMessageW(win, 0x0101, vk, (scan << 16) | 0xC0000001)  # WM_KEYUP
+
+
+def right_click(win, rect):
+    """a right click in the middle of a control's rectangle: window messages (Windows), the virtual display's
+    pointer (Linux)"""
+    x, y = (rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2
+    if LINUX:
+        subprocess.run(["xdotool", "windowfocus", "--sync", str(win)], capture_output=True)
+        subprocess.run(["xdotool", "mousemove", "--window", str(win), str(x), str(y), "click", "3"], capture_output=True)
+        return
+    import ctypes
+    user32 = ctypes.WinDLL("user32")
+    lp = (y << 16) | (x & 0xFFFF)
+    for msg, wp in ((0x0200, 0), (0x0204, 2), (0x0205, 0)):  # WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP: at once
+        user32.PostMessageW(win, msg, wp, lp)
+
+
+# keys as press_key takes them: virtual key, scan code, X11 name
+KEY_J, KEY_K, KEY_P = (0x4A, 0x24, "j"), (0x4B, 0x25, "k"), (0x50, 0x19, "p")
+KEY_ESCAPE, KEY_F10, KEY_RSHIFT = (0x1B, 0x01, "Escape"), (0x79, 0x44, "F10"), (0x10, 0x36, "Shift_R")
 
 
 def settings(pkg):
@@ -466,6 +503,79 @@ def main():
     set_settings(pkg, translation="", translation_dub=True)
     results.append(result("a translation in mods: listed on the Game page, chosen, its dub switched off (translation.png)",
                           errors))
+
+    # 1.11.0: the keyboard's keys on the Controls page (src/common/keys.h): a key clicked waits for the next key
+    # pressed, saved as the game reads it (key_<name> = [first, second], only those not at their defaults)
+    errors = []
+    la = Launcher(pkg, env, out, ["--page", "controls"])
+
+    def keys_saved():
+        return {k: v for k, v in settings(pkg).items() if k.startswith("key_")}
+
+    def take(control, key, want, what):
+        """control clicked, then key pressed: the keys saved as want"""
+        if not la.click(control):
+            errors.append(f"{what}: {control} could not be clicked")
+            return
+        time.sleep(0.3)
+        press_key(la.win, *key)
+        if not wait(lambda: keys_saved() == want, 4):
+            errors.append(f"{what}: the keys saved are {keys_saved()}, not {want}")
+
+    def kept(want, what):
+        time.sleep(1.0)
+        if keys_saved() != want:
+            errors.append(f"{what}: the keys saved are {keys_saved()}, not {want}")
+
+    # J for jump's first key: attack, which had it, left with none; jump keeps Space
+    take("key.a.0", KEY_J, {"key_a": [74, 32], "key_x": [0, 0]}, "J for jump")
+    la.shot("keys-taken")
+    # Escape stops the wait: the K after it changes nothing
+    if la.click("key.x.0"):
+        time.sleep(0.3)
+        press_key(la.win, *KEY_ESCAPE)
+        time.sleep(0.3)
+        press_key(la.win, *KEY_K)
+        kept({"key_a": [74, 32], "key_x": [0, 0]}, "Escape, then K")
+    # the settings menu's key (F10) is not taken, the wait goes on; the right Shift then is, by its side
+    if la.click("key.x.1"):
+        time.sleep(0.3)
+        press_key(la.win, *KEY_F10)
+        kept({"key_a": [74, 32], "key_x": [0, 0]}, "F10 for attack")
+        press_key(la.win, *KEY_RSHIFT)
+        if not wait(lambda: keys_saved().get("key_x") == [0, 161], 4):
+            errors.append(f"right Shift for attack: the keys saved are {keys_saved()}")
+    # a right-click clears jump's Space (the keycap in sight first: clicked, its wait stopped)
+    if la.click("key.a.1"):
+        time.sleep(0.3)
+        press_key(la.win, *KEY_ESCAPE)
+        time.sleep(0.5)
+        rect = la.control("key.a.1")
+        if rect:
+            right_click(la.win, rect)
+        if not rect or not wait(lambda: keys_saved().get("key_a") == [74, 0], 4):
+            errors.append(f"a right-click on jump's Space: the keys saved are {keys_saved()}")
+    la.shot("keys-changed")
+    # another page opened while a key waits: the wait is over, a key pressed there or after is not taken
+    if la.click("key.y.0"):
+        time.sleep(0.3)
+        if la.click("page.5") and wait(lambda: la.read().get("page") == 5, 4):
+            press_key(la.win, *KEY_K)
+            time.sleep(0.5)
+            if not (la.click("page.6") and wait(lambda: la.read().get("page") == 6, 4)):
+                errors.append("the Controls page did not open again")
+            kept({"key_a": [74, 0], "key_x": [0, 161]}, "a key pressed on the Game page after Y's key was clicked")
+        else:
+            errors.append("the Game page did not open")
+    if not la.set_by_click("Default keys", lambda: keys_saved() == {}):
+        errors.append(f"Default keys: the keys saved are {keys_saved()}")
+    take("key.b.0", KEY_P, {"key_b": [80, 0]}, "P for B")
+    if not la.set_by_click("Reset to defaults", lambda: keys_saved() == {}):
+        errors.append(f"Reset to defaults: the keys saved are {keys_saved()}")
+    la.close()
+    results.append(result("the keyboard's keys: taken from a key pressed, saved as the game reads them, moved from the "
+                          "action that had one, Escape and the menu's key not taken, cleared by a right-click, put back "
+                          "by Default keys and Reset to defaults (keys-taken.png, keys-changed.png)", errors))
 
     # the HD texture pack's row
     errors = []

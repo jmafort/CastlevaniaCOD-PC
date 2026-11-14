@@ -1,0 +1,107 @@
+{
+  "name": "keys-remap",
+  "after": "newgame.json",
+  "platforms": [
+    "linux"
+  ],
+  "settings": {
+    "key_a": [
+      74,
+      0
+    ],
+    "key_x": [
+      75,
+      0
+    ],
+    "key_y": [
+      164,
+      0
+    ],
+    "key_move_up": [
+      38,
+      0
+    ],
+    "key_camera_up": [
+      87,
+      0
+    ]
+  },
+  "note": "The keyboard's keys changed (src/common/keys.h), held as the keyboard sends them (Linux only: on Windows the game reads the keyboard's state, which only a real key sets): J jumps (A) and Space no longer does, K attacks (X) and J no longer does, Left Alt presses Y, the up arrow walks Hector and W turns the camera instead; B's key changed while the game runs (the live set=, as the settings menu would) takes at once, its old key no longer presses it.",
+  "steps": [
+    {
+      "keys": "j",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'a' in pad.held.split('+')",
+        "'x' not in pad.held.split('+')"
+      ]
+    },
+    {
+      "keys": "k",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'x' in pad.held.split('+')",
+        "'a' not in pad.held.split('+')"
+      ]
+    },
+    {
+      "keys": "space",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'a' not in pad.held.split('+')"
+      ]
+    },
+    {
+      "keys": "Alt_L",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'y' in pad.held.split('+')"
+      ]
+    },
+    {
+      "keys": "w",
+      "press": "0f:wait:10f",
+      "expect": [
+        "pad.ry > 30000",
+        "pad.ly == 0"
+      ]
+    },
+    {
+      "keys": "Right",
+      "press": "0f:wait:10f",
+      "expect": [
+        "pad.rx > 30000"
+      ]
+    },
+    {
+      "keys": "Up",
+      "press": "0f:wait:40f",
+      "shot": "walk",
+      "expect": [
+        "pad.ly > 30000",
+        "pad.ry == 0",
+        "((player.pos[0] - prev.player.pos[0]) ** 2 + (player.pos[2] - prev.player.pos[2]) ** 2) ** 0.5 > 200"
+      ]
+    },
+    {
+      "press": "0:set=key_b=80/0,0f:wait:5f",
+      "expect": [
+        "found(log, r'keyboard: key_b = 80, 0$')"
+      ]
+    },
+    {
+      "keys": "p",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'b' in pad.held.split('+')"
+      ]
+    },
+    {
+      "keys": "l",
+      "press": "0f:wait:10f",
+      "expect": [
+        "'b' not in pad.held.split('+')"
+      ]
+    }
+  ]
+}

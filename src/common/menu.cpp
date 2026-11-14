@@ -22,12 +22,16 @@
 #include <imgui.h>
 
 #include "app/app.h"
+#include "common/keys.h"
 #include "common/marks.h"
 #include "common/translation_packs.h"
 #include "core/log.h"
 #include "core/input.h"
 #include "gpu/backend.h"
 #include "gpu/raytrace.h"
+
+uint32_t KeysOf(int input);  // keyboard.cpp: the keyboard's keys of an input (keys.h), first | second << 16
+bool KeyBound(uint32_t vk);  // keyboard.cpp: a key some input has
 
 // game settings beside the runtime's, in the settings file (game_info.cpp lists them)
 bool g_fps_counter = false;
@@ -94,6 +98,7 @@ int g_click_wait = -1;  // frames waited for the control, -1 none to click
 app::FrameGenState g_fg_seen;  // frame generation's last state while it was generating (the menu pauses it)
 
 std::string KeyName(uint32_t vk);  // the key as the keyboard labels it
+std::string KeysText(int input);   // an input's keys so (keys.h), "K / Space"
 
 struct Res {
     uint32_t w, h;
@@ -598,52 +603,60 @@ void ControlsTab(bool& save) {
         save |= Choice<bool>("##stick", g_ps2_stick, {true, false}, {"PS2", "Xbox"});
         ImGui::EndTable();
     }
+    // the keyboard's keys as they are set (keys.h), in the words: ", or press Left Shift," and none when it has none
+    auto or_press = [](int input, const char* after) {
+        std::string keys = KeysText(input);
+        return keys.empty() ? std::string(after + (after[0] == ',' ? 1 : 0)) : ", or press " + keys + after;
+    };
     if (Section("Camera", "camstick")) {
-        Row("Invert camera left / right", "The right stick (and the arrow keys) turn the camera the other way across.");
+        Row("Invert camera left / right", "The right stick (and the camera's keys) turn the camera the other way across.");
         save |= Check("##invx", &g_invert_camera_x);
-        Row("Invert camera up / down", "The right stick (and the arrow keys) move the camera the other way up and down.");
+        Row("Invert camera up / down", "The right stick (and the camera's keys) move the camera the other way up and down.");
         save |= Check("##invy", &g_invert_camera_y);
         ImGui::EndTable();
     }
     if (Section("Movement", "move")) {
-        Row("Sprint", "Click the left stick in (L3), or press Left Shift, while Hector walks: he sprints at this speed "
-                      "until you let go of the stick. Only his walk is faster: enemies, his dodge, jumps and attacks "
-                      "keep their speed.");
+        std::string sprint = "Click the left stick in (L3)" + or_press(cv::kKeySprint, ",") +
+                             " while Hector walks: he sprints at this speed until you let go of the stick. Only his "
+                             "walk is faster: enemies, his dodge, jumps and attacks keep their speed.";
+        Row("Sprint", sprint.c_str());
         save |= Choice<uint32_t>("##sprint", g_sprint, {0, 125, 150, 200}, {"Off", "1.25x", "1.5x", "2x"});
-        Row("Speed-up", "Click the right stick in (R3), or press Tab: the whole game runs at this speed until you "
-                        "click it again. A sign at the screen's top right shows it is on.");
+        std::string speed = "Click the right stick in (R3)" + or_press(cv::kKeySpeedUp, "") +
+                            ": the whole game runs at this speed until you click it again. A sign at the screen's top "
+                            "right shows it is on.";
+        Row("Speed-up", speed.c_str());
         save |= Choice<uint32_t>("##speedup", g_speed_up, {0, 2, 4}, {"Off", "2x", "4x"});
-        Row(g_button_layout == 1 ? "Select + Start: back to the title" : "Back + Start: back to the title",
-            "Hold both for a second (Enter and Backspace on the keyboard): the game starts again at its title screen, as "
-            "a console's reset does. Anything not saved is lost.");
+        std::string start = KeysText(cv::kKeyStart), back = KeysText(cv::kKeyBack);
+        std::string title = "Hold both for a second" +
+                            (start.empty() || back.empty() ? std::string() : " (" + start + " and " + back + " on the keyboard)") +
+                            ": the game starts again at its title screen, as a console's reset does. Anything not "
+                            "saved is lost.";
+        Row(g_button_layout == 1 ? "Select + Start: back to the title" : "Back + Start: back to the title", title.c_str());
         save |= Check("##title", &g_title_combo);
         ImGui::EndTable();
     }
     ImGui::Spacing();
     ImGui::SeparatorText("Keyboard");
-    ImGui::TextWrapped("Xbox, PlayStation and Switch controllers work as player 1. The keyboard plays alongside:");
+    ImGui::TextWrapped("Xbox, PlayStation and Switch controllers work as player 1. The keyboard plays alongside, with "
+                       "these keys (the launcher's Controls page changes them). The buttons are named by what the "
+                       "game's Controller Config has them do at first.");
     ImGui::Spacing();
-    static const char* kKeys[][2] = {
-        {"W A S D", "Move"},           {"Arrow keys", "Camera"},   {"K / Space", "A (jump)"},
-        {"J", "X (attack)"},           {"L", "B"},                 {"I", "Y"},
-        {"Q / E", "Left / right trigger"}, {"Z / C", "White / black"}, {"Enter", "Start"},
-        {"Backspace", "Back"},         {"Numpad 8 2 4 6", "D-pad"},
-        {"Left Shift", "Sprint (L3 on a controller)"}, {"Tab", "Speed-up (R3 on a controller)"},
-        {"L3 + R3 (controller)", "This menu"},
-    };
     if (ImGui::BeginTable("keys", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
-        ImGui::TableNextRow();
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted(KeyName(g_menu_key).c_str());
-        ImGui::TableNextColumn();
-        ImGui::TextUnformatted("This menu (change it in the launcher)");
-        for (auto& k : kKeys) {
+        auto row = [](const std::string& keys, const char* what) {
             ImGui::TableNextRow();
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(k[0]);
+            ImGui::TextUnformatted(keys.c_str());
             ImGui::TableNextColumn();
-            ImGui::TextUnformatted(k[1]);
-        }
+            ImGui::TextUnformatted(what);
+        };
+        row(KeyName(g_menu_key), "This menu (change it in the launcher)");
+        for (const auto& column : cv::kKeyColumns)
+            for (cv::KeyInput i : column) {
+                std::string keys = KeysText(i);
+                row(keys.empty() ? "-" : keys, i == cv::kKeyBack && g_button_layout == 1 ? "Select" : cv::kKeyInputs[i].label);
+                g_marks.Mark("key." + std::string(cv::kKeyInputs[i].name) + "=" + keys);  // tests: the keys shown
+            }
+        row("L3 + R3 (controller)", "This menu");
         ImGui::EndTable();
     }
 }
@@ -712,14 +725,37 @@ void Defaults() {
     app::ApplyDisplay();
 }
 
-std::string KeyName(uint32_t vk) {
+// a key as the keyboard labels it, empty when it has no name; looked up once (the menu draws them each frame)
+std::string KeyText(uint32_t vk) {
+    static std::string names[256];
+    static bool asked[256] = {};
+    vk &= 0xFF;
+    if (asked[vk]) return names[vk];
+    asked[vk] = true;
     wchar_t name[64] = {};
     LONG scan = LONG(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)) << 16;
-    // keys of the navigation block share scan codes with the numpad: the extended bit tells them apart
-    if ((vk >= VK_PRIOR && vk <= VK_DOWN) || vk == VK_INSERT || vk == VK_DELETE) scan |= 1 << 24;
-    if (!GetKeyNameTextW(scan, name, 64)) return "F10";
+    // keys of the navigation block share scan codes with the numpad, the right Ctrl and Alt with the left ones: the
+    // extended bit tells them apart
+    if (cv::KeyExtended(vk)) scan |= 1 << 24;
+    if (!GetKeyNameTextW(scan, name, 64)) return "";
     char out[64];
     WideCharToMultiByte(CP_UTF8, 0, name, -1, out, sizeof(out), nullptr, nullptr);
+    return names[vk] = out;
+}
+
+std::string KeyName(uint32_t vk) {
+    std::string name = KeyText(vk);
+    return name.empty() ? "F10" : name;
+}
+
+std::string KeysText(int input) {
+    uint32_t k = KeysOf(input);
+    std::string out;
+    for (uint32_t vk : {k & 0xFFFF, k >> 16}) {
+        if (!vk) continue;
+        std::string name = KeyText(vk);
+        out += (out.empty() ? "" : " / ") + (name.empty() ? "Key " + std::to_string(vk) : name);
+    }
     return out;
 }
 
@@ -815,6 +851,11 @@ bool MenuMessage(void*, uint32_t msg, uintptr_t wp, intptr_t, intptr_t* result) 
     if (msg == WM_CLOSE) g_closing = true;
     bool key = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN || msg == WM_KEYUP || msg == WM_SYSKEYUP;
     if (key && (wp == VK_F10 || wp == g_menu_key || (wp == VK_ESCAPE && g_open))) {
+        *result = 0;
+        return true;
+    }
+    // Alt as a key of the keyboard's (keys.h): not Windows' too, whose menu bar would take the keys after it
+    if ((msg == WM_SYSKEYDOWN || msg == WM_SYSKEYUP) && wp == VK_MENU && (KeyBound(VK_LMENU) || KeyBound(VK_RMENU))) {
         *result = 0;
         return true;
     }

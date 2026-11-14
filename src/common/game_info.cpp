@@ -11,6 +11,7 @@
 void KeyboardWindow(void* hwnd);              // keyboard.cpp
 void KeyboardPad(int port, input::Pad& pad);  // keyboard.cpp
 void KeyboardRumble(int port, uint16_t& left, uint16_t& right);  // keyboard.cpp
+void KeysLoad(const std::string& setting, const std::string& value);  // keyboard.cpp: a keyboard key (common/keys.h)
 bool MenuMessage(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result);  // menu.cpp
 void MenuUi(double fps);                      // menu.cpp
 extern bool g_fps_counter;                    // menu.cpp
@@ -66,6 +67,13 @@ uint32_t g_settings_version = 0;
 void SettingsLoad(const void* table) {
     const toml::table& t = *static_cast<const toml::table*>(table);
     g_translation = t["translation"].value_or(std::string());
+    // the keyboard's keys the launcher changed: key_<name> = [first, second] (common/keys.h)
+    for (auto&& [key, value] : t)
+        if (const toml::array* keys = value.as_array(); keys && key.str().substr(0, 4) == "key_") {
+            std::string text;
+            for (const toml::node& k : *keys) text += std::to_string(std::max<int64_t>(0, k.value_or(int64_t(0)))) + "/";
+            KeysLoad(std::string(key.str()), text);
+        }
     g_settings_version = t["settings_version"].value_or(0u);
     if (g_settings_version >= cv::kSettingsVersion) return;
     uint32_t quality = g_rt_quality;

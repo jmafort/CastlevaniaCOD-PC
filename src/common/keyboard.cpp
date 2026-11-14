@@ -2,6 +2,7 @@
 //
 // The keyboard is read only while the game window is in front, and adds to a real controller on the same port
 // rather than replacing it. Port 1 always reports a controller, so the game can be played with the keyboard alone.
+// Its keys at first (keys.h: the launcher's Controls page changes them, key_<name> in the settings file):
 //
 //   WASD left stick         arrows right stick (camera)    numpad 8 2 4 6 d-pad
 //   K or Space  A (jump)    J  X (attack)                  L  B         I  Y
@@ -41,7 +42,8 @@
 //   0:set=<setting>=<value>           a setting changed at the command's start, as the in-game menu changes it
 //                                     (display_mode, width, height, render_percent, anisotropic_filtering,
 //                                     widescreen, widescreen_aspect, vsync, fps_cap, hdr, hdr_peak_nits,
-//                                     hdr_scene_nits, or a game option such as lament_save): the renderer takes it
+//                                     hdr_scene_nits, a game option such as lament_save, or a keyboard key as
+//                                     key_a=74/32, its two keys' codes, keys.h): the renderer takes it
 //                                     after the frame it presents; hdr_dump=1 has the next HDR frame written to
 //                                     XBE_HDR_DUMP's folder (gpu/d3d12.cpp). One
 //                                     read only at the start (texture_pack_size, button_layout) is an error: give
@@ -74,6 +76,8 @@
 #include "kernel/memory.h"
 #include "audio/audio.h"
 #include "xdk/d3d8.h"
+
+#include "keys.h"
 
 namespace fs = std::filesystem;
 
@@ -118,6 +122,37 @@ enum { kA, kB, kX, kY, kBlack, kWhite, kLT, kRT };
 
 bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
+// each input's two keys (keys.h), first | second << 16: the defaults, then the settings file's at the start
+// (SettingsLoad, game_info.cpp) and as the launcher kept open changes them (SettingsWatch)
+struct Keys {
+    std::atomic<uint32_t> v[cv::kKeyInputCount];
+    static uint32_t Default(int i) { return cv::kKeyInputs[i].keys[0] | uint32_t(cv::kKeyInputs[i].keys[1]) << 16; }
+    Keys() {
+        for (int i = 0; i < cv::kKeyInputCount; i++) v[i] = Default(i);
+    }
+} g_keys;
+
+// one of the input's keys held
+bool KeyDown(int input) {
+    uint32_t k = g_keys.v[input].load(std::memory_order_relaxed);
+    uint32_t first = k & 0xFFFF, second = k >> 16;
+    return (first && Down(int(first))) || (second && Down(int(second)));
+}
+
+// key_<name> = <keys> (keys.h's ParseKeys): that input's keys, logged when not its defaults or changed; false for a
+// setting that is none
+bool SetKeys(const std::string& setting, const std::string& value) {
+    int input = cv::KeyInputOf(setting);
+    if (input < 0) return false;
+    uint16_t k[2];
+    cv::ParseKeys(value, k);
+    uint32_t keys = k[0] | uint32_t(k[1]) << 16;
+    bool defaults = keys == Keys::Default(input);
+    if (g_keys.v[input].exchange(keys) != keys || !defaults)
+        LOGR("keyboard: %s = %u, %u%s", setting.c_str(), k[0], k[1], defaults ? " (its defaults)" : "");
+    return true;
+}
+
 bool Focused() {
     HWND fg = GetForegroundWindow();
     if (!fg || !g_hwnd) return false;
@@ -136,31 +171,33 @@ void Rest(int16_t& x, int16_t& y) {
 // a stick axis the other way: -32768 has no positive, so it goes to 32767
 int16_t Flip(int16_t v) { return int16_t(-std::max<int>(v, -32767)); }
 
-// one stick axis from two keys, full deflection
+// one stick axis from two inputs' keys, full deflection
 int16_t Axis(int neg, int pos) {
-    int v = (Down(pos) ? 32767 : 0) - (Down(neg) ? 32767 : 0);
+    int v = (KeyDown(pos) ? 32767 : 0) - (KeyDown(neg) ? 32767 : 0);
     return int16_t(v);
 }
 
 void Keyboard(input::Pad& p) {
     if (!Focused()) return;
-    if (Down(VK_NUMPAD8)) p.buttons |= kUp;
-    if (Down(VK_NUMPAD2)) p.buttons |= kDown;
-    if (Down(VK_NUMPAD4)) p.buttons |= kLeft;
-    if (Down(VK_NUMPAD6)) p.buttons |= kRight;
-    if (Down(VK_RETURN)) p.buttons |= kStart;
-    if (Down(VK_BACK)) p.buttons |= kBack;
+    using namespace cv;
+    if (KeyDown(kKeyDpadUp)) p.buttons |= kUp;
+    if (KeyDown(kKeyDpadDown)) p.buttons |= kDown;
+    if (KeyDown(kKeyDpadLeft)) p.buttons |= kLeft;
+    if (KeyDown(kKeyDpadRight)) p.buttons |= kRight;
+    if (KeyDown(kKeyStart)) p.buttons |= kStart;
+    if (KeyDown(kKeyBack)) p.buttons |= kBack;
     auto press = [&](int slot, bool on) { if (on) p.analog[slot] = 0xFF; };
-    press(kA, Down('K') || Down(VK_SPACE));
-    press(kX, Down('J'));
-    press(kB, Down('L'));
-    press(kY, Down('I'));
-    press(kWhite, Down('Z'));
-    press(kBlack, Down('C'));
-    press(kLT, Down('Q'));
-    press(kRT, Down('E'));
+    press(kA, KeyDown(kKeyA));
+    press(kX, KeyDown(kKeyX));
+    press(kB, KeyDown(kKeyB));
+    press(kY, KeyDown(kKeyY));
+    press(kWhite, KeyDown(kKeyWhite));
+    press(kBlack, KeyDown(kKeyBlack));
+    press(kLT, KeyDown(kKeyLT));
+    press(kRT, KeyDown(kKeyRT));
     // the keyboard wins over a centred stick, a moved stick keeps its value
-    int16_t lx = Axis('A', 'D'), ly = Axis('S', 'W'), rx = Axis(VK_LEFT, VK_RIGHT), ry = Axis(VK_DOWN, VK_UP);
+    int16_t lx = Axis(kKeyMoveLeft, kKeyMoveRight), ly = Axis(kKeyMoveDown, kKeyMoveUp);
+    int16_t rx = Axis(kKeyCameraLeft, kKeyCameraRight), ry = Axis(kKeyCameraDown, kKeyCameraUp);
     if (lx) p.lx = lx;
     if (ly) p.ly = ly;
     if (rx) p.rx = rx;
@@ -307,6 +344,7 @@ void ApplySetting(const std::string& entry) {
     else if (key == "hdr_scene_nits") st.hdr_scene_nits = n;
     else if (key == "hdr_dump") {  // tests: the next HDR frame written to XBE_HDR_DUMP's folder (gpu/d3d12.cpp)
         if (const char* dir = std::getenv("XBE_HDR_DUMP")) std::ofstream(std::filesystem::path(dir) / "dump") << "1";
+    } else if (SetKeys(key, value)) {  // a keyboard key: key_<name>=<first>/<second> (keys.h)
     } else {
         auto it = std::find_if(app::kGame.options.begin(), app::kGame.options.end(),
                                [&](const app::Option& o) { return key == o.key; });
@@ -537,9 +575,16 @@ void SettingsWatch() {
     if (started) {
         static const char* kLive[] = {"hdr", "hdr_peak_nits", "hdr_scene_nits", "render_percent",
                                       "anisotropic_filtering", "widescreen", "widescreen_aspect", "vsync"};
+        // a key the launcher put back to its defaults: no longer in the file (keys.h)
+        for (const auto& [k, v] : values) {
+            int input = cv::KeyInputOf(k);
+            if (input >= 0 && !now.count(k))
+                SetKeys(k, std::to_string(cv::kKeyInputs[input].keys[0]) + "/" + std::to_string(cv::kKeyInputs[input].keys[1]));
+        }
         for (const auto& [k, v] : now) {
             auto it = values.find(k);
             if (it != values.end() && it->second == v) continue;
+            if (SetKeys(k, v)) continue;
             bool live = std::find_if(std::begin(kLive), std::end(kLive), [&](const char* s) { return k == s; }) !=
                         std::end(kLive);
             bool option = !live && k != "texture_pack" && k != "texture_pack_size" &&
@@ -562,9 +607,9 @@ extern bool g_invert_camera_y;       // menu.cpp
 extern uint32_t g_button_layout;     // texpack.cpp
 std::atomic<bool> g_closing{false};  // the window is closing: a paused game lets go
 
-// Hector's sprint (game/hooks.cpp): a click of L3, the left stick pressed in, or of Left Shift starts it; the move
-// stick let go for a moment (10 frames, a sixth of a second, so a turn through the middle keeps it) ends it, as do the
-// settings menu and the sprint set off. L3 with R3 is the settings menu's, not a sprint's. The game has no use of its own for
+// Hector's sprint (game/hooks.cpp): a click of L3, the left stick pressed in, or of its key (Left Shift at first)
+// starts it; the move stick let go for a moment (10 frames, a sixth of a second, so a turn through the middle keeps
+// it) ends it, as do the settings menu and the sprint set off. L3 with R3 is the settings menu's, not a sprint's. The game has no use of its own for
 // either stick's click, in either button layout
 std::atomic<bool> g_sprinting{false};
 
@@ -578,7 +623,7 @@ void Sprint(const input::Pad& p, bool menu) {
     static std::atomic<bool> l3_was{false}, shift_was{false};
     static std::atomic<int64_t> idle_since{-1};  // the frame the stick has been at rest since, -1 moving
     bool l3 = (p.buttons & kL3) != 0, r3 = (p.buttons & kR3) != 0;
-    bool shift = Focused() && Down(VK_LSHIFT);
+    bool shift = Focused() && KeyDown(cv::kKeySprint);
     bool clicked = (!l3_was.exchange(l3) && l3 && !r3) | (!shift_was.exchange(shift) && shift);
     if (!g_sprint || menu || (l3 && r3)) {
         g_sprinting = false;
@@ -598,7 +643,8 @@ void Sprint(const input::Pad& p, bool menu) {
     }
 }
 
-// The speed-up: a click of R3, the right stick pressed in, or of Tab turns it on at the setting's speed and off again.
+// The speed-up: a click of R3, the right stick pressed in, or of its key (Tab at first) turns it on at the setting's
+// speed and off again.
 // The whole game then runs that many frames a second (the SDK's app::SetSpeed: its pacing, and one frame of each so
 // many shown). A click is R3 let go with L3 not held at any time while it was down (L3 with R3 is the settings
 // menu's) and the settings menu closed. The setting changed while it is on takes it along, set off ends it; every
@@ -608,7 +654,7 @@ std::atomic<bool> g_sped{false};
 void SpeedUp(const input::Pad& p, bool menu) {
     static std::atomic<bool> r3_was{false}, spoiled{false}, tab_was{false};
     bool l3 = (p.buttons & kL3) != 0, r3 = (p.buttons & kR3) != 0;
-    bool tab = Focused() && Down(VK_TAB);
+    bool tab = Focused() && KeyDown(cv::kKeySpeedUp);
     bool was = r3_was.exchange(r3), clicked = false;
     if (!was && r3) spoiled = l3 || menu;
     else if (r3 && (l3 || menu)) spoiled = true;
@@ -807,6 +853,19 @@ void KeyboardRumble(int port, uint16_t& left, uint16_t& right) {
     }
     left = m.sent[0];  // the controller's as it is: an unchanged rumble is not sent again
     right = m.sent[1];
+}
+
+// the keyboard's keys (keys.h): an input's, first | second << 16 (menu.cpp lists them); the settings file's key_<name>
+// at the start (game_info.cpp's SettingsLoad, the value as ParseKeys reads it); a key some input has (menu.cpp: Alt
+// kept from Windows' menu bar)
+uint32_t KeysOf(int input) { return g_keys.v[input].load(std::memory_order_relaxed); }
+void KeysLoad(const std::string& setting, const std::string& value) { SetKeys(setting, value); }
+bool KeyBound(uint32_t vk) {
+    for (const auto& k : g_keys.v) {
+        uint32_t keys = k.load(std::memory_order_relaxed);
+        if (vk && ((keys & 0xFFFF) == vk || (keys >> 16) == vk)) return true;
+    }
+    return false;
 }
 
 // Hector sprinting now (game/hooks.cpp, telemetry.cpp), and how much faster than his walk

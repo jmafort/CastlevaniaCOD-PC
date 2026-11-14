@@ -76,6 +76,8 @@ and may have
   "keys": "<key>[+<key>...]"              Linux: holds those keys (X11 names: F10, k, space, Left) while the step's
                                           press plays (the game reads the keyboard's state, which on Windows only a
                                           real key sets)
+  "settings_file": {"<key>": <value>}     changes the settings file first, as the launcher kept open beside the game
+                                          does (null takes a key out); the game looks at it about twice a second
   "ask": {"question": "...",              asks a Codex model (judge.py, gpt-6-luna) about the screenshot:
           "choices": {"<name>": "...", ...}}   screen.ask.answer is the choice's name, screen.ask.why its reason
   "note": "..."                           shown in the report
@@ -625,6 +627,18 @@ def saved_settings(folder):
         except ValueError:
             out[k.strip()] = v
     return out
+
+
+def change_settings_file(folder, changes):
+    """the settings file with those keys changed (None: taken out), the rest as it is, as the launcher kept open
+    beside the game changes it (the game's SettingsWatch, src/common/keyboard.cpp)"""
+    path = folder / "castlevania.toml"
+    lines = [line for line in path.read_text(encoding="utf-8").splitlines()
+             if line.partition("=")[0].strip() not in changes]
+    for k, v in changes.items():
+        if v is not None:
+            lines.append(f"{k} = {json.dumps(v) if isinstance(v, (str, list)) else str(v).lower()}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def exe_name(scenario):
@@ -1380,6 +1394,8 @@ def play_steps(game, scenario, settings, shots, run, results):
                                                     shots / f"{i:03d}_box" if step.get("box_shots") else None)
             r["warnings"] += notes
         else:
+            if step.get("settings_file"):
+                change_settings_file(game.folder, step["settings_file"])
             clicks = step.get("click", [])
             clicks = [clicks] if isinstance(clicks, str) else clicks
             # the checks a click step is played again for: those on the game state, the settings and the menu
