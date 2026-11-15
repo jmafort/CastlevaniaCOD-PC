@@ -1,0 +1,13 @@
+{
+  "name": "status-names-es",
+  "after": "newgame.json",
+  "settings": {"game_language": 5},
+  "note": "The European release's Spanish status screen (--release eu, game_language 5): its element list says Hielo and Oscuro (src/common/pc_text.cpp, data\\statusep.dar's sprite table, issue 21). On the console too it said Hieloo, Hielo's last letters taken 32 wide with Oscuro's o, and Oscur, Oscuro's frame without its o. The spot after Hielo's o is empty, the one after Oscur holds its o (the mean brightness step: a letter about 28, the bar behind them about 7).",
+  "steps": [
+    {"press": "0:start,90f:wait", "shot": "status", "note": "the pause menu's status page",
+     "measure": {"after_hielo": [0.783, 0.430, 0.800, 0.459], "oscuro_o": [0.783, 0.698, 0.800, 0.726]},
+     "expect": ["found(runlog, 'status screen.s Hielo and Oscuro put right')", "menu",
+                "screen.edges.after_hielo < 15", "screen.edges.oscuro_o > 18"]},
+    {"press": "0:start,60f:wait", "note": "closed", "expect": ["not menu"]}
+  ]
+}

@@ -105,6 +105,7 @@ On top of Pazzi7054's port:
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
 - **Keyboard keys of your choice** - every key the keyboard plays with can be changed on the launcher's Controls page,
   two keys for each action. See [Keyboard](#keyboard).
+- **The Spanish status screen's names** - Hielo and Oscuro, where the European release said Hieloo and Oscur.
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
 - **Launcher in seven languages** - English, Deutsch, Español, Français, Italiano, Português (Brasil) and Русский,
@@ -575,6 +576,8 @@ background first); the size pictures load at applies from the next start.
 - **FPS Counter** - Optional, in the corner.
 - **Pause on Focus Loss** - The game stops while another window is in front (on by default), and so does its sound,
   the looped ones too (the first courtyard's fountain).
+- **Fixed Text** - The European release's Spanish status screen says Hielo and Oscuro: its list's last letters for
+  Hielo took Oscuro's "o" too (Hieloo) and Oscuro had none (Oscur), on the console as well.
 - **Lament of Innocence Save** - As the PS2 game did when it found a Lament of Innocence save on the memory card:
   a Moai to pick up at the far end of the room behind the first courtyard, beside the potion, for completing the
   item list (the launcher's or the in-game menu's Game page; `lament_save = true`).

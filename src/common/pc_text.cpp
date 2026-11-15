@@ -4,11 +4,17 @@
 // in each the same nine: Continue on its title with no save says there is none on the PC); each is changed in place as the file is read (the SDK's
 // kernel::g_file_read), the new words no longer than the old with the rest of their space zeroed, and only where the
 // bytes read are the ones this was made from: another release's file of the same name is left as it is.
+//
+// The same read puts right the European release's Spanish status screen (data\statusep.dar), whose element list said
+// "Hieloo" and "Oscur" on the console too (issue 21): see kStatusEP.
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <string>
+#include <vector>
 
 #include "core/log.h"
 #include "kernel/kernel.h"
@@ -149,6 +155,47 @@ constexpr Message kEP[] = {  // data\global2ep.dar
      "Comprobando... \nNo apagar el PC."},
 };
 
+// The Spanish status screen's element names. data\statusep.dar's first part (from 0x200) is the screen's table of
+// sprites, 20 bytes each (centre x and y, width, height, u, v, width and height in the texture, which texture, 0),
+// with before them its frames (each a count of sprites and where the first is, from 0x200): an element's row is a
+// frame of its name's cell, the "-" of its value and, for a name longer than its cell, its last letters from another
+// texture. That one holds "lo" for Hielo at u 208 and "o" for Oscuro at u 224, but Hielo's piece was 32 wide, both
+// ("Hieloo"), and Oscuro's frame had none ("Oscur"). Hielo's piece is 16 wide here, and Oscuro's two sprites are
+// written again with its "o" after them in the zeros that end the table, where its frame then points
+struct Patch {
+    uint32_t at;                 // where it starts in the file
+    std::vector<uint16_t> was;   // the release's bytes, as 16-bit words
+    std::vector<uint16_t> now;   // in their place, as many
+};
+const Patch kStatusEP[] = {
+    // Hielo's last letters: "lo", 16 wide after its 24 wide cell
+    {0x19b0, {40, 12, 32, 24, 208, 0, 32, 24, 0x4800, 0}, {32, 12, 16, 24, 208, 0, 16, 24, 0x4800, 0}},
+    // Oscuro's frame: three sprites at 0x3bac
+    {0x53c, {2, 0, 0x1a64 - 0x200, 0, 0, 0}, {3, 0, 0x3bac - 0x200, 0, 0, 0}},
+    {0x3bac, std::vector<uint16_t>(30, 0),
+     {20, 12, 40, 24, 0, 144, 40, 24, 0x400, 0,      // its cell, "Oscur", as at 0x1a64
+      84, 12, 40, 24, 136, 64, 40, 24, 0x400, 0,     // its value's "-", as at 0x1a78
+      48, 12, 16, 24, 224, 0, 16, 24, 0x4800, 0}},  // its "o"
+};
+static_assert(std::endian::native == std::endian::little, "the file's words are little-endian");
+
+// the part of each patch this read holds (one can straddle two reads), changed when it is the release's bytes
+int Apply(const Patch* patches, size_t count, uint64_t offset, uint8_t* data, size_t size) {
+    int changed = 0;
+    for (size_t k = 0; k < count; k++) {
+        const Patch& p = patches[k];
+        size_t len = p.was.size() * 2;
+        uint64_t lo = std::max<uint64_t>(offset, p.at), hi = std::min<uint64_t>(offset + size, p.at + len);
+        if (lo >= hi) continue;
+        size_t from = size_t(lo - p.at), n = size_t(hi - lo);
+        uint8_t* at = data + (lo - offset);
+        if (std::memcmp(at, reinterpret_cast<const uint8_t*>(p.was.data()) + from, n) != 0) continue;
+        std::memcpy(at, reinterpret_cast<const uint8_t*>(p.now.data()) + from, n);
+        changed++;
+    }
+    return changed;
+}
+
 struct File {
     const char* name;
     const Message* messages;
@@ -178,6 +225,11 @@ bool EndsWith(const std::string& s, const char* tail) {
 
 // the part of each message this read holds (a message can straddle two reads): changed when it is the release's
 void Read(const std::string& path, uint64_t offset, uint8_t* data, size_t size) {
+    if (EndsWith(path, "statusep.dar")) {
+        if (Apply(kStatusEP, std::size(kStatusEP), offset, data, size))
+            LOGR("pc text: the status screen's Hielo and Oscuro put right (%s)", path.c_str());
+        return;
+    }
     const File* file = nullptr;
     for (const File& f : kFiles)
         if (EndsWith(path, f.name)) file = &f;

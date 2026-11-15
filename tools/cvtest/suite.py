@@ -285,6 +285,8 @@ def tests():
         t.append(scenario("language", *eu, "--set", f"game_language={n}", test=f"language-eu-{lang}", quick=n == 4))
         # 1.10.2: its save messages say PC, not Xbox, in each language
         t.append(scenario("pctext-eu", *eu, "--set", f"game_language={n}", test=f"pctext-eu-{lang}"))
+    # 1.11.1: the Spanish status screen says Hielo and Oscuro, not Hieloo and Oscur (issue 21)
+    t.append(scenario("status-names-es", *eu, "--set", "game_language=5"))
     for i, g in enumerate(gpus()):
         t.append(scenario("gpu", "--set", f"gpu={g}", test=f"gpu-{i + 1}"))
     d = discs()
