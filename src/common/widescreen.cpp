@@ -106,6 +106,7 @@ uint32_t TexturePackEpoch();  // texpack.cpp: moves on when the pack is switched
 void MoviesFrame(uint64_t presents);
 uint64_t MoviesReplace(const gpu::TextureDesc& d, const uint8_t* guest);
 bool MoviesGuestPicture(const gpu::TextureDesc& d);
+bool MoviesBrighten(const gpu::TextureDesc& d);  // the movie's frame, drawn twice as bright (issue 22)
 bool MoviesOwn(uint64_t id);
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id);
 bool MoviesScale(const gpu::TextureDesc& d, float squeeze, float qx, float qy, float& sx, float& sy);
@@ -250,10 +251,12 @@ public:
                "    o.pos.x += (sides ? 0 : strip ? lerp(ext.y, ext.w, across) : ext.w) * o.pos.w;\n"
                "    o.pos.y = at_top ? sign(o.pos.y) * o.pos.w : o.pos.y * (strip ? 1 : ext.y) + ext2.x * o.pos.w;\n";
     }
-    // ext2.y 1: only the texture's own columns are drawn (stage 0's, in texels: a linear texture), not its edge ones
-    // repeated past them (the European release's intro movie, squeezed)
+    // ext2.y 1 (3): only the texture's own columns are drawn (stage 0's, in texels: a linear texture), not its edge
+    // ones repeated past them (the European release's intro movie, squeezed). 2 (3): a movie's frame, its colour
+    // doubled, as MODULATE2X would have it (movies.cpp: the game drew it at half its brightness)
     std::string Output() const override {
-        return gpu::ShaderHooks::Output() + "if (ext2.y > 0.5 && (tc0.x < 0 || tc0.x > texsize[0].x)) discard;\n";
+        return "if (ext2.y > 1.5) outc.rgb *= 2;\n" + gpu::ShaderHooks::Output() +
+               "if (fmod(ext2.y, 2) > 0.5 && (tc0.x < 0 || tc0.x > texsize[0].x)) discard;\n";
     }
 };
 
@@ -719,6 +722,7 @@ public:
         ext[3] = sides ? (d_.u.lo + d_.u.hi) * 0.5f : menu.strip ? menu.right : placed ? across * d_.move[0] : shift;
         ext[4] = placed ? d_.move[1] : 0.0f;
         ext[5] = placed && squeeze && d_.tex.linear ? 1.0f : 0.0f;
+        if (back_buffer_ && d_.whole && d_.textured && MoviesBrighten(d_.tex)) ext[5] += 2.0f;
         ext[6] = ext[7] = 0;
         // CV_WATER_HIDE: the water's draws (Water) left out, to see which they are
         static const bool hide_water = std::getenv("CV_WATER_HIDE") != nullptr;

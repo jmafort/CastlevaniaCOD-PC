@@ -69,6 +69,7 @@ extern bool g_menu_spread;       // widescreen.cpp: the pause menu's columns tow
 extern std::string g_translation;  // translation.cpp: a fan translation's folder in mods, empty none
 extern bool g_translation_dub;     // translation.cpp: its voices too
 extern bool g_hd_movies;         // movies.cpp: a movie pack's HD movies drawn
+extern bool g_movie_full_brightness;  // movies.cpp: the movies twice as bright as the game drew them
 extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture whole as large as it goes, 2 filled
 extern uint32_t g_button_layout;    // texpack.cpp
 extern uint32_t g_sprint;           // keyboard.cpp: Hector's sprint, percent of his walk (0 off)
@@ -711,6 +712,7 @@ void Defaults() {
     g_title_combo = false;
     g_menu_spread = true;
     g_hd_movies = true;
+    g_movie_full_brightness = true;
     g_texture_pack = true;
     g_movie_view = 1;
     g_surface_depth = 0;

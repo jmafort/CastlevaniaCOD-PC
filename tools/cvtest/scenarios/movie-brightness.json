@@ -1,0 +1,17 @@
+{
+  "name": "movie-brightness",
+  "note": "The CG movies as bright as their own pictures (src/common/movies.cpp, issue 22): the game drew the movie's frame in the PS2's colour (0x80 grey for full) with the Xbox's MODULATE where its other 2D draws have MODULATE2X, so on the console too they played at half their brightness. A new game's opening movie, the same moment of it with movie_full_brightness on, off (the console's) and on again: about twice as bright on (less where the sky clips at white: at least 1.4 times).",
+  "steps": [
+    {"press": "0:wait:11000", "note": "the logos to the title"},
+    {"until": "frame >= 640", "timeout": 60},
+    {"press": "1000:a,4000:a,4600:a,5200:a,6000:start,7000:a,9000:a,13000:left,14000:a,18000:a,21000:a,24000:a,26000:wait", "note": "New Game, name AAA, the save made; the movies then play"},
+    {"press": "0:wait:12000", "shot": "full", "note": "the opening movie, twice as bright as the game draws it",
+     "luma": {"picture": [0.15, 0.2, 0.85, 0.8]}, "expect": ["movies.name != ''"]},
+    {"press": "0:set=movie_full_brightness=false,0f:wait:20f", "shot": "console", "note": "movie_full_brightness off: as the console drew it",
+     "luma": {"picture": [0.15, 0.2, 0.85, 0.8]},
+     "expect": ["movies.name != ''", "screen.luma.picture * 1.4 < shots['full'].luma.picture"]},
+    {"press": "0:set=movie_full_brightness=true,0f:wait:20f", "shot": "full-again", "note": "on again",
+     "luma": {"picture": [0.15, 0.2, 0.85, 0.8]},
+     "expect": ["movies.name != ''", "shots['console'].luma.picture * 1.4 < screen.luma.picture"]}
+  ]
+}

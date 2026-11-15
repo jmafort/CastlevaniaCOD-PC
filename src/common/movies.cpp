@@ -21,6 +21,13 @@
 // movie_view: 0 the game's 4:3 frame as it was; 1 the movie's picture as large as the screen shows it whole (as tall
 // as a 16:9 screen, as wide as a 16:10 one); 2 the screen filled, a little cut off the picture's top and bottom on
 // 16:9 (its sides on 4:3). With or without a pack: the rows each movie's picture lies on are known.
+//
+// Brightness: the game draws the frame's quad in the PS2's colour, 0x80 grey for full (the PS2 doubles a texture's
+// colour by its vertex colour over 128), which on the Xbox wants the texture stage's MODULATE2X, as the game's other
+// 2D draws have it; the movie's quad has MODULATE, so on the console too the movies played at half their brightness
+// (both releases, the HD versions as well: issue 22). The movie's frame is drawn twice as bright (MoviesBrighten:
+// widescreen.cpp's pixel shader hook), as bright as the movie's own pictures; movie_full_brightness = false in the
+// settings file keeps the console's.
 #ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -77,6 +84,7 @@ extern "C" {
 #endif
 
 bool g_hd_movies = true;    // a movie pack's HD movies drawn (the settings file, menu.cpp)
+bool g_movie_full_brightness = true;  // the movie's frame twice as bright as the game draws it (the settings file)
 uint32_t g_movie_view = 1;  // 0 the game's 4:3, 1 the picture whole as large as it goes, 2 the screen filled
 
 namespace {
@@ -671,6 +679,14 @@ public:
         return active_;
     }
 
+    // a draw of a texture is the movie's frame (one the movie's frames went into while it plays, at any movie_view),
+    // to be drawn twice as bright
+    bool Brighten(const gpu::TextureDesc& d) {
+        if (!g_movie_full_brightness || !MovieTexture(d)) return false;
+        std::lock_guard lock(m_);
+        return active_ && std::find(std::begin(textures_), std::end(textures_), d.data) != std::end(textures_);
+    }
+
     // telemetry's "movies" (telemetry.cpp): the movie playing (its name, empty when none) and the frames drawn from its
     // HD video so far
     std::string Telemetry() {
@@ -841,6 +857,7 @@ void MoviesInit() {
 void MoviesFrame(uint64_t presents) { g_movies.Frame(presents); }
 uint64_t MoviesReplace(const gpu::TextureDesc& d, const uint8_t* guest) { return g_movies.Replace(d, guest); }
 bool MoviesGuestPicture(const gpu::TextureDesc& d) { return g_movies.GuestPicture(d); }
+bool MoviesBrighten(const gpu::TextureDesc& d) { return g_movies.Brighten(d); }
 bool MoviesOwn(uint64_t id) { return (id & kTag) != 0; }
 std::string MoviesJson() { return g_movies.Telemetry(); }
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id) { return g_movies.Replaced(id); }

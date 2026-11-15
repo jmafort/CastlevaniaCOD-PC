@@ -105,6 +105,8 @@ On top of Pazzi7054's port:
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
 - **Keyboard keys of your choice** - every key the keyboard plays with can be changed on the launcher's Controls page,
   two keys for each action. See [Keyboard](#keyboard).
+- **Movies at their full brightness** - the Xbox release drew its movies (and so the HD ones) at half their
+  brightness; here they play as bright as their own pictures. See [General](#general).
 - **The Spanish status screen's names** - Hielo and Oscuro, where the European release said Hieloo and Oscur.
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
@@ -576,6 +578,10 @@ background first); the size pictures load at applies from the next start.
 - **FPS Counter** - Optional, in the corner.
 - **Pause on Focus Loss** - The game stops while another window is in front (on by default), and so does its sound,
   the looped ones too (the first courtyard's fountain).
+- **Movie Brightness** - The game draws its movie frames in the PS2's colour, where 0x80 grey stands for full, and on
+  the Xbox that wants the texture stage's doubling, which its other 2D pictures have and the movies' do not: on the
+  console they played at half their brightness, the HD movies too. Here they play as bright as the movies' own
+  pictures; `movie_full_brightness = false` in `castlevania.toml` keeps the console's.
 - **Fixed Text** - The European release's Spanish status screen says Hielo and Oscuro: its list's last letters for
   Hielo took Oscuro's "o" too (Hieloo) and Oscuro had none (Oscur), on the console as well.
 - **Lament of Innocence Save** - As the PS2 game did when it found a Lament of Innocence save on the memory card:

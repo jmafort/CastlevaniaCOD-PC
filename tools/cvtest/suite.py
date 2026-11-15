@@ -258,6 +258,9 @@ def tests():
         # 1.10.3: the European release decodes every other movie frame into a target of its own: each frame at Fit's
         # size, none at the game's between them (issue 17)
         scenario("movies-hd", "--release", "eu", test="movies-hd-eu", needs=["movies"], env=folder_env("movies", "CV_MOVIES")),
+        # 1.11.1: the movies as bright as their own pictures, where the console drew them at half (issue 22)
+        scenario("movie-brightness"),
+        scenario("movie-brightness", "--release", "eu", test="movie-brightness-eu"),
         scenario("surface", needs=["materials"], env=folder_env("materials", "CV_TEXTURES")),
         scenario("aa", needs=["vendor"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
         scenario("aa-dlss", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
