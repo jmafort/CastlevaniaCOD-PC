@@ -19,6 +19,7 @@ and the game on a virtual X display of their own), with each disc linked into it
   - the keyboard's keys (Controls): a key clicked takes the next key pressed, saved as the game reads it; a key
     another action had leaves it; Escape stops the wait; the settings menu's key is not taken; Shift by its side; a
     right-click clears a key; another page ends the wait; Default keys, and Reset to defaults, put them all back
+  - the volumes (Game): a click along each slider sets it, saved as the game reads it; Reset to defaults, 100 each
   - a fan translation in mods (a catalog of no texts, as PTBR-PS2): listed on the Game page, chosen, its dub off
   - the HD texture pack's row: none in the textures folder, then three pictures found and in use, switched off
   - the Game files page: each copy's verdict (the USA release's patched xiso, the European one, another release's
@@ -208,6 +209,21 @@ def right_click(win, rect):
     user32 = ctypes.WinDLL("user32")
     lp = (y << 16) | (x & 0xFFFF)
     for msg, wp in ((0x0200, 0), (0x0204, 2), (0x0205, 0)):  # WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP: at once
+        user32.PostMessageW(win, msg, wp, lp)
+
+
+def click_at(win, rect, across):
+    """a left click on a control's rectangle, that part of the way across it, half way down: window messages
+    (Windows), the virtual display's pointer (Linux)"""
+    x, y = round(rect[0] + (rect[2] - rect[0]) * across), (rect[1] + rect[3]) // 2
+    if LINUX:
+        subprocess.run(["xdotool", "windowfocus", "--sync", str(win)], capture_output=True)
+        subprocess.run(["xdotool", "mousemove", "--window", str(win), str(x), str(y), "click", "1"], capture_output=True)
+        return
+    import ctypes
+    user32 = ctypes.WinDLL("user32")
+    lp = (y << 16) | (x & 0xFFFF)
+    for msg, wp in ((0x0200, 0), (0x0201, 1), (0x0202, 0)):  # WM_MOUSEMOVE, WM_LBUTTONDOWN, WM_LBUTTONUP: at once
         user32.PostMessageW(win, msg, wp, lp)
 
 
@@ -576,6 +592,26 @@ def main():
     results.append(result("the keyboard's keys: taken from a key pressed, saved as the game reads them, moved from the "
                           "action that had one, Escape and the menu's key not taken, cleared by a right-click, put back "
                           "by Default keys and Reset to defaults (keys-taken.png, keys-changed.png)", errors))
+
+    # 1.11.1: the volumes on the Game page, percent of the game's own mix from 0 to 200 (volume, music_volume and
+    # effects_volume, as the game reads them): a click three quarters along a slider's track sets it to about 150
+    errors = []
+    la = Launcher(pkg, env, out, ["--page", "game"])
+    volumes = (("volume", "volume"), ("music", "music_volume"), ("effects", "effects_volume"))
+    for control, key in volumes:
+        rect = la.control(control)
+        if not rect:
+            errors.append(f"{control}: not on the Game page")
+            continue
+        click_at(la.win, rect, 0.75)
+        if not wait(lambda: 140 <= (settings(pkg).get(key) or 0) <= 160, 4):
+            errors.append(f"{control} clicked three quarters along: {key} saved as {settings(pkg).get(key)}")
+    la.shot("volumes")
+    if not la.set_by_click("Reset to defaults", lambda: all(settings(pkg).get(k) == 100 for _, k in volumes)):
+        errors.append(f"Reset to defaults: {[settings(pkg).get(k) for _, k in volumes]}")
+    la.close()
+    results.append(result("the volumes: set by a click along their sliders, saved as the game reads them, put back by "
+                          "Reset to defaults (volumes.png)", errors))
 
     # the HD texture pack's row
     errors = []

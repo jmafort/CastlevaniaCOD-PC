@@ -87,7 +87,7 @@ before the step, screen has mean, std and flat (one colour) and, with a judge, j
 judge.hector and judge.by (the model; judge.first has Jev's answers a review replaced), step has fps, seconds and
 saved (the game wrote a save during it), settings the run's settings (--set changes them), shots["<shot>"] the
 screen of an earlier step with that shot (shots["a"].edges.floor < screen.edges.floor; its step's fps and seconds as
-shots["a"].step.fps), log the game's log lines
+shots["a"].step.fps, the game state after it as shots["a"].state.frame), log the game's log lines
 of the step (any("Rumble" in l for l in log)) and runlog those of the run so far, found(lines, pattern) the
 lines a regular expression matches and total(lines, pattern) the sum of its first group's numbers over them
 (total(runlog, r"(\d+) shaders compiled")), saved the settings file as the game left it (saved.display_mode),
@@ -1492,8 +1492,8 @@ def play_steps(game, scenario, settings, shots, run, results):
                 if not ok:
                     r["errors"].append(f"expect {expr!r} failed" + (f" ({why})" if why else ""))
             r.update(state=state, screen=screen, **info)
-            if step.get("shot"):  # its screen, and its step's own figures as .step (shots["a"].step.fps)
-                screens[step["shot"]] = dict(screen, step=info)
+            if step.get("shot"):  # its screen, its step's own figures as .step (shots["a"].step.fps), the state after it
+                screens[step["shot"]] = dict(screen, step=info, state=state)
             if screen.get("flat"):
                 r["warnings"].append(f"screen is one colour (mean {screen['mean']})")
             r["warnings"] += seen

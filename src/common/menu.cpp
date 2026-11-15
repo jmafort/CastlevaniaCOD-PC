@@ -27,6 +27,7 @@
 #include "common/translation_packs.h"
 #include "core/log.h"
 #include "core/input.h"
+#include "audio/audio.h"
 #include "gpu/backend.h"
 #include "gpu/raytrace.h"
 
@@ -62,6 +63,10 @@ uint32_t g_ray_tracing = 0;
 // how strongly ray tracing's bounce lighting shows, percent (gpu::g_rt_lighting_strength): 100 keeps each room as bright
 // as the game made it, its light from where the rays say; 0 none of it
 uint32_t g_rt_lighting = 100;
+// the volumes, percent of the game's own mix, 0 to 200 (the SDK's mixer: audio::g_volume, g_stream_volume and
+// g_buffer_volume): the whole sound, the music (the game's streams: its music and its movies' sound) and the sound
+// effects (the rest, the story scenes' voices too). The game played quiet, its music under its effects (issue 24)
+uint32_t g_volume = 100, g_music_volume = 100, g_effects_volume = 100;
 // how much ray tracing does a frame (gpu::g_rt_quality): 0 low, 1 medium, 2 high, 3 path traced (High, and the lighting
 // as a path tracer's: two bounces at the frame's full size, the game's own light kept only an artists' share)
 uint32_t g_rt_quality = 3;
@@ -564,6 +569,22 @@ void GameTab(bool& save) {
     Row("Pause on focus loss", "Stops the game while another window is in front.");
     save |= Check("##pause", &g_pause_on_focus_loss);
     ImGui::EndTable();
+    if (Section("Sound", "sound")) {
+        auto percent = [](const char* id, uint32_t& v) {
+            int pct = int(std::min<uint32_t>(v, 200));
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x * 0.45f);
+            if (!SliderI(id, &pct, 0, 200, pct ? "%d%%" : "Off", ImGuiSliderFlags_AlwaysClamp)) return false;
+            v = uint32_t(pct);
+            return true;
+        };
+        Row("Volume", "All of the game's sound. 100% is the game's own mix; up to 200% louder.");
+        save |= percent("##volume", g_volume);
+        Row("Music", "The music, and the movies' sound, against the rest.");
+        save |= percent("##music", g_music_volume);
+        Row("Sound effects", "Everything else: the sounds and the voices of the story scenes.");
+        save |= percent("##effects", g_effects_volume);
+        ImGui::EndTable();
+    }
     // a fan translation in mods (translation.cpp), the folders there looked at when the menu first draws this
     if (Section("Translation", "translation")) {
         static const std::vector<cv::TranslationPack> packs = cv::TranslationPacks(cv::ModsFolder(app::ExeDir()));
@@ -722,6 +743,7 @@ void Defaults() {
     g_ambient_occlusion = 0;
     g_ray_tracing = 0;
     g_rt_lighting = 100;
+    g_volume = g_music_volume = g_effects_volume = 100;
     g_rt_quality = 3;
     g_translation_dub = true;  // the translation itself kept, a language as the game's
     app::ApplyDisplay();
@@ -880,6 +902,10 @@ void MenuToRenderer() {
     gpu::g_ray_tracing.store(g_ray_tracing & (gpu::kRtAmbientOcclusion | gpu::kRtLighting), std::memory_order_relaxed);
     gpu::g_rt_lighting_strength.store(float(std::min<uint32_t>(g_rt_lighting, 200)) / 100.0f, std::memory_order_relaxed);
     gpu::g_rt_quality.store(std::min<uint32_t>(g_rt_quality, 3), std::memory_order_relaxed);
+    // and the SDK's mixer
+    audio::g_volume.store(float(std::min<uint32_t>(g_volume, 200)) / 100.0f, std::memory_order_relaxed);
+    audio::g_stream_volume.store(float(std::min<uint32_t>(g_music_volume, 200)) / 100.0f, std::memory_order_relaxed);
+    audio::g_buffer_volume.store(float(std::min<uint32_t>(g_effects_volume, 200)) / 100.0f, std::memory_order_relaxed);
 }
 
 void MenuUi(double fps) {

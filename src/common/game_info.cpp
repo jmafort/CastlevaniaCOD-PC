@@ -44,6 +44,7 @@ extern uint32_t g_sharpening;                 // menu.cpp, read by the SDK's ren
 extern uint32_t g_ambient_occlusion;          // menu.cpp, read by the SDK's renderer (gpu::g_ambient_occlusion)
 extern uint32_t g_ray_tracing;                // menu.cpp, read by the SDK's renderer (gpu::g_ray_tracing)
 extern uint32_t g_rt_lighting;                // menu.cpp, read by the SDK's renderer (gpu::g_rt_lighting_strength)
+extern uint32_t g_volume, g_music_volume, g_effects_volume;  // menu.cpp, read by the SDK's mixer (audio::g_volume...)
 extern uint32_t g_rt_quality;                 // menu.cpp, read by the SDK's renderer (gpu::g_rt_quality)
 extern std::string g_translation;             // translation.cpp: the translation's folder in mods, empty none
 extern bool g_translation_dub;                // translation.cpp: its voices too
@@ -106,6 +107,9 @@ const app::GameInfo app::kGame = {
     .releases = {kReleases, kReleases + kReleaseCount},  // the other region's xbe starts its executable instead
     .options = {{"fps_counter", &g_fps_counter, nullptr},  // game settings kept in the settings file
                 {"pause_on_focus_loss", &g_pause_on_focus_loss, nullptr},
+                {"volume", nullptr, &g_volume},
+                {"music_volume", nullptr, &g_music_volume},
+                {"effects_volume", nullptr, &g_effects_volume},
                 {"menu_key", nullptr, &g_menu_key},
                 {"launcher_keep_open", &g_launcher_keep_open, nullptr},
                 {"texture_pack", &g_texture_pack, nullptr},

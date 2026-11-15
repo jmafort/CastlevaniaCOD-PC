@@ -1,0 +1,97 @@
+{
+  "name": "volume",
+  "after": "newgame.json",
+  "note": "The volumes (the settings file's volume, music_volume and effects_volume, percent of the game's own mix, 0 to 200; the SDK's mixer, audio::g_volume, g_stream_volume and g_buffer_volume; issue 24), in the first courtyard: telemetry's audio.energy, the output's samples squared and summed, over each step's frames. The ratios are taken on the fountain alone, the music at 0 (its loop plays on steadily where the music rises and falls): half the volume a quarter of the energy, 200% four times it, the sound effects at 200% the same; the music and the sound effects at 0 silence, the music alone some sound. The settings menu's Game page has the three sliders.",
+  "steps": [
+    {
+      "press": "0:set=music_volume=0,0f:wait:60f",
+      "shot": "start",
+      "note": "the first courtyard, the music at 0: its fountain"
+    },
+    {
+      "press": "0f:wait:240f",
+      "shot": "full",
+      "note": "the fountain as the game mixes it",
+      "expect": [
+        "audio.loud - prev.audio.loud > 4800"
+      ]
+    },
+    {
+      "press": "0:set=volume=50,0f:wait:240f",
+      "shot": "half",
+      "note": "volume 50%: a quarter of the energy",
+      "expect": [
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) > 0.15 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)",
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) < 0.4 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)"
+      ]
+    },
+    {
+      "press": "0:set=volume=200,0f:wait:240f",
+      "shot": "louder",
+      "note": "volume 200%: four times the energy",
+      "expect": [
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) > 3 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)",
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) < 5 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)"
+      ]
+    },
+    {
+      "press": "0:set=volume=100,0:set=effects_volume=200,0f:wait:240f",
+      "shot": "effects-200",
+      "note": "the sound effects at 200%",
+      "expect": [
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) > 3 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)",
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) < 5 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)"
+      ]
+    },
+    {
+      "press": "0:set=effects_volume=0,0f:wait:60f",
+      "note": "the music and the sound effects at 0"
+    },
+    {
+      "press": "0f:wait:240f",
+      "shot": "silent",
+      "note": "silence: no sound in the output at all",
+      "expect": [
+        "audio.energy - prev.audio.energy < 100",
+        "audio.loud == prev.audio.loud"
+      ]
+    },
+    {
+      "press": "0:set=music_volume=100,0f:wait:240f",
+      "shot": "music",
+      "note": "the music alone",
+      "expect": [
+        "(audio.energy - prev.audio.energy) / (audio.frames - prev.audio.frames) > 0.05 * (shots['full'].state.audio.energy - shots['start'].state.audio.energy) / (shots['full'].state.audio.frames - shots['start'].state.audio.frames)",
+        "audio.loud - prev.audio.loud > 4800"
+      ]
+    },
+    {
+      "press": "0:set=effects_volume=100,0f:wait:30f",
+      "note": "back to the game's own mix"
+    },
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "expect": [
+        "settings_menu"
+      ]
+    },
+    {
+      "click": "tab.Game",
+      "press": "0f:wait:10f",
+      "shot": "menu-sound",
+      "note": "the settings menu's Sound sliders",
+      "expect": [
+        "'volume' in menu_controls",
+        "'music' in menu_controls",
+        "'effects' in menu_controls"
+      ]
+    },
+    {
+      "click": "Close",
+      "press": "0f:wait:20f",
+      "expect": [
+        "not settings_menu"
+      ]
+    }
+  ]
+}

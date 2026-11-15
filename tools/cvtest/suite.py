@@ -261,6 +261,8 @@ def tests():
         # 1.11.1: the movies as bright as their own pictures, where the console drew them at half (issue 22)
         scenario("movie-brightness"),
         scenario("movie-brightness", "--release", "eu", test="movie-brightness-eu"),
+        # 1.11.1: the volumes, the whole sound and the music and the sound effects apart (issue 24)
+        scenario("volume"),
         scenario("surface", needs=["materials"], env=folder_env("materials", "CV_TEXTURES")),
         scenario("aa", needs=["vendor"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),
         scenario("aa-dlss", needs=["vendor", "rtx"], env=folder_env("vendor", "CV_VENDOR_DIR"), platforms=["windows"]),

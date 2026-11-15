@@ -22,7 +22,7 @@
 //                        save's name at +0x10, which sub_002F7240 returns
 //
 // Beside the game's own, for the regression suite (tools/cvtest/SUITE.md): "pad", the buttons and sticks as the game
-// last got them; "audio", the frames the sound output played and those with sound; "window_size", the game window's
+// last got them; "audio", the sound output's frames, those with sound, its energy; "window_size", the game window's
 // pixels; "view", the field of view, far plane and fog as the game set them and as drawn (game/view.cpp); "wide",
 // widescreen's moves of the lock-on marker and the HUD and the sky's fogged draws (widescreen.cpp); "texpack", the HD
 // texture pack on, indexed, and the textures that asked it and got a picture (texpack.cpp); "aa", "fg" and "hdr", the
@@ -352,9 +352,10 @@ std::string GameStateJson() {
     // the game window's size in pixels, as drawn into (fullscreen and borderless: the display's)
     app::Mode px = app::WindowPixels();
     out += ",\"window_size\":[" + std::to_string(px.width) + "," + std::to_string(px.height) + "]";
-    // what the sound output played: frames, and those with sound in them
+    // what the sound output played: frames, those with sound in them, their samples' squares summed (a millionth a unit)
     audio::Played played = audio::PlayedSoFar();
-    out += ",\"audio\":{\"frames\":" + std::to_string(played.frames) + ",\"loud\":" + std::to_string(played.loud) +
+    out += ",\"audio\":{\"frames\":" + std::to_string(played.frames) + ",\"energy\":" + std::to_string(played.energy) +
+           ",\"loud\":" + std::to_string(played.loud) +
            "}";
     // the field of view, far plane and fog, the game's and as drawn; the in-game settings menu
     std::string view = ViewJson();

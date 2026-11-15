@@ -2064,6 +2064,9 @@ struct Settings {
     uint32_t ambient_occlusion = 0;     // 0 off, 1 low, 2 high
     uint32_t ray_tracing = 0;           // 0 off, 1 ambient occlusion, 5 lighting (menu.cpp); reflections are not offered
     uint32_t rt_lighting = 100;         // percent, how strongly its lighting shows (menu.cpp)
+    uint32_t volume = 100;              // percent of the game's own mix: all of it, its music, its sound effects
+    uint32_t music_volume = 100;        // (menu.cpp, the SDK's mixer)
+    uint32_t effects_volume = 100;
     uint32_t rt_quality = 3;            // 0 low, 1 medium, 2 high, 3 path traced: how much ray tracing a frame does (menu.cpp;
                                         // castlevania.toml's alone, not a control: a handheld's 0)
     uint32_t surface_depth = 0;         // 0 off, 1 low, 2 high: a pack's material maps seen into (parallax)
@@ -2138,6 +2141,9 @@ struct Settings {
         uint32_t rt = rest["ray_tracing"].value_or(ray_tracing);
         ray_tracing = (rt & 6) ? 5u : (rt & 1);  // an older build's lighting and reflections (7): lighting
         rt_lighting = std::min(rest["ray_tracing_lighting"].value_or(rt_lighting), 200u);
+        volume = std::min(rest["volume"].value_or(volume), 200u);
+        music_volume = std::min(rest["music_volume"].value_or(music_volume), 200u);
+        effects_volume = std::min(rest["effects_volume"].value_or(effects_volume), 200u);
         rt_quality = std::min(rest["ray_tracing_quality"].value_or(rt_quality), 3u);
         surface_depth = std::min(rest["surface_depth"].value_or(surface_depth), 2u);
         gpu = rest["gpu"].value_or(gpu);
@@ -2199,6 +2205,9 @@ struct Settings {
         rest.insert_or_assign("ambient_occlusion", int64_t(ambient_occlusion));
         rest.insert_or_assign("ray_tracing", int64_t(ray_tracing));
         rest.insert_or_assign("ray_tracing_lighting", int64_t(rt_lighting));
+        rest.insert_or_assign("volume", int64_t(volume));
+        rest.insert_or_assign("music_volume", int64_t(music_volume));
+        rest.insert_or_assign("effects_volume", int64_t(effects_volume));
         rest.insert_or_assign("ray_tracing_quality", int64_t(rt_quality));
         rest.insert_or_assign("surface_depth", int64_t(surface_depth));
         rest.insert_or_assign("gpu", gpu);
@@ -3519,7 +3528,8 @@ private:
                std::to_string(s.frame_generation) + "|" + std::to_string(s.menu_spread) + std::to_string(s.antialiasing) +
                std::to_string(s.upscaling) + std::to_string(s.ambient_occlusion) + std::to_string(s.surface_depth) + std::to_string(s.ray_tracing) + "|" + std::to_string(s.rt_lighting) + std::to_string(s.rt_quality) + "|" +
                std::to_string(s.sharpening) + "|" + std::to_string(s.hd_movies) + std::to_string(s.movie_view) + "|" +
-               std::to_string(s.update_check) + "|" + KeysSnapshot();
+               std::to_string(s.update_check) + "|" + std::to_string(s.volume) + "," + std::to_string(s.music_volume) +
+               "," + std::to_string(s.effects_volume) + "|" + KeysSnapshot();
     }
 
     std::string KeysSnapshot() const {
@@ -4395,6 +4405,17 @@ private:
             ToggleRight("dub", settings_.translation_dub);
             EndSetting();
         }
+        // the volumes (the SDK's mixer, menu.cpp), percent of the game's own mix
+        auto percent = [](uint32_t v) { return v ? std::to_string(v) + "%" : std::string(T("Off")); };
+        BeginSetting(T("Volume"), T("All of the game's sound. 100% is the game's own mix; up to 200% louder."));
+        Slider("volume", settings_.volume, 0, 200, percent(settings_.volume));
+        EndSetting();
+        BeginSetting(T("Music"), T("The music, and the movies' sound, against the rest."));
+        Slider("music", settings_.music_volume, 0, 200, percent(settings_.music_volume));
+        EndSetting();
+        BeginSetting(T("Sound effects"), T("Everything else: the sounds and the voices of the story scenes."));
+        Slider("effects", settings_.effects_volume, 0, 200, percent(settings_.effects_volume));
+        EndSetting();
         BeginSetting(T("FPS counter"), T("Shows the frame rate in the corner."));
         ToggleRight("fps", settings_.fps_counter);
         EndSetting();
