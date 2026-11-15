@@ -40,12 +40,24 @@ def make_xgd2(xiso, dest):
     return dest
 
 
+def let_go(do, timeout=10):
+    """do() again until it no longer meets a file in use (Windows lets a killed game's files go a moment after)"""
+    end = time.time() + timeout
+    while True:
+        try:
+            return do()
+        except PermissionError:
+            if time.time() > end:
+                raise
+            time.sleep(0.25)
+
+
 def clear(assets):
     for e in assets.iterdir():
         if e.is_symlink() or e.is_file():
-            e.unlink()
+            let_go(e.unlink)
         else:
-            shutil.rmtree(e)
+            let_go(lambda: shutil.rmtree(e))
 
 
 def link_folder(folder, assets):
@@ -86,7 +98,13 @@ def start(pkg, env, timeout, done):
         time.sleep(0.25)
     time.sleep(0.5)  # a handover would be logged by now
     log = lt.log_text(pkg)
+    # every process of it ended and gone before the next case (its log and disc let go): taskkill returns before then
     lt.end_family(proc.pid)
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        pass
+    lt.wait(lambda: not lt.family_names(proc.pid), 10)
     return log, dialog, held
 
 
@@ -142,7 +160,7 @@ def main():
             xgd2 = make_xgd2(usa, where / "Castlevania (XGD2 layout).iso")
             case("xgd2: the same as a whole disc dump of the XGD2 layout", lambda: link(xgd2),
                  plays(xgd2.name), no_handover)
-            xgd2.unlink()
+            let_go(xgd2.unlink)
     if eu:
         case(f"eu: {eu.name}, the European release's, handed to CastlevaniaEU", lambda: link(eu),
              lambda log, dialog: any(eu.name in l and "another" not in l for l in game_lines(log)),
