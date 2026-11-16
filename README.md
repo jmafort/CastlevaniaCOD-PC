@@ -70,6 +70,7 @@ On top of Pazzi7054's port:
 - **Anisotropic filtering without a pack** - it sharpens the game's own textures too.
 - **PS2 button layout** - the PS2's button icons and shoulder buttons, as an option.
 - **Lament of Innocence bonus** - the Moai the PS2 game gave for a Lament of Innocence save, as an option.
+- **Evo Crystals** - each crystal an Innocent Devil takes counts 2, 4 or 8 times toward its evolution, as an option.
 - **Field of view, draw distance and fog** - a wider view, the world drawn farther and its fog pushed out or gone,
   with the painted skies kept as the game shows them. By Calm-Consideration41.
 - **HUD at the screen's corners** - in widescreen the health bar and the rest of the HUD sit in the corners of the
@@ -95,7 +96,8 @@ On top of Pazzi7054's port:
 - **16:10 widescreen** - for the Steam Deck and 16:10 monitors, beside 16:9. By Calm-Consideration41.
 - **The settings menu by controller** - LB and RB turn its pages, B and Start close it. By Calm-Consideration41.
 - **Sprint** - a click of L3 (the left stick pressed in) or of Left Shift while Hector walks, and he sprints until the
-  stick is let go: 1.25, 1.5 or 2 times his walk, off by default. Only his walk speeds up.
+  stick is let go: 1.25, 1.5 or 2 times his walk, off by default. Only his walk speeds up. With Sprint stays on, a click
+  turns it on and the next one off, so he sprints every time he walks.
 - **Speed-up** - a click of R3 (the right stick pressed in) or of Tab runs the whole game at 2x or 4x until it is
   clicked again, with a fast-forward sign at the screen's top right while it is on.
 - **Back to the title** - Back and Start (Select and Start in the PS2 layout) held for a second start the game again
@@ -600,6 +602,11 @@ background first); the size pictures load at applies from the next start.
 - **Lament of Innocence Save** - As the PS2 game did when it found a Lament of Innocence save on the memory card:
   a Moai to pick up at the far end of the room behind the first courtyard, beside the potion, for completing the
   item list (the launcher's or the in-game menu's Game page; `lament_save = true`).
+- **Evo Crystals** - Each Evo Crystal an Innocent Devil takes counts 2, 4 or 8 times toward its evolution (off by
+  default: once, as in the game; the launcher's or the in-game menu's Game page; `evo_crystals = 8`). A devil evolves
+  once it has enough crystals of one kind (40 to 100, by its form; the kind is the weapon Hector fought with), so the
+  late forms come much sooner: at 8x a devil 8 short of its evolution takes it with the next crystal. Only the count
+  changes: the evolutions and what the devils learn are the game's.
 - **Crazy Mode and Trevor Mode** - Name a new game `@CRAZY` for Crazy mode (harder enemies) or `@TREVOR` to play as
   Trevor Belmont, with his whip and sub-weapons. The game takes these names only once it has been beaten; here they
   work from the start. The `@` is on the last row of the name screen's letters. A beaten game is still not recorded
@@ -634,6 +641,10 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   `sprint = 150`). Only his walk speeds up, its animation with it, so his steps keep up with the ground: his guarded
   walk, the dodge, jumps and attacks, every enemy and the game's clock keep their pace. The game has no use of its own
   for the stick's click, in either button layout; L3 with R3 is still the settings menu.
+- **Sprint Stays On** - With it on, a click of L3 (let go), or of its key, turns the sprint on and the next one off:
+  Hector keeps sprinting when he stops, so each walk is a sprint, through the settings menu and from room to room,
+  until the next click (off by default; the Controls page; `sprint_stays = true`). Off, the sprint ends once you let go
+  of the stick.
 - **Speed-up** - Click the right stick in (R3), or press its key (Tab at first): the whole game runs at 2x (the default) or 4x until you
   click it again (the launcher's or the in-game menu's Controls page; `speed_up = 4`, or `0` for no speed-up). A
   fast-forward sign and the speed show at the screen's top right while it is on, and every start begins at the game's

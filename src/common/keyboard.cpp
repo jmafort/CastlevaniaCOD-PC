@@ -108,6 +108,8 @@ void BotPad(input::Pad& p);
 
 // Hector's sprint speed, in percent of his walk: 0 off, 125, 150, 200 (the settings file's sprint; game/hooks.cpp)
 uint32_t g_sprint = 0;
+// the sprint stays on through Hector's stops, until the next click (the settings file's sprint_stays)
+bool g_sprint_stays = false;
 // the speed-up's speed, times the game's own: 0 off, 2, 4 (the settings file's speed_up). R3 or Tab turns it on and off
 uint32_t g_speed_up = 2;
 // Back and Start held together go back to the title (the settings file's title_combo; TitleCombo)
@@ -626,7 +628,9 @@ std::atomic<bool> g_closing{false};  // the window is closing: a paused game let
 // Hector's sprint (game/hooks.cpp): a click of L3, the left stick pressed in, or of its key (Left Shift at first)
 // starts it; the move stick let go for a moment (10 frames, a sixth of a second, so a turn through the middle keeps
 // it) ends it, as do the settings menu and the sprint set off. L3 with R3 is the settings menu's, not a sprint's. The game has no use of its own for
-// either stick's click, in either button layout
+// either stick's click, in either button layout. With sprint_stays (issue 27) a click turns it on and the next one
+// off, and it stays on through his stops, the settings menu and the rooms in between, so each walk is a sprint: L3's
+// click is then its letting go, with R3 not held at any time while it was down, as the speed-up's click is R3's
 std::atomic<bool> g_sprinting{false};
 
 // the move stick pushed past the game's own dead zone (16 of the PS2's 128)
@@ -636,11 +640,21 @@ bool Moving(const input::Pad& p) {
 }
 
 void Sprint(const input::Pad& p, bool menu) {
-    static std::atomic<bool> l3_was{false}, shift_was{false};
+    static std::atomic<bool> l3_was{false}, shift_was{false}, spoiled{false};
     static std::atomic<int64_t> idle_since{-1};  // the frame the stick has been at rest since, -1 moving
     bool l3 = (p.buttons & kL3) != 0, r3 = (p.buttons & kR3) != 0;
     bool shift = Focused() && KeyDown(cv::kKeySprint);
-    bool clicked = (!l3_was.exchange(l3) && l3 && !r3) | (!shift_was.exchange(shift) && shift);
+    bool l3_before = l3_was.exchange(l3), shift_clicked = !shift_was.exchange(shift) && shift;
+    bool clicked = (!l3_before && l3 && !r3) | shift_clicked;
+    // sprint_stays' click: L3 let go, unless R3 was down with it (or the settings menu up) at any time while it was
+    bool let_go = l3_before && !l3 && !spoiled.load();
+    if (l3 && (r3 || menu)) spoiled = true;
+    else if (!l3) spoiled = false;
+    if (g_sprint && g_sprint_stays) {
+        if (!menu && (let_go || shift_clicked)) g_sprinting = !g_sprinting.load();
+        idle_since = -1;
+        return;
+    }
     if (!g_sprint || menu || (l3 && r3)) {
         g_sprinting = false;
         return;

@@ -32,6 +32,8 @@ extern uint32_t g_fog_distance;               // menu.cpp, read by game/view.cpp
 extern bool g_hud_edges;                      // menu.cpp, read by widescreen.cpp
 extern bool g_menu_spread;                    // widescreen.cpp
 extern uint32_t g_sprint;                     // keyboard.cpp, read by game/hooks.cpp
+extern bool g_sprint_stays;                   // keyboard.cpp
+extern uint32_t g_evo_crystals;               // menu.cpp, read by game/hooks.cpp
 extern uint32_t g_speed_up;                   // keyboard.cpp
 extern bool g_title_combo;                    // keyboard.cpp
 extern bool g_mouse_camera;                   // keyboard.cpp
@@ -119,6 +121,7 @@ const app::GameInfo app::kGame = {
                 {"texture_pack_materials", &g_texture_pack_materials, nullptr},
                 {"button_layout", nullptr, &g_button_layout},
                 {"lament_save", &g_lament_save, nullptr},
+                {"evo_crystals", nullptr, &g_evo_crystals},
                 {"game_language", nullptr, &g_game_language},
                 {"ps2_stick", &g_ps2_stick, nullptr},
                 {"invert_camera_x", &g_invert_camera_x, nullptr},
@@ -129,6 +132,7 @@ const app::GameInfo app::kGame = {
                 {"hud_edges", &g_hud_edges, nullptr},
                 {"menu_spread", &g_menu_spread, nullptr},
                 {"sprint", nullptr, &g_sprint},
+                {"sprint_stays", &g_sprint_stays, nullptr},
                 {"speed_up", nullptr, &g_speed_up},
                 {"title_combo", &g_title_combo, nullptr},
                 {"mouse_camera", &g_mouse_camera, nullptr},

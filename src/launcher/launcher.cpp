@@ -2042,9 +2042,11 @@ struct Settings {
     bool texture_pack_materials = true;  // the pack's normal and ORM maps (texpack.cpp)
     uint32_t button_layout = 0;         // 0 Xbox, 1 PS2
     bool lament_save = false;           // the Moai of a Lament of Innocence save (hooks.cpp)
+    uint32_t evo_crystals = 1;          // what an Evo Crystal counts as: 1 (the game's), 2, 4, 8 (hooks.cpp)
     bool ps2_stick = true;              // the sticks as the PS2 read them (hooks.cpp)
     bool invert_camera_x = false, invert_camera_y = false;  // the camera stick the other way (keyboard.cpp)
     uint32_t sprint = 0;                // Hector's sprint, percent of his walk: 0 off, 125, 150, 200 (keyboard.cpp)
+    bool sprint_stays = false;          // the sprint on through his stops, until the next click (keyboard.cpp)
     uint32_t speed_up = 2;              // the speed-up R3 or Tab turns on: 0 off, 2, 4 times the game's (keyboard.cpp)
     bool title_combo = false;           // Back and Start held go back to the title (keyboard.cpp)
     bool mouse_camera = false;          // the mouse turns the camera, its buttons press (keyboard.cpp)
@@ -2117,11 +2119,14 @@ struct Settings {
         texture_pack_materials = rest["texture_pack_materials"].value_or(texture_pack_materials);
         button_layout = rest["button_layout"].value_or(button_layout);
         lament_save = rest["lament_save"].value_or(lament_save);
+        evo_crystals = rest["evo_crystals"].value_or(evo_crystals);
+        if (evo_crystals != 2 && evo_crystals != 4 && evo_crystals != 8) evo_crystals = 1;
         ps2_stick = rest["ps2_stick"].value_or(ps2_stick);
         invert_camera_x = rest["invert_camera_x"].value_or(invert_camera_x);
         invert_camera_y = rest["invert_camera_y"].value_or(invert_camera_y);
         sprint = rest["sprint"].value_or(sprint);
         if (sprint != 125 && sprint != 150 && sprint != 200) sprint = 0;
+        sprint_stays = rest["sprint_stays"].value_or(sprint_stays);
         speed_up = rest["speed_up"].value_or(speed_up);
         if (speed_up != 0 && speed_up != 4) speed_up = 2;
         title_combo = rest["title_combo"].value_or(title_combo);
@@ -2187,10 +2192,12 @@ struct Settings {
         rest.insert_or_assign("texture_pack_materials", texture_pack_materials);
         rest.insert_or_assign("button_layout", int64_t(button_layout));
         rest.insert_or_assign("lament_save", lament_save);
+        rest.insert_or_assign("evo_crystals", int64_t(evo_crystals));
         rest.insert_or_assign("ps2_stick", ps2_stick);
         rest.insert_or_assign("invert_camera_x", invert_camera_x);
         rest.insert_or_assign("invert_camera_y", invert_camera_y);
         rest.insert_or_assign("sprint", int64_t(sprint));
+        rest.insert_or_assign("sprint_stays", sprint_stays);
         rest.insert_or_assign("speed_up", int64_t(speed_up));
         rest.insert_or_assign("title_combo", title_combo);
         rest.insert_or_assign("mouse_camera", mouse_camera);
@@ -3529,10 +3536,10 @@ private:
                std::to_string(s.keep_open) + "|" + std::to_string(s.menu_key) + "|" + std::to_string(s.texture_pack) +
                std::to_string(s.texture_pack_size) + std::to_string(s.texture_pack_materials) + "|" +
                std::to_string(s.button_layout) +
-               std::to_string(s.lament_save) + "|" + s.gpu + "|" + s.language + "|" + std::to_string(s.game_language) +
+               std::to_string(s.lament_save) + std::to_string(s.evo_crystals) + "|" + s.gpu + "|" + s.language + "|" + std::to_string(s.game_language) +
                "|" + s.translation + std::to_string(s.translation_dub) +
                "|" + std::to_string(s.ps2_stick) + std::to_string(s.invert_camera_x) + std::to_string(s.invert_camera_y) +
-               "|" + std::to_string(s.sprint) + std::to_string(s.speed_up) + std::to_string(s.title_combo) + "|" +
+               "|" + std::to_string(s.sprint) + std::to_string(s.sprint_stays) + std::to_string(s.speed_up) + std::to_string(s.title_combo) + "|" +
                std::to_string(s.hud_edges) + "|" + std::to_string(s.fov) + "|" + std::to_string(s.draw_distance) + "|" +
                std::to_string(s.fog_distance) + "|" + s.release + "|" +
                std::to_string(s.hdr) + std::to_string(s.hdr_peak_nits) + "|" + std::to_string(s.hdr_scene_nits) + "|" +
@@ -4439,6 +4446,11 @@ private:
                                                       "courtyard, beside the potion, for the item list."));
         ToggleRight("lament", settings_.lament_save);
         EndSetting();
+        BeginSetting(T("Evo Crystals"), T("Each Evo Crystal an Innocent Devil takes counts this many times toward its "
+                                          "evolution, for the late forms that want 70 to 100 crystals of a kind. Off: "
+                                          "one, as in the game."));
+        Segmented<uint32_t>("evo", settings_.evo_crystals, {1, 2, 4, 8}, {T("Off"), "2x", "4x", "8x"});
+        EndSetting();
         BeginSetting(T("Settings menu key"), T("Opens the in-game settings. Pick another if F10 does nothing on your keyboard "
                                                "(laptops often need Fn for it). L3 + R3 on a controller always works."));
         static const std::vector<uint32_t> keys = {VK_F10, VK_F1, VK_F2, VK_F4, VK_F5, VK_F6, VK_F7, VK_F8, VK_F9,
@@ -4488,6 +4500,12 @@ private:
                                "attacks keep their speed.", {KeysName(settings_.keys[cv::kKeySprint])});
         BeginSetting(T("Sprint"), sprint.c_str());
         Segmented<uint32_t>("sprint", settings_.sprint, {0, 125, 150, 200}, {T("Off"), "1.25x", "1.5x", "2x"});
+        EndSetting();
+        std::string stays = F("On: click the left stick in (L3), or press {}, once to sprint and again to walk: Hector "
+                              "sprints each time he walks, even after he stops. Off: the sprint ends once you let go of "
+                              "the stick.", {KeysName(settings_.keys[cv::kKeySprint])});
+        BeginSetting(T("Sprint stays on"), stays.c_str());
+        ToggleRight("sprintstays", settings_.sprint_stays);
         EndSetting();
         std::string speed = F("Click the right stick in (R3), or press {}: the whole game runs at this speed until you "
                               "click it again. A sign at the screen's top right shows it is on.",

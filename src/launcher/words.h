@@ -930,6 +930,27 @@ inline constexpr Row kRows[] = {
       "derrière la première cour, à côté de la potion, pour la liste des objets.",
       "Wie auf der PS2 mit einem Spielstand von Lament of Innocence auf der Memory Card: ein Moai am Ende des Raums "
       "hinter dem ersten Hof, neben dem Trank, für die Gegenstandsliste."}},
+    {{"Evo Crystals",
+      "Cristais Evo",
+      "Cristales de evolución",
+      "Cristalli Evo",
+      "Кристаллы эволюции",
+      "Cristaux Évo",
+      "Evo-Kristalle"}},
+    {{"Each Evo Crystal an Innocent Devil takes counts this many times toward its evolution, for the late forms that "
+      "want 70 to 100 crystals of a kind. Off: one, as in the game.",
+      "Cada Cristal Evo que um Innocent Devil pega conta esta quantidade de vezes para a evolução dele, para as formas "
+      "finais que pedem de 70 a 100 cristais de um tipo. Desl.: um, como no jogo.",
+      "Cada cristal de evolución que toma un Innocent Devil cuenta este número de veces para su evolución, para las "
+      "últimas formas, que piden de 70 a 100 cristales de un tipo. No: uno, como en el juego.",
+      "Ogni Cristallo Evo raccolto da un Innocent Devil conta questo numero di volte per la sua evoluzione, per le "
+      "ultime forme, che chiedono da 70 a 100 cristalli di un tipo. No: uno, come nel gioco.",
+      "Каждый кристалл эволюции, который берёт Innocent Devil, засчитывается столько раз для его эволюции: для "
+      "поздних форм, которым нужно от 70 до 100 кристаллов одного вида. Выкл: один, как в игре.",
+      "Chaque Cristal Évo qu'un Innocent Devil prend compte autant de fois pour son évolution, pour les dernières "
+      "formes, qui demandent de 70 à 100 cristaux d'un type. Non : un, comme dans le jeu.",
+      "Jeder Evo-Kristall, den ein Innocent Devil aufnimmt, zählt so oft für seine Entwicklung, für die späten "
+      "Formen, die 70 bis 100 Kristalle einer Art brauchen. Aus: einer, wie im Spiel."}},
     {{"Settings menu key",
       "Tecla do menu de configurações",
       "Tecla del menú de ajustes",
@@ -1516,6 +1537,20 @@ inline constexpr Row kRows[] = {
       "Нажмите левый стик (L3) или {}, пока Гектор идёт: он бежит с этой скоростью, пока вы не отпустите стик. Быстрее становится только его ходьба: враги, уклонение, прыжки и атаки сохраняют свою скорость.",
       "Cliquez le stick gauche (L3), ou appuyez sur {}, pendant qu'Hector marche : il court à cette vitesse jusqu'à ce que vous lâchiez le stick. Seule sa marche est plus rapide : les ennemis, son esquive, les sauts et les attaques gardent leur vitesse.",
       "Drücke den linken Stick (L3) oder {}, während Hector geht: Er sprintet mit diesem Tempo, bis du den Stick loslässt. Nur sein Gehen wird schneller: Gegner, Ausweichen, Sprünge und Angriffe behalten ihr Tempo."}},
+    {{"Sprint stays on",
+      "Corrida contínua",
+      "Correr continuo",
+      "Scatto continuo",
+      "Постоянный бег",
+      "Sprint maintenu",
+      "Sprint bleibt an"}},
+    {{"On: click the left stick in (L3), or press {}, once to sprint and again to walk: Hector sprints each time he walks, even after he stops. Off: the sprint ends once you let go of the stick.",
+      "Ligado: clique o analógico esquerdo (L3), ou aperte {}, uma vez para correr e outra para andar: Hector corre sempre que anda, mesmo depois de parar. Desligado: a corrida acaba quando você solta o analógico.",
+      "Sí: pulsa el stick izquierdo (L3), o la tecla {}, una vez para correr y otra para caminar: Hector corre cada vez que camina, incluso después de pararse. No: deja de correr al soltar el stick.",
+      "Sì: premi la levetta sinistra (L3), o il tasto {}, una volta per scattare e di nuovo per camminare: Hector scatta ogni volta che cammina, anche dopo essersi fermato. No: lo scatto finisce quando lasci la levetta.",
+      "Вкл: нажмите левый стик (L3) или {} один раз, чтобы бежать, и ещё раз, чтобы идти: Гектор бежит каждый раз, когда идёт, даже после остановки. Выкл: бег заканчивается, когда вы отпускаете стик.",
+      "Oui : cliquez le stick gauche (L3), ou appuyez sur {}, une fois pour courir et une autre pour marcher : Hector court chaque fois qu'il marche, même après s'être arrêté. Non : la course s'arrête quand vous lâchez le stick.",
+      "An: Drücke den linken Stick (L3) oder {} einmal zum Sprinten und noch einmal zum Gehen: Hector sprintet jedes Mal, wenn er geht, auch nachdem er stehen geblieben ist. Aus: Der Sprint endet, wenn du den Stick loslässt."}},
     {{"Speed-up",
       "Acelerar",
       "Acelerar",

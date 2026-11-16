@@ -14,8 +14,9 @@ and the game on a virtual X display of their own), with each disc linked into it
     starts CastlevaniaEU, which finds the European disc
   - Russian: the home page in Russian, a picture of it for the report
   - every page in every language: each opens (--page) with its controls, a picture of each for the report
-  - settings: the display mode, widescreen, render scale, filtering, the FPS counter and the button layout clicked
-    and saved as the game reads them; Reset to defaults puts them back, the language and the release kept
+  - settings: the display mode, widescreen, render scale, filtering, the FPS counter, Evo Crystals, the button
+    layout and Sprint stays on clicked and saved as the game reads them; Reset to defaults puts them back, the language
+    and the release kept
   - the keyboard's keys (Controls): a key clicked takes the next key pressed, saved as the game reads it; a key
     another action had leaves it; Escape stops the wait; the settings menu's key is not taken; Shift by its side; a
     right-click clears a key; another page ends the wait; Default keys, and Reset to defaults, put them all back
@@ -492,8 +493,8 @@ def main():
     checks = [("display", "mode.1", "display_mode", "borderless"), ("display", "mode.2", "display_mode", "windowed"),
               ("graphics", "scale.0", "render_percent", 50), ("graphics", "aniso.3", "anisotropic_filtering", 8),
               ("view", "wide.0", "widescreen", False), ("view", "wide.2", "widescreen_aspect", 1610),
-              ("game", "fps", "fps_counter", True),
-              ("controls", "layout.1", "button_layout", 1)]
+              ("game", "fps", "fps_counter", True), ("game", "evo.3", "evo_crystals", 8),
+              ("controls", "layout.1", "button_layout", 1), ("controls", "sprintstays", "sprint_stays", True)]
     la = None
     for page, control, key, value in checks:
         if not la or la.read().get("page") != pages.index(page):
@@ -507,7 +508,8 @@ def main():
     s = settings(pkg)
     for key, value in (("display_mode", "borderless"), ("widescreen", True), ("widescreen_aspect", 169),
                        ("render_percent", 100),
-                       ("anisotropic_filtering", 0), ("fps_counter", False), ("button_layout", 0),
+                       ("anisotropic_filtering", 0), ("fps_counter", False), ("evo_crystals", 1), ("button_layout", 0),
+                       ("sprint_stays", False),
                        ("launcher_language", "en"), ("release", EU)):
         if s.get(key) != value:
             errors.append(f"after Reset to defaults {key} is {s.get(key)!r}, not {value!r}")

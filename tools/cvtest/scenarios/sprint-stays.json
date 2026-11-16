@@ -1,0 +1,170 @@
+{
+  "name": "sprint-stays",
+  "after": "newgame.json",
+  "env": {
+    "XBE_VIRTUAL_PAD": "1"
+  },
+  "note": "Sprint stays on (sprint_stays, issue 27; keyboard.cpp), by a controller as SDL reads one: L3 clicked (let go) while Hector walks starts his sprint at 1.5 times his walk, and it stays on when he stops, so his next walk is a sprint too; the next click, standing, ends it. L3 with R3 opens the settings menu and toggles nothing; a sprint on stays on through the settings menu and a room change. Set off again, the sprint is as before: it ends once the stick is let go.",
+  "steps": [
+    {
+      "press": "0:set=sprint=150,0:set=sprint_stays=true,0f:wait:10f",
+      "expect": [
+        "sprint.setting == 150",
+        "sprint.stays",
+        "not sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsd:20f",
+      "note": "his walk",
+      "expect": [
+        "abs(player.speed - 18.519) < 0.05",
+        "not sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsd:30f,3f:l3:4f",
+      "shot": "sprint",
+      "note": "L3 clicked while walking",
+      "expect": [
+        "sprint.active",
+        "abs(player.speed - 27.778) < 0.05",
+        "384 in [player.pace0, player.pace1, player.pace2]"
+      ]
+    },
+    {
+      "press": "0f:wait:40f",
+      "note": "the stick let go, Hector stands: the sprint stays on",
+      "expect": [
+        "sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsu:30f",
+      "shot": "again",
+      "note": "a walk again: a sprint",
+      "expect": [
+        "sprint.active",
+        "abs(player.speed - 27.778) < 0.05",
+        "384 in [player.pace0, player.pace1, player.pace2]"
+      ]
+    },
+    {
+      "press": "0f:wait:20f,0f:l3:4f,4f:wait:20f",
+      "note": "L3 clicked standing: off",
+      "expect": [
+        "not sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsd:30f",
+      "note": "his walk again",
+      "expect": [
+        "abs(player.speed - 18.519) < 0.05",
+        "not sprint.active",
+        "384 not in [player.pace0, player.pace1, player.pace2]"
+      ]
+    },
+    {
+      "press": "0f:lsu:20f,3f:l3+r3:5f,25f:wait:20f",
+      "note": "both sticks: the settings menu, no sprint",
+      "expect": [
+        "settings_menu",
+        "not sprint.active"
+      ]
+    },
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "expect": [
+        "not settings_menu",
+        "not sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsd:30f,3f:l3:4f",
+      "note": "on again",
+      "expect": [
+        "sprint.active",
+        "abs(player.speed - 27.778) < 0.05"
+      ]
+    },
+    {
+      "press": "0f:wait:20f,0f:l3+r3:5f,25f:wait:20f",
+      "note": "the settings menu opened",
+      "expect": [
+        "settings_menu",
+        "sprint.active"
+      ]
+    },
+    {
+      "press": "0f:l3+r3:5f,10f:wait:20f",
+      "note": "and closed: still on",
+      "expect": [
+        "not settings_menu",
+        "sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsu:30f",
+      "expect": [
+        "sprint.active",
+        "abs(player.speed - 27.778) < 0.05"
+      ]
+    },
+    {
+      "press": "0:warp=5.2,10f:wait:20f",
+      "note": "another room"
+    },
+    {
+      "until": "room == 2 and player.active and not loading and not cutscene",
+      "timeout": 30,
+      "poll_by": [
+        [
+          "cutscene",
+          "0:start,45f:wait"
+        ],
+        [
+          "menu",
+          "0:b,30f:wait"
+        ]
+      ]
+    },
+    {
+      "press": "0f:wait:30f",
+      "expect": [
+        "sprint.active"
+      ],
+      "note": "still on after the room change"
+    },
+    {
+      "press": "0f:lsd:20f",
+      "shot": "room",
+      "expect": [
+        "sprint.active",
+        "abs(player.speed - 27.778) < 0.05"
+      ]
+    },
+    {
+      "press": "0:set=sprint_stays=false,0f:lsd:20f",
+      "note": "set off while sprinting: as before, on while he walks",
+      "expect": [
+        "not sprint.stays",
+        "sprint.active"
+      ]
+    },
+    {
+      "press": "0f:wait:20f",
+      "note": "the stick let go: the sprint ends",
+      "expect": [
+        "not sprint.active"
+      ]
+    },
+    {
+      "press": "0f:lsd:20f",
+      "expect": [
+        "abs(player.speed - 18.519) < 0.05",
+        "not sprint.active"
+      ]
+    }
+  ]
+}

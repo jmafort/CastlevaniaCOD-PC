@@ -35,6 +35,7 @@
 // (keyboard.cpp) writes the state beside each done file.
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -199,7 +200,10 @@ std::string TexturePackJson();  // texpack.cpp
 std::string MoviesJson();       // movies.cpp
 bool SprintOn();                // keyboard.cpp
 extern uint32_t g_sprint;       // keyboard.cpp
+extern bool g_sprint_stays;     // keyboard.cpp
 extern uint32_t g_speed_up;     // keyboard.cpp
+extern uint32_t g_evo_crystals;  // menu.cpp
+extern std::atomic<uint32_t> g_evo_taken, g_evo_added;  // game/hooks.cpp
 bool MenuOpen();         // menu.cpp
 float MenuScroll();      // menu.cpp
 
@@ -381,8 +385,28 @@ std::string GameStateJson() {
     }
     out += MenuOpen() ? ",\"settings_menu\":true" : ",\"settings_menu\":false";
     out += ",\"menu_scroll\":" + std::to_string(int(MenuScroll()));
-    // Hector's sprint: the setting (percent of his walk, 0 off) and whether he sprints (keyboard.cpp)
-    out += ",\"sprint\":{\"setting\":" + std::to_string(g_sprint) + ",\"active\":" + (SprintOn() ? "true" : "false") + "}";
+    // Hector's sprint: the setting (percent of his walk, 0 off), whether it stays on through his stops and whether he
+    // sprints (keyboard.cpp)
+    out += ",\"sprint\":{\"setting\":" + std::to_string(g_sprint) + ",\"stays\":" + (g_sprint_stays ? "true" : "false") +
+           ",\"active\":" + (SprintOn() ? "true" : "false") + "}";
+    // Evo Crystals (game/hooks.cpp): the setting, the crystals devils have taken and what they added, and each devil's
+    // kind (its form: a new one when it evolves) and five counts: the records after Hector's (cv::kAttributes is his
+    // +4), 0x238 bytes each, their count after the gold; a devil's kind at +4, its ID at +8, its counts at +0xA8
+    out += ",\"evo\":{\"setting\":" + std::to_string(g_evo_crystals) + ",\"taken\":" +
+           std::to_string(g_evo_taken.load(std::memory_order_relaxed)) + ",\"added\":" +
+           std::to_string(g_evo_added.load(std::memory_order_relaxed)) + ",\"devils\":[";
+    if (uint32_t count = 0; Read(cv::kGold + 4, count) && count <= 60) {
+        for (uint32_t i = 1; i < count; i++) {
+            uint32_t at = cv::kAttributes - 4 + i * 0x238, kind = 0, id = 0;
+            int32_t c[5] = {};
+            if (!Read(at + 4, kind) || !Read(at + 8, id) || !Read(at + 0xA8, c)) break;
+            char b[128];
+            std::snprintf(b, sizeof(b), "%s{\"id\":%u,\"kind\":%u,\"crystals\":[%d,%d,%d,%d,%d]}", i > 1 ? "," : "", id,
+                          kind, c[0], c[1], c[2], c[3], c[4]);
+            out += b;
+        }
+    }
+    out += "]}";
     // the speed-up: the setting (0 off, 2, 4) and the game's speed now (keyboard.cpp, the SDK's app::Speed)
     out += ",\"speed\":{\"setting\":" + std::to_string(g_speed_up) + ",\"times\":" + std::to_string(app::Speed()) +
            ",\"shown\":" + std::to_string(gpu::g_frames_shown.load(std::memory_order_relaxed)) + "}";

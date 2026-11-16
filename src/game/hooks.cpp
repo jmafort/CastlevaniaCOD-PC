@@ -11,6 +11,7 @@
 // made from (common/release.h); the European executable compiles this file too (game_eu/hooks.cpp). The addresses in
 // the comments are the USA release's.
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstring>
 
@@ -20,6 +21,7 @@
 
 extern bool g_lament_save;  // menu.cpp
 extern bool g_ps2_stick;    // menu.cpp
+extern uint32_t g_evo_crystals;  // menu.cpp: a devil's crystal counts as 1 (the game's), 2, 4 or 8
 bool SprintOn();            // keyboard.cpp
 float SprintFactor();       // keyboard.cpp
 
@@ -216,6 +218,32 @@ X86_EXTERN_FUNC(CV_ORIGINAL(CV_LAMENT_FLAG));
 X86_FUNC(CV_HOOK(CV_LAMENT_FLAG)) {
     CV_ORIGINAL(CV_LAMENT_FLAG)(ctx, base);
     if (g_lament_save) ctx.eax = 1;
+}
+
+// Evo Crystals (issue 18). The game adds to an attribute of Hector's or a devil's record here (sub_00151AF0: who, 0
+// Hector and a devil its ID, which attribute, how much), whose case for a devil's five crystal counts, attributes 0x29
+// to 0x2D (one for each kind of weapon a crystal comes from: its +0xA8 to +0xB8), holds them to 999 after the add, and
+// its evolution is looked at after that (sub_00151A20). A crystal the summoned devil takes adds 1 to its kind's count;
+// with evo_crystals at 2, 4 or 8 it adds that many, so an evolution that wants 70 or 100 of a kind comes sooner. What
+// takes crystals away, and Hector's own attributes of those numbers, are left alone. g_evo_taken and g_evo_added count
+// them for tests (telemetry.cpp)
+std::atomic<uint32_t> g_evo_taken{0}, g_evo_added{0};
+
+X86_EXTERN_FUNC(CV_ORIGINAL(CV_ADD_ATTRIBUTE));
+X86_FUNC(CV_HOOK(CV_ADD_ATTRIBUTE)) {
+    uint32_t who, attribute;
+    int32_t amount;
+    std::memcpy(&who, base + ctx.esp + 4, 4);
+    std::memcpy(&attribute, base + ctx.esp + 8, 4);
+    std::memcpy(&amount, base + ctx.esp + 12, 4);
+    if (who != 0 && attribute >= 0x29 && attribute <= 0x2D && amount > 0) {
+        int32_t times = g_evo_crystals == 2 || g_evo_crystals == 4 || g_evo_crystals == 8 ? int32_t(g_evo_crystals) : 1;
+        amount = std::min(amount * times, 999);
+        std::memcpy(base + ctx.esp + 12, &amount, 4);
+        g_evo_taken.fetch_add(1, std::memory_order_relaxed);
+        g_evo_added.fetch_add(uint32_t(amount), std::memory_order_relaxed);
+    }
+    CV_ORIGINAL(CV_ADD_ATTRIBUTE)(ctx, base);
 }
 
 // The play time (the pause menu's Time, kept in the save): a u32 at the game block's +8 (sub_002F7180's), in 1/300 of a

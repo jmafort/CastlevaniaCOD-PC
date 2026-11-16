@@ -43,6 +43,7 @@
 #define CV_MENU_NUMBER CV_PICK(0030F960, 00311170)      // a number drawn in the pause menu (hooks.cpp, the hours)
 #define CV_SAVE_NUMBER CV_PICK(0033E670, 00340200)      // a number drawn in a save slot (hooks.cpp, the hours)
 #define CV_FOG CV_PICK(00012A90, 00012A20)              // the fog set
+#define CV_ADD_ATTRIBUTE CV_PICK(00151AF0, 001520C0)    // an attribute of Hector's or a devil's added to (hooks.cpp, crystals)
 
 namespace cv {
 

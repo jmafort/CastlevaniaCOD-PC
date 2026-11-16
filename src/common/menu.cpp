@@ -40,6 +40,7 @@ bool g_pause_on_focus_loss = true;
 uint32_t g_menu_key = VK_F10;  // virtual key that opens the menu
 bool g_launcher_keep_open = false;  // the launcher's, kept when the game writes the file
 bool g_lament_save = false;  // as with a Lament of Innocence save on the PS2's memory card (hooks.cpp)
+uint32_t g_evo_crystals = 1;  // what an Evo Crystal a devil takes counts as: 1 (the game's), 2, 4, 8 (hooks.cpp)
 bool g_ps2_stick = true;     // the sticks as the PS2 read them, without the Xbox's dead zone by axis (hooks.cpp)
 bool g_invert_camera_x = false;  // the right stick turns the camera the other way across (keyboard.cpp)
 bool g_invert_camera_y = false;  // and up and down
@@ -78,6 +79,7 @@ extern bool g_movie_full_brightness;  // movies.cpp: the movies twice as bright 
 extern uint32_t g_movie_view;    // movies.cpp: 0 the game's 4:3, 1 the picture whole as large as it goes, 2 filled
 extern uint32_t g_button_layout;    // texpack.cpp
 extern uint32_t g_sprint;           // keyboard.cpp: Hector's sprint, percent of his walk (0 off)
+extern bool g_sprint_stays;         // keyboard.cpp: the sprint on through his stops, until the next click
 extern uint32_t g_speed_up;         // keyboard.cpp: the speed-up's speed (0 off, 2, 4)
 extern bool g_title_combo;          // keyboard.cpp: Back and Start held go back to the title
 extern bool g_mouse_camera;         // keyboard.cpp: the mouse turns the camera, its buttons press
@@ -613,6 +615,9 @@ void GameTab(bool& save) {
     Row("Lament of Innocence save", "As the PS2 game with a Lament of Innocence save on the memory card: a Moai "
                                     "at the far end of the room behind the first courtyard, beside the potion.");
     save |= Check("##lament", &g_lament_save);
+    Row("Evo Crystals", "Each Evo Crystal an Innocent Devil takes counts this many times toward its evolution, for the "
+                        "late forms that want 70 to 100 crystals of a kind. Off: one, as in the game.");
+    save |= Choice<uint32_t>("##evo", g_evo_crystals, {1, 2, 4, 8}, {"Off", "2x", "4x", "8x"});
     ImGui::EndTable();
 }
 
@@ -658,6 +663,11 @@ void ControlsTab(bool& save) {
                              "walk is faster: enemies, his dodge, jumps and attacks keep their speed.";
         Row("Sprint", sprint.c_str());
         save |= Choice<uint32_t>("##sprint", g_sprint, {0, 125, 150, 200}, {"Off", "1.25x", "1.5x", "2x"});
+        std::string stays = "On: click the left stick in (L3)" + or_press(cv::kKeySprint, ",") +
+                            " once to sprint and again to walk: Hector sprints each time he walks, even after he "
+                            "stops. Off: the sprint ends once you let go of the stick.";
+        Row("Sprint stays on", stays.c_str());
+        save |= Check("##sprintstays", &g_sprint_stays);
         std::string speed = "Click the right stick in (R3)" + or_press(cv::kKeySpeedUp, "") +
                             ": the whole game runs at this speed until you click it again. A sign at the screen's top "
                             "right shows it is on.";
@@ -739,12 +749,14 @@ void Defaults() {
     g_pause_on_focus_loss = true;
     g_button_layout = 0;
     g_lament_save = false;
+    g_evo_crystals = 1;
     g_ps2_stick = true;
     g_invert_camera_x = g_invert_camera_y = false;
     g_fov = 100;
     g_draw_distance = g_fog_distance = 100;
     g_hud_edges = true;
     g_sprint = 0;
+    g_sprint_stays = false;
     g_speed_up = 2;
     g_title_combo = false;
     g_mouse_camera = false;

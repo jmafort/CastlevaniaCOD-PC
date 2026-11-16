@@ -194,6 +194,10 @@ def tests():
         # 1.12.0: a steal's words in the middle beside the Innocent Devil's panel, not at the left with it (issue 19:
         # with DJBLOPA's save, which stays out of the repository)
         scenario("steal-words", *eu, needs=["save:user19eu"]),
+        # 1.13.0: Evo Crystals (issue 18), DJBLOPA's save again: a crystal counts once as in the game, and 8 times with
+        # the setting, when the devil evolves
+        scenario("evo-crystals", *eu, needs=["save:user19eu"]),
+        scenario("evo-crystals", *eu, "--set", "evo_crystals=8", test="evo-crystals-8x", needs=["save:user19eu"]),
         # in a game of its own: Hector's level up comes from the knights only at his first level (a session's game may
         # have him at his second)
         scenario("hud-levelup"),
@@ -225,6 +229,7 @@ def tests():
         scenario("sprint", quick=True),
         scenario("sprint", "--set", "button_layout=1", test="sprint-ps2"),
         scenario("sprint", *eu, test="sprint-eu"),
+        scenario("sprint-stays"),  # 1.13.0: the sprint on through Hector's stops, until the next click (issue 27)
         scenario("sprint-keys", platforms=["linux"]),
         # 1.9.0: the speed-up, 2x and 4x by R3 (a controller as SDL reads one), Tab on the keyboard (Linux)
         scenario("speed", quick=True),
