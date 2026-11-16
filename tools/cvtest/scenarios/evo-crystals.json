@@ -5,7 +5,7 @@
     "save:user19eu"
   ],
   "telemetry": 30,
-  "note": "Issue 18: Evo Crystals (evo_crystals; game/hooks.cpp, the game's attribute add sub_00151AF0). DJBLOPA's save (the European release, kept out of the repository) has three devils in the deck, the fifth summoned (kind 38) with 6 crystals of the first kind (its record's +0xA8, 0xB351DC) and none of the other four; it evolves at 70 of them (into kind 40, its counts back to 0). The count is set to 62, and the bot fights the skeletons of 5.3 with Hector's sword until the devil takes a crystal: as in the game (1) it holds 63 and the devil stays as it is; with --set evo_crystals=8 the crystal adds 8, 70, and the devil evolves. Each crystal taken adds the setting's count, and play goes on after the evolution's scene.",
+  "note": "Issue 18: Evo Crystals (evo_crystals; game/hooks.cpp, the game's attribute add sub_00151AF0). DJBLOPA's save (the European release, kept out of the repository) has three devils in the deck, the fifth summoned (kind 38) with 6 crystals of the first kind (its record's +0xA8, 0xB351DC) and none of the other four; it evolves at 70 of them (into kind 40, its counts back to 0). The count is set to 62, and the bot fights the skeletons of 5.3 with Hector's sword until the devil takes a crystal (the room entered again when it is cleared without one): as in the game (1) it holds 63 (one more for each crystal after it) and the devil stays as it is; with --set evo_crystals=8 the crystal adds 8, 70, and the devil evolves. Each crystal taken adds the setting's count, and play goes on after the evolution's scene.",
   "steps": [
     {
       "press": "0:wait:11000"
@@ -59,19 +59,33 @@
     {
       "until": "evo.taken >= 1",
       "poll": "0:heal,0:fight:500",
-      "timeout": 90,
-      "note": "fought until the devil takes a crystal"
+      "timeout": 300,
+      "note": "fought until the devil takes a crystal (a skeleton drops one now and then: a room cleared without one is entered again for six more)",
+      "poll_by": [
+        [
+          "room == 3 and len(enemies) == 0 and player.active and not loading and not cutscene",
+          "0:warp=5.3,10f:wait:120f"
+        ],
+        [
+          "cutscene",
+          "0:start,45f:wait"
+        ],
+        [
+          "menu",
+          "0:b,30f:wait"
+        ]
+      ]
     },
     {
       "press": "0f:wait:300f",
       "shot": "taken",
       "expect": [
-        "evo.taken == 1",
-        "evo.added == evo.setting",
+        "evo.taken >= 1",
+        "evo.added == evo.setting * evo.taken",
         "[d for d in evo.devils if d.id == 5][0].kind == (40 if evo.setting == 8 else 38)",
-        "[d for d in evo.devils if d.id == 5][0].crystals == ([0, 0, 0, 0, 0] if evo.setting == 8 else [62 + evo.added, 0, 0, 0, 0])"
+        "[d for d in evo.devils if d.id == 5][0].crystals == ([evo.added - 8, 0, 0, 0, 0] if evo.setting == 8 else [62 + evo.added, 0, 0, 0, 0])"
       ],
-      "note": "at 8 the crystal made 70 and the devil evolved (kind 40, its counts from 0 again); at 1, 63 and no evolution"
+      "note": "at 8 the first crystal made 70 and the devil evolved (kind 40, its counts from 0 again, then 8 for each crystal after it); at 1, 62 and one for each crystal, and no evolution"
     },
     {
       "until": "player.active and not modal and not cutscene and not loading and not menu",
