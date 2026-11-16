@@ -68,6 +68,7 @@
 #include "core/log.h"
 #include "gpu/ext.h"
 #include "gpu/texture.h"
+#include "ps2_buttons.h"
 
 bool g_texture_pack = true;         // settings file: texture_pack
 bool g_texture_pack_materials = true;  // texture_pack_materials: a pack's material maps (manifest.json) too
@@ -141,10 +142,13 @@ struct Key {
 // cells (A B X Y, L R, white and black: 8 bit, for their shading) in the PS2's places, so the PS2's 4 bit sheet,
 // in the palette its icons were drawn with, is the Xbox sheet with the PS2's icons: O, triangle, square, X where B
 // Y X A are, L1 L2 R1 R2 where L, white, R and black are (the PS2's shoulders, keyboard.cpp). A pack made from the
-// PS2 game has that sheet; the PS2 layout draws it for the Xbox one. (The Xbox sheet's name came from
+// PS2 game has that sheet; the PS2 layout draws it for the Xbox one. Without one (or with the pack off), the Xbox
+// sheet with the PS2's button cells over it (ps2_buttons.h, OwnButtons). (The Xbox sheet's name came from
 // CV_TEXPACK_MISSES on the controller settings screen.)
 constexpr Key kXboxButtons = {0xf381b771eed6d1a7ull, 0x485f27ac31c8011full};
 constexpr Key kPs2Buttons = {0x27818fa40a1117afull, 0x66279948575c23d7ull};
+constexpr uint64_t kOwnButtons = 1ull << 61;  // OwnButtons' replacement id (a pack picture's is its index + 1,
+                                              // a movie frame's has bit 62, movies.cpp)
 
 // Xbox textures a pack has under other names. On the PS2 each of these used part of its texture only (the rest is
 // never sampled), and the rest held whatever else was in GS memory there, which PCSX2 hashed with it; the Xbox has
@@ -374,7 +378,53 @@ public:
         asked_.fetch_add(1, std::memory_order_relaxed);
         if (id) matched_.fetch_add(1, std::memory_order_relaxed);
         Census(d, guest, palette, id, tried);
+        if (!id && g_button_layout == 1) id = OwnButtons(d, guest, palette);
         return id;
+    }
+
+    // the PS2 layout's icons where the pack has none for the button sheet (or is off): the Xbox sheet as the game
+    // draws it with the button palette, the PS2's button cells (ps2_buttons.h) over it in the PS2's colours. Only
+    // the button cells are drawn with that palette; the rest of the sheet keeps the game's own
+    uint64_t OwnButtons(const gpu::TextureDesc& d, const uint8_t* guest, const uint32_t* palette) {
+        if (!guest || !palette || d.width != 256 || d.height != 256 || d.depth > 1 || d.cube) return 0;
+        if (PaletteHash(palette, 256) != kXboxButtons.palette) return 0;
+        std::vector<uint8_t> idx;
+        if (!gpu::PaletteIndices(d, guest, idx) || idx.size() != 256 * 256 ||
+            TextureHash(idx, 256, 256, false) != kXboxButtons.texture)
+            return 0;
+        std::lock_guard lock(m_);
+        if (own_buttons_) return kOwnButtons;
+        std::vector<uint8_t> px(idx.size() * 4);  // B G R A, the Xbox's alpha
+        for (size_t i = 0; i < idx.size(); i++) {
+            uint32_t c = palette[idx[i]];  // A R G B
+            px[i * 4] = uint8_t(c);
+            px[i * 4 + 1] = uint8_t(c >> 8);
+            px[i * 4 + 2] = uint8_t(c >> 16);
+            px[i * 4 + 3] = uint8_t(c >> 24);
+        }
+        for (const cv::ButtonStrip& s : cv::kPs2ButtonStrips)
+            for (uint32_t y = 0; y < 24; y++)
+                for (uint32_t x = 0; x < s.width; x++) {
+                    char h = s.rows[y][x];
+                    uint32_t c = cv::kPs2ButtonColours[h <= '9' ? h - '0' : h - 'a' + 10];  // R G B A
+                    uint32_t a = c & 0xFF;
+                    uint8_t* p = &px[(size_t(s.y + y) * 256 + s.x + x) * 4];
+                    p[0] = uint8_t(c >> 8);
+                    p[1] = uint8_t(c >> 16);
+                    p[2] = uint8_t(c >> 24);
+                    p[3] = uint8_t(std::min(255u, (a * 255u + 64) / 128));  // the PS2's alpha doubled, as a pack's
+                }
+        auto r = std::make_shared<gpu::Replacement>();
+        r->width = r->height = 256;
+        r->levels.push_back(std::move(px));
+        for (uint32_t lw = 256, lh = 256; lw > 1 || lh > 1;) {
+            r->levels.push_back(Half(r->levels.back(), lw, lh));
+            lw = std::max(lw / 2, 1u);
+            lh = std::max(lh / 2, 1u);
+        }
+        own_buttons_ = std::move(r);
+        LOGR("texpack: the PS2 button icons drawn by the port (no pack picture for them)");
+        return kOwnButtons;
     }
 
     uint64_t Match(const gpu::TextureDesc& d, const uint8_t* guest, const uint32_t* palette, Key& tried) {
@@ -405,6 +455,7 @@ public:
 
     std::shared_ptr<const gpu::Replacement> Replaced(uint64_t id) {
         std::lock_guard lock(m_);
+        if (id == kOwnButtons) return own_buttons_;
         Entry& e = state_[size_t(id - 1)];
         if (e.stage == Stage::Failed) return std::make_shared<gpu::Replacement>();  // empty: drawn as it was
         if (e.stage != Stage::Ready) return nullptr;
@@ -935,6 +986,7 @@ private:
     std::set<uint64_t> census_;
     std::vector<int> material_of_;  // by picture, its material in materials_, -1 none
     std::vector<MaterialEntry> materials_;
+    std::shared_ptr<const gpu::Replacement> own_buttons_;  // OwnButtons' picture, made once
     // CV_TEXPACK_CENSUS's, on the render thread
     std::map<Key, int> census_index_;
     std::vector<CensusRow> census_list_;

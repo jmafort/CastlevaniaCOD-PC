@@ -1,7 +1,7 @@
 {
   "name": "buttons",
   "after": "newgame.json",
-  "note": "The button icons, asked of the AI judge: Hector at the courtyard door (no icon there, its arrows turn green) and the controller settings page. Xbox icons by default; --set button_layout=1 for the PS2 ones (from an HD pack made from the PS2 game).",
+  "note": "The button icons, asked of the AI judge: Hector at the courtyard door (no icon there, its arrows turn green) and the controller settings page. Xbox icons by default; --set button_layout=1 for the PS2 ones: an HD pack's PS2 sheet with the pack on, else the port's own (--set texture_pack=false too).",
   "steps": [
     {
       "press": "0:walk=-5165/-4876/120:8000",
@@ -87,7 +87,8 @@
         }
       },
       "expect": [
-        "screen.ask.answer == ('playstation' if settings.button_layout == 1 else 'xbox')"
+        "screen.ask.answer == ('playstation' if settings.button_layout == 1 else 'xbox')",
+        "(len(found(runlog, 'PS2 button icons drawn by the port')) > 0) == (settings.button_layout == 1 and not settings.texture_pack)"
       ]
     }
   ]

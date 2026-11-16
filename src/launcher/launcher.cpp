@@ -614,7 +614,6 @@ struct Files {
     bool exe = false;  // Castlevania.exe, the USA release's, which the other starts when it has no game of its own
     fs::path textures;
     size_t pictures = 0;      // .png and .dds in textures and the folders inside it
-    bool ps2_buttons = false;  // the PS2's button icons among them (texpack.cpp, the PS2 button layout)
     bool movies = false;       // a movie pack beside the game: movies\movies.toml (movies.cpp)
     fs::path logo;             // the title logo among them, for the home page
     fs::path crest, runes;     // the crest's picture among them and its ring of runes (src/common/crest.h)
@@ -623,7 +622,6 @@ struct Files {
     void Scan() {
         textures = FindTextures();
         pictures = 0;
-        ps2_buttons = false;
         logo.clear();
         crest.clear();
         runes.clear();
@@ -636,7 +634,6 @@ struct Files {
                 if (ext != L".png" && ext != L".dds") continue;
                 pictures++;
                 std::wstring name = it->path().filename().wstring();
-                ps2_buttons |= name.rfind(L"27818fa40a1117af-66279948575c23d7-", 0) == 0;
                 // the SLUS-21168 pack has it twice, the same picture
                 if (logo.empty() && (name.rfind(L"b0f0108366aad095-5623c99b0b0ecf41-", 0) == 0 ||
                                      name.rfind(L"fe15d42446e1b4e5-5623c99b0b0ecf41-", 0) == 0))
@@ -4472,13 +4469,6 @@ private:
                                            "resets the camera, R1 guards, L2 and R2 lock on. The keyboard keeps its keys."), true);
         Segmented<uint32_t>("layout", settings_.button_layout, {0, 1}, {"Xbox", "PS2"});
         EndSetting();
-        if (settings_.button_layout == 1) {
-            ImGui::Dummy({0, S(2)});
-            // the icons are the PS2 sheet of an HD pack made from the PS2 game (texpack.cpp)
-            if (!settings_.texture_pack) Status(kIconWarn, kMuted, T("The PS2 icons need the HD texture pack on (Graphics)"));
-            else if (files_.ps2_buttons) Status(kIconCheck, kGreen, T("PS2 icons found in the texture pack"));
-            else Status(kIconWarn, kMuted, T("No PS2 icons in the textures folder: the Xbox ones stay, the shoulders change"));
-        }
         EndCard();
         BeginCard("sticks");
         BeginSetting(T("Stick response"), T("PS2: Hector walks any way the stick points, from a slow walk up, as on the PS2. "

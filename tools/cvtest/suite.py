@@ -178,6 +178,8 @@ def tests():
         scenario("moai", test="moai-off"),
         scenario("buttons", test="buttons-xbox"),
         scenario("buttons", "--set", "button_layout=1", test="buttons-ps2", needs=["textures"]),
+        # 1.12.0: the PS2 layout's icons with no texture pack
+        scenario("buttons", "--set", "button_layout=1", "--set", "texture_pack=false", test="buttons-ps2-own"),
         scenario("buttons-live", needs=["textures"]),  # the layout changed while the game runs
         scenario("filters", test="filters-pack", needs=["textures"]),
         scenario("filters", "--set", "texture_pack=false", test="filters-nopack"),
@@ -189,7 +191,7 @@ def tests():
         # 1.10.3: the HUD's sheet has its words drawn in, one per language; only the English one was known, so in
         # Spanish the marker and the Innocent Devil's panel were not the HUD's (issues 5, 15)
         scenario("lockon", *eu, "--set", "game_language=5", test="lockon-eu-es"),
-        # 1.11.2: a steal's words in the middle beside the Innocent Devil's panel, not at the left with it (issue 19:
+        # 1.12.0: a steal's words in the middle beside the Innocent Devil's panel, not at the left with it (issue 19:
         # with DJBLOPA's save, which stays out of the repository)
         scenario("steal-words", *eu, needs=["save:user19eu"]),
         # in a game of its own: Hector's level up comes from the knights only at his first level (a session's game may
@@ -217,7 +219,7 @@ def tests():
         # 1.11.0: the keyboard's keys the launcher changed (common/keys.h): read at the start, listed in the settings
         # menu, changed while the game runs, kept when the menu saves; pressed, on Linux (keys-remap, below)
         scenario("keys-menu"),
-        # 1.11.2: the mouse turns the camera, as far as it moved, the way it moved (issue 25)
+        # 1.12.0: the mouse turns the camera, as far as it moved, the way it moved (issue 25)
         scenario("mouse-camera"),
         # Hector's sprint, by a controller in both button layouts and both releases, and by the keyboard (Linux)
         scenario("sprint", quick=True),
