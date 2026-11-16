@@ -2050,6 +2050,8 @@ struct Settings {
     uint32_t sprint = 0;                // Hector's sprint, percent of his walk: 0 off, 125, 150, 200 (keyboard.cpp)
     uint32_t speed_up = 2;              // the speed-up R3 or Tab turns on: 0 off, 2, 4 times the game's (keyboard.cpp)
     bool title_combo = false;           // Back and Start held go back to the title (keyboard.cpp)
+    bool mouse_camera = false;          // the mouse turns the camera, its buttons press (keyboard.cpp)
+    uint32_t mouse_sensitivity = 100;   // percent of the mouse's turn at first, 10 to 500
     uint32_t fov = 100;                 // percent of the game's field of view in play (game/view.cpp)
     uint32_t draw_distance = 100;       // percent of the game's far plane (game/view.cpp)
     uint32_t fog_distance = 100;        // percent of the game's fog distance, 0 none (game/view.cpp)
@@ -2126,6 +2128,8 @@ struct Settings {
         speed_up = rest["speed_up"].value_or(speed_up);
         if (speed_up != 0 && speed_up != 4) speed_up = 2;
         title_combo = rest["title_combo"].value_or(title_combo);
+        mouse_camera = rest["mouse_camera"].value_or(mouse_camera);
+        mouse_sensitivity = std::clamp(rest["mouse_sensitivity"].value_or(mouse_sensitivity), 10u, 500u);
         fov = rest["fov"].value_or(fov);
         draw_distance = rest["draw_distance"].value_or(draw_distance);
         fog_distance = rest["fog_distance"].value_or(fog_distance);
@@ -2192,6 +2196,8 @@ struct Settings {
         rest.insert_or_assign("sprint", int64_t(sprint));
         rest.insert_or_assign("speed_up", int64_t(speed_up));
         rest.insert_or_assign("title_combo", title_combo);
+        rest.insert_or_assign("mouse_camera", mouse_camera);
+        rest.insert_or_assign("mouse_sensitivity", int64_t(mouse_sensitivity));
         rest.insert_or_assign("fov", int64_t(fov));
         rest.insert_or_assign("draw_distance", int64_t(draw_distance));
         rest.insert_or_assign("fog_distance", int64_t(fog_distance));
@@ -2302,6 +2308,14 @@ std::string ResName(Res r) {
 #endif
 
 std::string KeyName(uint32_t vk) {
+    switch (vk) {  // the mouse's buttons (common/keys.h's MouseButtonName, in the language)
+        case VK_LBUTTON: return T("Left click");
+        case VK_RBUTTON: return T("Right click");
+        case VK_MBUTTON: return T("Middle click");
+        case VK_XBUTTON1: return T("Mouse 4");
+        case VK_XBUTTON2: return T("Mouse 5");
+        default: break;
+    }
     wchar_t name[64] = {};
     LONG scan = LONG(MapVirtualKeyW(vk, MAPVK_VK_TO_VSC)) << 16;
     if (cv::KeyExtended(vk)) scan |= 1 << 24;  // the arrows and the block above them, right Ctrl and Alt, numpad /
@@ -3529,7 +3543,8 @@ private:
                std::to_string(s.upscaling) + std::to_string(s.ambient_occlusion) + std::to_string(s.surface_depth) + std::to_string(s.ray_tracing) + "|" + std::to_string(s.rt_lighting) + std::to_string(s.rt_quality) + "|" +
                std::to_string(s.sharpening) + "|" + std::to_string(s.hd_movies) + std::to_string(s.movie_view) + "|" +
                std::to_string(s.update_check) + "|" + std::to_string(s.volume) + "," + std::to_string(s.music_volume) +
-               "," + std::to_string(s.effects_volume) + "|" + KeysSnapshot();
+               "," + std::to_string(s.effects_volume) + "|" + std::to_string(s.mouse_camera) + "," +
+               std::to_string(s.mouse_sensitivity) + "|" + KeysSnapshot();
     }
 
     std::string KeysSnapshot() const {
@@ -4498,6 +4513,18 @@ private:
         ToggleRight("title", settings_.title_combo);
         EndSetting();
         EndCard();
+        BeginCard("mouse");
+        BeginSetting(T("Mouse camera"), T("The mouse turns the camera, held in the game's window and hidden while you play, "
+                                          "and its buttons press what the keyboard's list below gives them: at first the "
+                                          "left attacks, the right guards and the middle locks on. The settings menu has "
+                                          "the pointer back."));
+        ToggleRight("mousecam", settings_.mouse_camera);
+        EndSetting();
+        BeginSetting(T("Mouse sensitivity"), T("How far the camera turns for a move of the mouse, from 10% to 500% of its "
+                                               "turn at first."));
+        Slider("mousesens", settings_.mouse_sensitivity, 10, 500, std::to_string(settings_.mouse_sensitivity) + "%");
+        EndSetting();
+        EndCard();
         BeginCard("keys");
         KeysCard();
         EndCard();
@@ -4511,6 +4538,8 @@ private:
                                    "it, and a key given to one action leaves the one that had it. The buttons are named by "
                                    "what the game's own controller settings (in its Options) have them do at first: "
                                    "change those there, and each key keeps its button."));
+        Wrapped(g_small, kMuted, T("For a mouse button, click it on the key that waits. The mouse's buttons press only "
+                                   "with Mouse camera on."));
         ImGui::Dummy({0, S(6)});
         if (key_input_ >= 0) TakeKey();
         // the labels of the inputs, as words.h has them (a label without a row there does not compile)
@@ -4555,13 +4584,24 @@ private:
     // one of an input's keys as a keycap: its name, "-" for none, and the green bar while it waits for a key; true
     // when the pointer is over it
     bool KeySlot(cv::KeyInput in, int which, float width) {
+        ImVec2 size{width, S(30)};
+        ImVec2 a = ImGui::GetCursorScreenPos();
+        // a mouse button pressed on the key that waits is the one to take (the press that started the wait came first)
+        bool took = false;
+        if (key_input_ == in && key_slot_ == which && ImGui::IsMouseHoveringRect(a, a + size)) {
+            static constexpr uint32_t kButtons[] = {VK_LBUTTON, VK_RBUTTON, VK_MBUTTON, VK_XBUTTON1, VK_XBUTTON2};
+            for (int b = 0; b < 5 && !took; b++)
+                if (ImGui::IsMouseClicked(b)) {
+                    TakeButton(kButtons[b]);
+                    took = true;
+                }
+        }
         uint16_t vk = settings_.keys[in][which];
         bool waiting = key_input_ == in && key_slot_ == which;
         std::string id = std::string("key.") + cv::kKeyInputs[in].name + "." + std::to_string(which);
         std::string text = waiting ? T("Press a key") : vk ? KeyName(vk) : "-";
-        ImVec2 size{width, S(30)};
-        ImVec2 a = ImGui::GetCursorScreenPos();
-        bool clicked = ImGui::InvisibleButton(id.c_str(), size);
+        // on its press, not its release: the next press on it is a mouse button's to take
+        bool clicked = ImGui::InvisibleButton(id.c_str(), size, ImGuiButtonFlags_PressedOnClick) && !took;
         g_marks.Mark(id);
         bool hover = ImGui::IsItemHovered();
         float t = Ease(ImGui::GetItemID(), waiting, 16);
@@ -4583,11 +4623,21 @@ private:
             key_slot_ = which;
             g_key_pressed = 0;  // a key from before the click is not the one
         }
-        if (hover && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        if (hover && !took && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
             settings_.keys[in][which] = 0;
             if (waiting) key_input_ = -1;
         }
         return hover;
+    }
+
+    // a mouse button clicked on the key that waits, which another input that has it leaves
+    void TakeButton(uint32_t vk) {
+        for (auto& keys : settings_.keys)
+            for (uint16_t& k : keys)
+                if (k == vk) k = 0;
+        settings_.keys[key_input_][key_slot_] = uint16_t(vk);
+        key_input_ = -1;
+        key_held_ = vk;
     }
 
     // the key pressed for the one waiting: Escape stops the wait, the settings menu's key is not taken, a key another

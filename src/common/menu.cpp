@@ -80,6 +80,8 @@ extern uint32_t g_button_layout;    // texpack.cpp
 extern uint32_t g_sprint;           // keyboard.cpp: Hector's sprint, percent of his walk (0 off)
 extern uint32_t g_speed_up;         // keyboard.cpp: the speed-up's speed (0 off, 2, 4)
 extern bool g_title_combo;          // keyboard.cpp: Back and Start held go back to the title
+extern bool g_mouse_camera;         // keyboard.cpp: the mouse turns the camera, its buttons press
+extern uint32_t g_mouse_sensitivity;  // keyboard.cpp: percent of its turn at first
 extern bool g_texture_pack;         // texpack.cpp: an HD texture pack's pictures drawn
 bool ViewFov(double& game, double& drawn);  // game/view.cpp: the field of view in degrees, the game's and as drawn
 extern std::atomic<bool> g_wide_trace_frame;  // widescreen.cpp: log the next frame's draws
@@ -637,6 +639,19 @@ void ControlsTab(bool& save) {
         save |= Check("##invy", &g_invert_camera_y);
         ImGui::EndTable();
     }
+    if (Section("Mouse", "mouse")) {
+        Row("Mouse camera", "The mouse turns the camera, held in the game's window and hidden while you play, and its "
+                            "buttons press what the keyboard's list below gives them: at first the left attacks, the "
+                            "right guards and the middle locks on. The settings menu has the pointer back.");
+        save |= Check("##mousecam", &g_mouse_camera);
+        Row("Mouse sensitivity", "How far the camera turns for a move of the mouse, from 10% to 500% of its turn at first.");
+        int sens = int(std::clamp<uint32_t>(g_mouse_sensitivity, 10, 500));
+        if (SliderI("##mousesens", &sens, 10, 500, "%d%%", ImGuiSliderFlags_AlwaysClamp)) {
+            g_mouse_sensitivity = uint32_t(sens);
+            save = true;
+        }
+        ImGui::EndTable();
+    }
     if (Section("Movement", "move")) {
         std::string sprint = "Click the left stick in (L3)" + or_press(cv::kKeySprint, ",") +
                              " while Hector walks: he sprints at this speed until you let go of the stick. Only his "
@@ -661,7 +676,8 @@ void ControlsTab(bool& save) {
     ImGui::SeparatorText("Keyboard");
     ImGui::TextWrapped("Xbox, PlayStation and Switch controllers work as player 1. The keyboard plays alongside, with "
                        "these keys (the launcher's Controls page changes them). The buttons are named by what the "
-                       "game's Controller Config has them do at first.");
+                       "game's Controller Config has them do at first. The mouse's buttons press only with Mouse "
+                       "camera on.");
     ImGui::Spacing();
     if (ImGui::BeginTable("keys", 2, ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV)) {
         auto row = [](const std::string& keys, const char* what) {
@@ -731,6 +747,8 @@ void Defaults() {
     g_sprint = 0;
     g_speed_up = 2;
     g_title_combo = false;
+    g_mouse_camera = false;
+    g_mouse_sensitivity = 100;
     g_menu_spread = true;
     g_hd_movies = true;
     g_movie_full_brightness = true;
@@ -749,8 +767,10 @@ void Defaults() {
     app::ApplyDisplay();
 }
 
-// a key as the keyboard labels it, empty when it has no name; looked up once (the menu draws them each frame)
+// a key as the keyboard labels it, empty when it has no name; looked up once (the menu draws them each frame). A mouse
+// button by keys.h's name
 std::string KeyText(uint32_t vk) {
+    if (const char* mouse = cv::MouseButtonName(vk)) return mouse;
     static std::string names[256];
     static bool asked[256] = {};
     vk &= 0xFF;

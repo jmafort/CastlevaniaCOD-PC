@@ -20,6 +20,8 @@ and the game on a virtual X display of their own), with each disc linked into it
     another action had leaves it; Escape stops the wait; the settings menu's key is not taken; Shift by its side; a
     right-click clears a key; another page ends the wait; Default keys, and Reset to defaults, put them all back
   - the volumes (Game): a click along each slider sets it, saved as the game reads it; Reset to defaults, 100 each
+  - the mouse (Controls): Mouse camera and its sensitivity saved; a middle click on the key that waits takes that
+    button from the action that had it; Reset to defaults
   - a fan translation in mods (a catalog of no texts, as PTBR-PS2): listed on the Game page, chosen, its dub off
   - the HD texture pack's row: none in the textures folder, then three pictures found and in use, switched off
   - the Game files page: each copy's verdict (the USA release's patched xiso, the European one, another release's
@@ -209,6 +211,20 @@ def right_click(win, rect):
     user32 = ctypes.WinDLL("user32")
     lp = (y << 16) | (x & 0xFFFF)
     for msg, wp in ((0x0200, 0), (0x0204, 2), (0x0205, 0)):  # WM_MOUSEMOVE, WM_RBUTTONDOWN, WM_RBUTTONUP: at once
+        user32.PostMessageW(win, msg, wp, lp)
+
+
+def middle_click(win, rect):
+    """a middle click in the middle of a control's rectangle, as right_click"""
+    x, y = (rect[0] + rect[2]) // 2, (rect[1] + rect[3]) // 2
+    if LINUX:
+        subprocess.run(["xdotool", "windowfocus", "--sync", str(win)], capture_output=True)
+        subprocess.run(["xdotool", "mousemove", "--window", str(win), str(x), str(y), "click", "2"], capture_output=True)
+        return
+    import ctypes
+    user32 = ctypes.WinDLL("user32")
+    lp = (y << 16) | (x & 0xFFFF)
+    for msg, wp in ((0x0200, 0), (0x0207, 0x10), (0x0208, 0)):  # WM_MOUSEMOVE, WM_MBUTTONDOWN, WM_MBUTTONUP: at once
         user32.PostMessageW(win, msg, wp, lp)
 
 
@@ -543,8 +559,8 @@ def main():
         if keys_saved() != want:
             errors.append(f"{what}: the keys saved are {keys_saved()}, not {want}")
 
-    # J for jump's first key: attack, which had it, left with none; jump keeps Space
-    take("key.a.0", KEY_J, {"key_a": [74, 32], "key_x": [0, 0]}, "J for jump")
+    # J for jump's first key: attack, which had it, left with its second, the left mouse button (1); jump keeps Space
+    take("key.a.0", KEY_J, {"key_a": [74, 32], "key_x": [0, 1]}, "J for jump")
     la.shot("keys-taken")
     # Escape stops the wait: the K after it changes nothing
     if la.click("key.x.0"):
@@ -552,12 +568,12 @@ def main():
         press_key(la.win, *KEY_ESCAPE)
         time.sleep(0.3)
         press_key(la.win, *KEY_K)
-        kept({"key_a": [74, 32], "key_x": [0, 0]}, "Escape, then K")
+        kept({"key_a": [74, 32], "key_x": [0, 1]}, "Escape, then K")
     # the settings menu's key (F10) is not taken, the wait goes on; the right Shift then is, by its side
     if la.click("key.x.1"):
         time.sleep(0.3)
         press_key(la.win, *KEY_F10)
-        kept({"key_a": [74, 32], "key_x": [0, 0]}, "F10 for attack")
+        kept({"key_a": [74, 32], "key_x": [0, 1]}, "F10 for attack")
         press_key(la.win, *KEY_RSHIFT)
         if not wait(lambda: keys_saved().get("key_x") == [0, 161], 4):
             errors.append(f"right Shift for attack: the keys saved are {keys_saved()}")
@@ -612,6 +628,41 @@ def main():
     la.close()
     results.append(result("the volumes: set by a click along their sliders, saved as the game reads them, put back by "
                           "Reset to defaults (volumes.png)", errors))
+
+    # 1.11.2: the mouse on the Controls page (issue 25): Mouse camera and its sensitivity saved as the game reads them
+    # (mouse_camera, mouse_sensitivity 10 to 500), and a mouse button taken by a click of it on the key that waits
+    errors = []
+    la = Launcher(pkg, env, out, ["--page", "controls"])
+    if not la.set_by_click("mousecam", lambda: settings(pkg).get("mouse_camera") is True):
+        errors.append(f"Mouse camera clicked: mouse_camera saved as {settings(pkg).get('mouse_camera')}")
+    rect = la.control("mousesens")
+    if not rect:
+        errors.append("mousesens: not on the Controls page")
+    else:
+        click_at(la.win, rect, 0.75)  # 10 + 0.75 * 490: about 377
+        if not wait(lambda: 350 <= (settings(pkg).get("mouse_sensitivity") or 0) <= 400, 4):
+            errors.append(f"mousesens clicked three quarters along: saved as {settings(pkg).get('mouse_sensitivity')}")
+    # the ability's second key, none at first: clicked, then the middle button clicked on it takes it (4), and the
+    # lock-on, which had it, is left with C
+    if la.click("key.y.1"):
+        time.sleep(0.4)
+        rect = la.control("key.y.1")
+        if rect:
+            middle_click(la.win, rect)
+        if not rect or not wait(lambda: settings(pkg).get("key_y") == [73, 4] and settings(pkg).get("key_black") == [67, 0], 4):
+            errors.append(f"the middle button on the ability's waiting key: key_y {settings(pkg).get('key_y')}, "
+                          f"key_black {settings(pkg).get('key_black')}")
+    else:
+        errors.append("key.y.1 could not be clicked")
+    la.shot("mouse")
+    if not la.set_by_click("Reset to defaults", lambda: settings(pkg).get("mouse_camera") is False and
+                           settings(pkg).get("mouse_sensitivity") == 100 and "key_y" not in settings(pkg)):
+        errors.append(f"Reset to defaults: mouse_camera {settings(pkg).get('mouse_camera')}, mouse_sensitivity "
+                      f"{settings(pkg).get('mouse_sensitivity')}, key_y {settings(pkg).get('key_y')}")
+    la.close()
+    results.append(result("the mouse: Mouse camera and its sensitivity saved as the game reads them, a mouse button "
+                          "taken by a click of it on the key that waits, moved from the action that had it, all put "
+                          "back by Reset to defaults (mouse.png)", errors))
 
     # the HD texture pack's row
     errors = []

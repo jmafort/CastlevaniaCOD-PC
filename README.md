@@ -105,6 +105,8 @@ On top of Pazzi7054's port:
 - **Crazy mode and Trevor from the start** - the name codes `@CRAZY` and `@TREVOR` work without beating the game first.
 - **Keyboard keys of your choice** - every key the keyboard plays with can be changed on the launcher's Controls page,
   two keys for each action. See [Keyboard](#keyboard).
+- **Mouse camera** - with it on, the mouse turns the camera and its buttons attack, guard and lock on (or what you
+  give them). Off by default. See [Mouse](#mouse).
 - **Volume** - the whole sound, the music and the sound effects apart, from 0 to 200% of the game's own mix, on the
   launcher's Game page and the settings menu's. The game plays quiet, its music under its effects.
 - **Movies at their full brightness** - the Xbox release drew its movies (and so the HD ones) at half their
@@ -620,8 +622,8 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   straight along them (within 20 degrees at full tilt, 42 at half), and a walk starts at a third of his speed. The
   PS2 setting lets the axes through as the PS2 did, and the game's own round dead zone counts: he walks any way the
   stick points, from a slow walk up (the in-game menu's Controls page; `ps2_stick = false` for the Xbox's).
-- **Invert Camera** - Left / right and up / down apart: the right stick (and the camera's keys) move the camera the
-  other way (`invert_camera_x`, `invert_camera_y`).
+- **Invert Camera** - Left / right and up / down apart: the right stick (and the camera's keys, and the mouse) move
+  the camera the other way (`invert_camera_x`, `invert_camera_y`).
 - **Rumble** - As on the PS2: the game drives a PS2 controller's two motors, the large one at 256 speeds and the
   small one on or off. The Xbox release made both of the controller's motors one value from either, so the small
   motor's "on" (1 of 255) that the game sends right after the large one's speed left nearly nothing; on the console
@@ -658,13 +660,13 @@ The keyboard plays as player 1 while the window is in front, alongside a control
 | W A S D | left stick | move |
 | arrow keys | right stick | camera |
 | K or Space | A | jump |
-| J | X | attack |
+| J or the left mouse button* | X | attack |
 | I | Y | ability |
 | L | B | final attack, confirm |
-| E | right trigger | guard |
+| E or the right mouse button* | right trigger | guard |
 | Q | left trigger | camera reset |
 | Z | white (LB) | change lock-on |
-| C | black (RB) | lock-on on / off |
+| C or the middle mouse button* | black (RB) | lock-on on / off |
 | Enter / Backspace | Start / Back | |
 | numpad 8 2 4 6 | d-pad | |
 | Left Shift | L3 | sprint |
@@ -672,8 +674,10 @@ The keyboard plays as player 1 while the window is in front, alongside a control
 | Enter + Backspace, held | Start + Back | back to the title, with the setting on |
 | F10 (changeable on the Game page) | L3 + R3 | settings menu |
 
+\* With Mouse Camera on (see [Mouse](#mouse)).
+
 Every one of them can be changed on the launcher's Controls page, two keys for each: click a key, then press the one
-to use instead (Escape cancels, a right-click clears a key). A key given to one action leaves the action that had it,
+to use instead, or click the mouse button to use (Escape cancels, a right-click clears a key). A key given to one action leaves the action that had it,
 **Default keys** puts them all back, and **Reset to defaults** does too. The settings menu's key is not taken: it
 stays the menu's. The settings menu's Controls page lists the keys as they are. A key changed is saved in
 `castlevania.toml` as `key_<name> = [first, second]` (Windows virtual key codes, the same numbers on Linux; 0 for
@@ -685,6 +689,26 @@ launcher kept open beside the game, a key changed there reaches the game at once
 The keys press the controller's buttons, and the game's own Controller Config (in its Options) decides what each
 button does: change an action's button there, and its key goes with the button. That menu is also where a controller's
 buttons are changed.
+
+### Mouse
+**Mouse Camera** (off by default; the launcher's or the in-game menu's Controls page; `mouse_camera = true`): while
+the game window is in front and the settings menu closed, the mouse is held in the window and hidden, and moving it
+turns the camera, the view the way the mouse moves (right turns it right, up looks up), as a mouse does on a PC.
+**Mouse Sensitivity** sets how far, from 10% to 500% (`mouse_sensitivity = 100`: 0.12 degrees for each of the mouse's
+counts, so an 800 DPI mouse moved an inch turns it about 96 degrees). The settings menu, or the window behind others,
+gives the pointer back.
+
+The game turns its camera at a speed the right stick sets and eases into each speed and out of it, so the mouse
+turns it through that stick: its moves are degrees owed, and each frame the stick asks for the speed that turns what
+is owed less what the camera will still coast. The camera follows the mouse with the game's own easing, some 80 ms
+behind, and stops where the mouse put it (a steady move to within a tenth of a degree, a fling to within a tenth of
+the turn); at its fastest it turns 1.9 degrees a frame, so a fling of more than 60 degrees turns 60. A controller's
+right stick pushed, or the camera's keys held, win over the mouse. The invert settings turn it the other way too.
+
+Its buttons press what the keyboard's list gives them, as keys do: at first the left one attacks, the right one guards
+and the middle one locks on (the second keys of attack, guard and lock-on on / off). On the launcher's Controls page,
+click a key, then click the mouse button to use on that key (the left, right, middle, 4 or 5). The mouse's buttons
+press only with Mouse Camera on, so a click that brings the window to the front presses nothing.
 
 ### Miscellaneous
 - **Boot Splash** - Place a `splash.png` (or `.bmp`) beside the exe to display a splash screen at launch.

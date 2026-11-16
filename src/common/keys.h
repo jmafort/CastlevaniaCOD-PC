@@ -1,7 +1,9 @@
 // The keyboard's keys: the controller inputs the keyboard presses, each with two keys. keyboard.cpp reads them, the
 // launcher's Controls page sets them and the settings menu lists them. A key is a Windows virtual key code, which the
-// Linux build numbers the same (the SDK's runtime/linux/win32.cpp), 0 none. The settings file keeps one changed from
-// its defaults as key_<name> = [first, second]; one not there has its defaults.
+// Linux build numbers the same (the SDK's runtime/linux/win32.cpp), 0 none; a mouse button is one too (MouseButton).
+// The settings file keeps one changed from its defaults as key_<name> = [first, second]; one not there has its
+// defaults. Attack, guard and the lock-on have the left, right and middle mouse buttons as their second keys, which
+// count only with the mouse turning the camera (mouse_camera, off at first).
 //
 // The VK_ names come from windows.h (the Linux build's own): include it first.
 #pragma once
@@ -40,13 +42,13 @@ inline constexpr KeyInputInfo kKeyInputs[kKeyInputCount] = {
     {"camera_left", "Camera left", {VK_LEFT, 0}},
     {"camera_right", "Camera right", {VK_RIGHT, 0}},
     {"a", "Jump (A)", {'K', VK_SPACE}},
-    {"x", "Attack (X)", {'J', 0}},
+    {"x", "Attack (X)", {'J', VK_LBUTTON}},
     {"y", "Ability (Y)", {'I', 0}},
     {"b", "Final attack / Confirm (B)", {'L', 0}},
-    {"rt", "Guard (RT)", {'E', 0}},
+    {"rt", "Guard (RT)", {'E', VK_RBUTTON}},
     {"lt", "Camera reset (LT)", {'Q', 0}},
     {"white", "Change lock-on (LB)", {'Z', 0}},
-    {"black", "Lock-on on / off (RB)", {'C', 0}},
+    {"black", "Lock-on on / off (RB)", {'C', VK_MBUTTON}},
     {"start", "Start", {VK_RETURN, 0}},
     {"back", "Back", {VK_BACK, 0}},
     {"dpad_up", "D-pad up", {VK_NUMPAD8, 0}},
@@ -95,9 +97,28 @@ inline bool KeyExtended(uint32_t vk) {
            vk == VK_RMENU || vk == VK_DIVIDE;
 }
 
-// a key the keyboard can take for an input (the launcher's): not Escape (it cancels), the Windows keys, Print Screen
-// or Num Lock (Windows' own), nor a mouse button
+// The mouse's buttons, by their virtual key codes: an input can have one as it has a key. They count only while the
+// mouse turns the camera (mouse_camera, keyboard.cpp: the mouse held in the game window), so a click that brings the
+// window to the front or a click while playing with a controller presses nothing
+inline bool MouseButton(uint32_t vk) {
+    return vk == VK_LBUTTON || vk == VK_RBUTTON || vk == VK_MBUTTON || vk == VK_XBUTTON1 || vk == VK_XBUTTON2;
+}
+// in English (the launcher's words.h has them in its languages); nullptr for a key
+inline const char* MouseButtonName(uint32_t vk) {
+    switch (vk) {
+        case VK_LBUTTON: return "Left click";
+        case VK_RBUTTON: return "Right click";
+        case VK_MBUTTON: return "Middle click";
+        case VK_XBUTTON1: return "Mouse 4";
+        case VK_XBUTTON2: return "Mouse 5";
+        default: return nullptr;
+    }
+}
+
+// a key the keyboard can take for an input (the launcher's): a mouse button, or a key but Escape (it cancels), the
+// Windows keys, Print Screen or Num Lock (Windows' own)
 inline bool KeyBindable(uint32_t vk) {
+    if (MouseButton(vk)) return true;
     if (vk < 0x08 || vk > 0xFE) return false;
     return vk != VK_ESCAPE && vk != VK_LWIN && vk != VK_RWIN && vk != VK_SNAPSHOT && vk != VK_NUMLOCK &&
            vk != VK_SHIFT && vk != VK_CONTROL && vk != VK_MENU;  // the generic ones: a side is always known

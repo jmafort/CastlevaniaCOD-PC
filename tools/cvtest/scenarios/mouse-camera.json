@@ -1,0 +1,23 @@
+{
+  "name": "mouse-camera",
+  "after": "newgame.json",
+  "note": "1.11.2 (issue 25): the mouse turns the camera (mouse_camera, off at first), through the right stick as the game eases it (keyboard.cpp MouseCamera): 0.12 degrees a count at 100%, 300 counts 36 degrees. A test's window is behind the others, where the mouse is not held, so the moves are a test's (mouse=, counts each frame).",
+  "steps": [
+    {"press": "0f:wait:30f", "shot": "start"},
+    {"press": "0f:mouse=10/0:30f,30f:wait:50f", "note": "off at first: the mouse turns nothing", "expect": ["abs((camera.angles[1] - prev.camera.angles[1]) * 57.29578) < 0.5", "not found(log, 'mouse: turning')"]},
+    {"press": "0:set=mouse_camera=1,0f:wait:2f"},
+    {"press": "0f:mouse=10/0:30f,30f:wait:50f", "shot": "right", "note": "300 counts right: the view turns right 36 degrees (the stick pushed left: the game's yaw less)", "expect": ["-39 < (camera.angles[1] - prev.camera.angles[1]) * 57.29578 < -33", "abs((camera.angles[0] - prev.camera.angles[0]) * 57.29578) < 1", "found(runlog, r'mouse: turning the camera \\(100%\\)')"]},
+    {"press": "0f:mouse=-10/0:30f,30f:wait:50f", "note": "and back", "expect": ["33 < (camera.angles[1] - prev.camera.angles[1]) * 57.29578 < 39"]},
+    {"press": "0f:mouse=60/0:5f,5f:wait:60f", "note": "a fling, 300 counts in 5 frames: the camera at its fastest, about as far (the game's easing at its fastest strays from its own by a tenth)", "expect": ["-41 < (camera.angles[1] - prev.camera.angles[1]) * 57.29578 < -31"]},
+    {"press": "0f:mouse=2/0:60f,60f:wait:50f", "note": "slow, 2 counts a frame: 14.4 degrees (the game's dead zone passed)", "expect": ["-16 < (camera.angles[1] - prev.camera.angles[1]) * 57.29578 < -12"]},
+    {"press": "0:set=mouse_sensitivity=200,0f:wait:2f"},
+    {"press": "0f:mouse=10/0:30f,30f:wait:60f", "note": "200%: 72 degrees", "expect": ["-78 < (camera.angles[1] - prev.camera.angles[1]) * 57.29578 < -66"]},
+    {"press": "0:set=mouse_sensitivity=100,0:set=invert_camera_x=1,0f:wait:2f"},
+    {"press": "0f:mouse=10/0:30f,30f:wait:50f", "note": "inverted across: the other way", "expect": ["33 < (camera.angles[1] - prev.camera.angles[1]) * 57.29578 < 39"]},
+    {"press": "0:set=invert_camera_x=0,0f:wait:2f"},
+    {"press": "0f:mouse=0/-5:20f,20f:wait:40f", "shot": "up", "note": "100 counts up: it looks up, as a mouse does on a PC (the stick pulled down: the camera lowers, 12 degrees)", "expect": ["-14 < (camera.angles[0] - prev.camera.angles[0]) * 57.29578 < -10", "abs((camera.angles[1] - prev.camera.angles[1]) * 57.29578) < 1"]},
+    {"press": "0f:mouse=0/5:20f,20f:wait:40f", "shot": "down", "note": "and down: it looks down (the camera rises)", "expect": ["10 < (camera.angles[0] - prev.camera.angles[0]) * 57.29578 < 14"]},
+    {"press": "0:set=mouse_camera=0,0f:wait:2f"},
+    {"press": "0f:mouse=10/0:30f,30f:wait:50f", "note": "off again", "expect": ["abs((camera.angles[1] - prev.camera.angles[1]) * 57.29578) < 0.5"]}
+  ]
+}

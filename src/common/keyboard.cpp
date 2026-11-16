@@ -112,6 +112,10 @@ uint32_t g_sprint = 0;
 uint32_t g_speed_up = 2;
 // Back and Start held together go back to the title (the settings file's title_combo; TitleCombo)
 bool g_title_combo = false;
+// the mouse turns the camera, its buttons press what they are set to (the settings file's mouse_camera; MouseCamera),
+// this many percent as fast as at first (mouse_sensitivity)
+bool g_mouse_camera = false;
+uint32_t g_mouse_sensitivity = 100;
 
 namespace {
 
@@ -120,7 +124,11 @@ HWND g_hwnd = nullptr;
 enum : uint16_t { kUp = 1, kDown = 2, kLeft = 4, kRight = 8, kStart = 0x10, kBack = 0x20, kL3 = 0x40, kR3 = 0x80 };
 enum { kA, kB, kX, kY, kBlack, kWhite, kLT, kRT };
 
-bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
+// a key held; a mouse button only while the mouse is the game's (mouse_camera: MouseCamera, below)
+bool Down(int vk) {
+    if (cv::MouseButton(uint32_t(vk)) && !app::MouseCaptured()) return false;
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
 
 // each input's two keys (keys.h), first | second << 16: the defaults, then the settings file's at the start
 // (SettingsLoad, game_info.cpp) and as the launcher kept open changes them (SettingsWatch)
@@ -219,6 +227,7 @@ struct Step {
     int plug = -1;                      // unplug 0, plug 1: the virtual controller
     std::string click;                  // click=<control>: the settings menu's
     bool menu_scroll = false;           // menuscroll: the settings menu's page scrolled to its end
+    float mouse_x = 0, mouse_y = 0;     // mouse=<x>/<y>: the mouse moved so many counts each frame it is held
     BotGoal bot{};
     float guard = 0;  // guard=<r>, for the bot's walks
     std::string set;  // set=<setting>=<value>
@@ -279,6 +288,7 @@ std::vector<Step> ParseScript(std::string text) {
             else if (b.rfind("warp=", 0) == 0) std::sscanf(b.c_str() + 5, "%d.%d.%d", &s.map, &s.room, &s.entry);
             else if (b.rfind("ls=", 0) == 0) Stick(b.substr(3), s.lx, s.ly);
             else if (b.rfind("rs=", 0) == 0) Stick(b.substr(3), s.rx, s.ry);
+            else if (b.rfind("mouse=", 0) == 0) std::sscanf(b.c_str() + 6, "%f/%f", &s.mouse_x, &s.mouse_y);
             else if (b == "heal") s.heal = true;
             else if (b.rfind("playtime=", 0) == 0) s.play_time = std::strtoll(b.c_str() + 9, nullptr, 10);
             else if (b.rfind("poke=", 0) == 0) {
@@ -374,11 +384,17 @@ const std::vector<Step>& Script() {
     return steps;
 }
 
+// a test's mouse moves (mouse=), taken with the mouse's own by MouseCamera, which a test's window behind the others
+// does not get (the mouse is held only in front)
+std::atomic<float> g_test_mouse_x{0}, g_test_mouse_y{0};
+
 // ms and frames since the script or command started
 void Press(input::Pad& p, const std::vector<Step>& steps, int64_t ms, int64_t frames) {
     for (const Step& s : steps) {
         int64_t now = s.frames ? frames : ms;
         if (now < s.at || now >= s.until) continue;
+        if (s.mouse_x) g_test_mouse_x.fetch_add(s.mouse_x, std::memory_order_relaxed);
+        if (s.mouse_y) g_test_mouse_y.fetch_add(s.mouse_y, std::memory_order_relaxed);
         p.buttons |= s.buttons;
         for (int i = 0; i < 8; i++)
             if (s.analog >> i & 1) p.analog[i] = 0xFF;
@@ -699,6 +715,71 @@ void TitleCombo(input::Pad& p, bool menu) {
     kernel::Relaunch(exe.c_str());
 }
 
+// The mouse turning the camera (mouse_camera): while the game window is in front and the settings menu closed, the
+// mouse is held in the window and hidden (the SDK's app::CaptureMouse) and its moves turn the camera through the right
+// stick, as a controller's would. The game turns the camera at a speed the stick sets, measured in the first courtyard
+// at 60 frames a second: none up to an eighth of its throw (kStickDead), then kStickSlope degrees a frame for each
+// whole throw past that, to kTurnMax (1.9 degrees a frame) from 0.74 of it on; and it eases into each speed and out of
+// it, a fifth of the way each frame (kEase), so after a push it coasts on as far as it lost at the start, and a push
+// turns it in all as far as its speed times its frames. So the mouse's moves are degrees owed (kDegreesPerCount at
+// 100%), and each frame the stick asks for the speed that turns what is owed less what the camera will still coast by
+// its easing as this frame's push leaves it, at most kTurnMax: the camera follows the mouse with the game's own easing,
+// some 80 ms behind, and stops where the mouse stopped (a steady move to within a tenth of a degree; a fling, which
+// the camera takes at its fastest, to within a tenth of the turn, as the game's easing then strays from its own). Moves
+// owed past kOwedMax are let go, so a fling does not turn it on for seconds. Up and down go the same way (the game's
+// pitch eases and turns alike). The game's stick swings the camera around Hector, pushed right to his right, so the
+// view turns left, pushed up over him, looking down: the mouse looks the way it moves, as a mouse does on a PC, so
+// moved right it pushes the stick left and moved up it pulls it down. The invert settings turn it as they turn the
+// stick. A controller's stick pushed, or the camera's keys held, win over it. (The camera's own turn, read back
+// each frame to pay what is owed, overshot every move by a tenth: its coast at a slow speed lasts longer than its
+// easing says.)
+constexpr float kStickDead = 0.125f, kStickSlope = 3.09f, kTurnMax = 1.9f, kEase = 0.21f;
+constexpr float kDegreesPerCount = 0.12f, kOwedMax = 60.0f;
+
+struct MouseAxis {
+    float owed = 0;  // degrees the mouse moved that the camera has yet to turn
+    float turn = 0;  // the camera's turn this frame, degrees, as the game eases it (the stick's last ask)
+
+    // this frame's stick, -32767 to 32767; owed taken down by what the camera turns with it
+    int16_t Stick() {
+        owed = std::clamp(owed, -kOwedMax, kOwedMax);
+        float ask = std::clamp(owed - turn * (1 - kEase) / kEase, -kTurnMax, kTurnMax);
+        turn += kEase * (ask - turn);
+        owed -= turn;
+        if (std::fabs(owed) < 0.02f && std::fabs(turn) < 0.02f) {
+            owed = turn = 0;
+            return 0;
+        }
+        if (std::fabs(ask) < 1e-4f) return 0;
+        float s = (std::min)(1.0f, kStickDead + std::fabs(ask) / kStickSlope);
+        return int16_t(std::lround(std::copysign(s, ask) * 32767));
+    }
+};
+
+void MouseCamera(input::Pad& p, bool menu) {
+    static MouseAxis across, up;
+    static std::atomic<bool> said{false};
+    bool on = g_mouse_camera && !menu;
+    app::CaptureMouse(on && Focused());
+    float dx = 0, dy = 0;
+    app::TakeMouse(dx, dy);
+    dx += g_test_mouse_x.exchange(0, std::memory_order_relaxed);
+    dy += g_test_mouse_y.exchange(0, std::memory_order_relaxed);
+    if (!on) {
+        across = up = {};
+        return;
+    }
+    float k = kDegreesPerCount * float(std::clamp<uint32_t>(g_mouse_sensitivity, 10, 500)) / 100.0f;
+    across.owed -= dx * k;  // the mouse moved right (its x more) is the stick pushed left: the view turns right
+    up.owed += dy * k;  // the mouse moved down (its y more) is the stick pushed up: the camera rises, looks down
+    int16_t rx = across.Stick(), ry = up.Stick();
+    if ((rx || ry) && !said.exchange(true)) LOGR("mouse: turning the camera (%u%%)", g_mouse_sensitivity);
+    // a stick inside the game's dead zone (a controller's at rest, a little off centre) is not pushed
+    constexpr int kRest = 4096;
+    if (rx && std::abs(p.rx) < kRest) p.rx = rx;
+    if (ry && std::abs(p.ry) < kRest) p.ry = ry;
+}
+
 // the game's rumble, a frame at a time (KeyboardRumble)
 struct Motors {
     uint16_t want[2] = {}, sent[2] = {};  // as the game asks for them, as the controller has them
@@ -794,6 +875,7 @@ void KeyboardPad(int port, input::Pad& p) {
         if (l.running && l.goals && !MenuOpen()) BotPad(to);
     }
     if (input::VirtualOn()) input::VirtualSet(scripted);
+    MouseCamera(p, MenuOpen());
     Sprint(p, MenuOpen());
     SpeedUp(p, MenuOpen());
     TitleCombo(p, MenuOpen());

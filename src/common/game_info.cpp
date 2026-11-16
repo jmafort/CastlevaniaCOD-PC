@@ -34,6 +34,8 @@ extern bool g_menu_spread;                    // widescreen.cpp
 extern uint32_t g_sprint;                     // keyboard.cpp, read by game/hooks.cpp
 extern uint32_t g_speed_up;                   // keyboard.cpp
 extern bool g_title_combo;                    // keyboard.cpp
+extern bool g_mouse_camera;                   // keyboard.cpp
+extern uint32_t g_mouse_sensitivity;          // keyboard.cpp
 extern bool g_hd_movies;                      // movies.cpp
 extern bool g_movie_full_brightness;          // movies.cpp
 extern uint32_t g_movie_view;                 // movies.cpp
@@ -129,6 +131,8 @@ const app::GameInfo app::kGame = {
                 {"sprint", nullptr, &g_sprint},
                 {"speed_up", nullptr, &g_speed_up},
                 {"title_combo", &g_title_combo, nullptr},
+                {"mouse_camera", &g_mouse_camera, nullptr},
+                {"mouse_sensitivity", nullptr, &g_mouse_sensitivity},
                 {"hd_movies", &g_hd_movies, nullptr},
                 {"movie_full_brightness", &g_movie_full_brightness, nullptr},
                 {"movie_view", nullptr, &g_movie_view},

@@ -407,7 +407,7 @@ index 15f8ab1..5379649 100644
  SRC="$SRC $(ls "$H"/*.cpp) ${EXTRA[*]}"
  for x in "${EXCL[@]}"; do SRC=$(echo $SRC | tr ' ' '\n' | grep -Ev -- "$x"); done
 diff --git a/runtime/app/app.h b/runtime/app/app.h
-index e1c1254..1e502d7 100644
+index e1c1254..2a6c8b9 100644
 --- a/runtime/app/app.h
 +++ b/runtime/app/app.h
 @@ -1,5 +1,6 @@
@@ -532,7 +532,7 @@ index e1c1254..1e502d7 100644
      std::vector<Option> options;
      // the settings file's toml::table, for what options cannot hold
      void (*load)(const void* table);
-@@ -98,10 +169,22 @@ struct GameInfo {
+@@ -98,10 +169,31 @@ struct GameInfo {
      void (*ui)(double fps);        // each frame inside the ImGui frame, UiLock held
      void (*pad)(int port, input::Pad& pad);  // a polled pad before the game gets it
      void (*rumble)(int port, uint16_t& left, uint16_t& right);
@@ -553,6 +553,15 @@ index e1c1254..1e502d7 100644
 +// 1 its own speed. Any thread
 +void SetSpeed(uint32_t times);
 +uint32_t Speed();
++
++// The mouse for a game's own use (a camera it turns): while asked for and the game window is in front, the pointer is
++// held in the window and hidden, and the mouse's moves gather for TakeMouse (Windows' raw input, SDL's relative
++// motion, so a move goes on past the window's edge); otherwise, or once asked no more, it is the desktop's again. Any
++// thread, as often as wanted: the window thread takes a change
++void CaptureMouse(bool on);
++bool MouseCaptured();  // held now
++// the mouse's moves since the last call, in its own counts (right and down positive); none while it is not held
++void TakeMouse(float& dx, float& dy);
  
  }  // namespace app
 diff --git a/runtime/app/game_code.cpp b/runtime/app/game_code.cpp
@@ -934,7 +943,7 @@ index 0000000..a8e985f
 +
 +}  // namespace app
 diff --git a/runtime/app/main.cpp b/runtime/app/main.cpp
-index e36f7ac..932d326 100644
+index e36f7ac..a093b12 100644
 --- a/runtime/app/main.cpp
 +++ b/runtime/app/main.cpp
 @@ -1,4 +1,5 @@
@@ -944,15 +953,18 @@ index e36f7ac..932d326 100644
  #ifndef WIN32_LEAN_AND_MEAN
  #define WIN32_LEAN_AND_MEAN
  #endif
-@@ -12,6 +13,7 @@
+@@ -10,8 +11,10 @@
+ #include <timeapi.h>
+ 
  #include <algorithm>
++#include <atomic>
  #include <chrono>
  #include <csignal>
 +#include <cstdlib>
  #include <cwchar>
  #include <thread>
  
-@@ -22,6 +24,7 @@
+@@ -22,6 +25,7 @@
  #include "core/input.h"
  #include "core/log.h"
  #include "gpu/backend.h"
@@ -960,7 +972,7 @@ index e36f7ac..932d326 100644
  #include "image_symbols.h"
  #include "kernel/kernel.h"
  
-@@ -29,6 +32,18 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM,
+@@ -29,6 +33,18 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND, UINT, WPARAM,
  
  namespace app {
  
@@ -979,7 +991,46 @@ index e36f7ac..932d326 100644
  namespace {
  
  HWND g_hwnd = nullptr;
-@@ -110,12 +125,13 @@ void ApplyNow() {
+@@ -36,6 +52,38 @@ constexpr UINT kApplyDisplay = WM_APP + 1, kOpenWindow = WM_APP + 2;
+ bool g_mode_changed = false;
+ bool g_apply_posted = false;  // a display apply is waiting in the queue or running
+ 
++// the mouse for the game's own use (CaptureMouse): asked for, held now (window thread), its moves since TakeMouse
++constexpr UINT kMouseCapture = WM_APP + 3;
++std::atomic<bool> g_mouse_want{false}, g_mouse_held{false};
++std::atomic<float> g_mouse_dx{0}, g_mouse_dy{0};
++
++// window thread: the mouse held as asked, while the window is in front and not minimized; its raw input taken (the
++// moves, past the window's edge too), the pointer kept inside the window's client area and hidden there
++void ApplyMouse(HWND hwnd) {
++    bool hold = g_mouse_want && hwnd && GetForegroundWindow() == hwnd && !IsIconic(hwnd);
++    if (hold) {
++        RECT r;
++        GetClientRect(hwnd, &r);
++        POINT a{r.left, r.top}, b{r.right, r.bottom};
++        ClientToScreen(hwnd, &a);
++        ClientToScreen(hwnd, &b);
++        RECT clip{a.x, a.y, b.x, b.y};
++        ClipCursor(&clip);  // again on each move and size of the window
++    }
++    if (hold == g_mouse_held) return;
++    RAWINPUTDEVICE rid{0x01, 0x02, hold ? 0u : DWORD(RIDEV_REMOVE), hold ? hwnd : nullptr};  // generic desktop, mouse
++    RegisterRawInputDevices(&rid, 1, sizeof(rid));
++    if (hold) {
++        SetCursor(nullptr);
++    } else {
++        ClipCursor(nullptr);
++        g_mouse_dx = 0;
++        g_mouse_dy = 0;
++    }
++    g_mouse_held = hold;
++    LOGR("mouse: %s", hold ? "held for the game" : "the desktop's");
++}
++
+ // crash dump in CrashDumps beside the exe
+ LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
+     // the dump holds no guest memory: the guest registers and return addresses go to the log
+@@ -110,16 +158,22 @@ void ApplyNow() {
          int w = r.right - r.left, h = r.bottom - r.top;
          const RECT& a = mi.rcWork;
          SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | visible);
@@ -996,7 +1047,42 @@ index e36f7ac..932d326 100644
      }
  }
  
-@@ -158,8 +174,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
++    // the pointer hidden while the mouse is held, before ImGui sets its own
++    if (msg == WM_SETCURSOR && g_mouse_held && LOWORD(lp) == HTCLIENT) {
++        SetCursor(nullptr);
++        return TRUE;
++    }
+     {
+         std::lock_guard lock(UiLock());
+         if (ImGui::GetCurrentContext() && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return 1;
+@@ -129,7 +183,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+         case WM_KEYDOWN:
+             if (wp == VK_F3) DumpThreads();
+             return 0;
++        case WM_INPUT:
++            if (g_mouse_held) {
++                RAWINPUT ri;
++                UINT size = sizeof(ri);
++                if (GetRawInputData(HRAWINPUT(lp), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) != UINT(-1) &&
++                    ri.header.dwType == RIM_TYPEMOUSE && !(ri.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
++                    g_mouse_dx.fetch_add(float(ri.data.mouse.lLastX), std::memory_order_relaxed);
++                    g_mouse_dy.fetch_add(float(ri.data.mouse.lLastY), std::memory_order_relaxed);
++                }
++            }
++            break;  // DefWindowProc lets the input go
++        case kMouseCapture:
++        case WM_MOVE:
++        case WM_SIZE:
++            ApplyMouse(hwnd);
++            if (msg == kMouseCapture) return 0;
++            break;
+         case WM_ACTIVATE:
++            PostMessageW(hwnd, kMouseCapture, 0, 0);  // held again in front, let go behind (once activation is over)
+             if (LOWORD(wp) == WA_INACTIVE) {
+                 // a changed display mode steps aside for the desktop, minimized, and comes back on return; not while
+                 // handing over to the next instance, which runs in the same mode
+@@ -158,8 +230,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
          case kOpenWindow:
              CloseSplash();
              if (wp) ApplyNow();
@@ -1006,7 +1092,23 @@ index e36f7ac..932d326 100644
              return 0;
          case WM_CLOSE:
              DestroyWindow(hwnd);
-@@ -189,6 +204,12 @@ int Instance() {
+@@ -173,6 +244,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+ 
+ }  // namespace
+ 
++void CaptureMouse(bool on) {
++    if (g_mouse_want.exchange(on) != on && g_hwnd) PostMessageW(g_hwnd, kMouseCapture, 0, 0);
++}
++bool MouseCaptured() { return g_mouse_held; }
++void TakeMouse(float& dx, float& dy) {
++    dx = g_mouse_dx.exchange(0, std::memory_order_relaxed);
++    dy = g_mouse_dy.exchange(0, std::memory_order_relaxed);
++}
++
+ std::filesystem::path ExeDir() {
+     wchar_t p[MAX_PATH];
+     GetModuleFileNameW(nullptr, p, MAX_PATH);
+@@ -189,6 +269,12 @@ int Instance() {
  
  void* Window() { return g_hwnd; }
  
@@ -1019,7 +1121,7 @@ index e36f7ac..932d326 100644
  std::recursive_mutex& UiLock() {
      static std::recursive_mutex m;
      return m;
-@@ -230,7 +251,8 @@ void Pace() {
+@@ -230,7 +316,8 @@ void Pace() {
          next = now;
          return;
      }
@@ -1029,7 +1131,7 @@ index e36f7ac..932d326 100644
      next += period;
      if (next < now - period) next = now;
      while (clock::now() + std::chrono::milliseconds(2) < next) Sleep(1);
-@@ -244,18 +266,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -244,18 +331,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
      std::signal(SIGABRT, [](int) { app::WriteCrashDump(nullptr); });
      timeBeginPeriod(1);
      SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -1059,7 +1161,7 @@ index e36f7ac..932d326 100644
      if (!app::PrepareGameCode(game)) return 1;
  
      bool splash = app::OpenSplash(), handover = app::StartHandover();
-@@ -265,6 +295,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -265,6 +360,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
      wc.lpfnWndProc = app::WndProc;
      wc.hInstance = inst;
      wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
@@ -1070,7 +1172,7 @@ index e36f7ac..932d326 100644
      wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
      wc.lpszClassName = app::kGame.name;
      RegisterClassExW(&wc);
-@@ -275,7 +309,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -275,7 +374,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
          app::ApplyNow();
      } else if (!splash) {
          app::ApplyNow();
@@ -1079,7 +1181,7 @@ index e36f7ac..932d326 100644
      }
  
      IMGUI_CHECKVERSION();
-@@ -305,3 +339,4 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -305,3 +404,4 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
      logx::Flush();
      kernel::Shutdown(0);
  }
@@ -19192,10 +19294,10 @@ index 0000000..08dbd97
 +#endif
 diff --git a/runtime/linux/main.cpp b/runtime/linux/main.cpp
 new file mode 100644
-index 0000000..ec709c2
+index 0000000..304ce36
 --- /dev/null
 +++ b/runtime/linux/main.cpp
-@@ -0,0 +1,357 @@
+@@ -0,0 +1,391 @@
 +// Linux: the host's window and main loop (app/main.cpp's), on SDL. The main thread takes SDL's events: ImGui's input,
 +// the window messages GameInfo::message knows, controllers plugged in or out, the display settings; the game and
 +// the renderer run on threads of their own as on Windows.
@@ -19206,6 +19308,7 @@ index 0000000..ec709c2
 +#include <unistd.h>
 +
 +#include <algorithm>
++#include <atomic>
 +#include <chrono>
 +#include <condition_variable>
 +#include <cstring>
@@ -19234,6 +19337,25 @@ index 0000000..ec709c2
 +std::mutex g_open_lock;
 +std::condition_variable g_open_cv;
 +uint64_t g_opened = 0;
++
++// the mouse for the game's own use (CaptureMouse): asked for, held now (main loop), its moves since TakeMouse
++std::atomic<bool> g_mouse_want{false}, g_mouse_held{false};
++std::atomic<float> g_mouse_dx{0}, g_mouse_dy{0};
++
++// main loop: the mouse held as asked while the window has the focus, by SDL's relative mode (the pointer hidden and
++// kept in the window, the moves reported past its edge)
++void ApplyMouse() {
++    SDL_Window* w = linuxapp::g_window;
++    bool hold = g_mouse_want && w && linuxapp::g_focused;
++    if (hold == g_mouse_held) return;
++    SDL_SetWindowRelativeMouseMode(w, hold);
++    if (!hold) {
++        g_mouse_dx = 0;
++        g_mouse_dy = 0;
++    }
++    g_mouse_held = hold;
++    LOGR("mouse: %s", hold ? "held for the game" : "the desktop's");
++}
 +
 +bool HasArg(const char* arg) {
 +    for (int i = 1; i < g_argc; i++)
@@ -19367,6 +19489,12 @@ index 0000000..ec709c2
 +            if (down && vk == VK_F3) DumpThreads();
 +            break;
 +        }
++        case SDL_EVENT_MOUSE_MOTION:
++            if (g_mouse_held) {
++                g_mouse_dx.fetch_add(e.motion.xrel, std::memory_order_relaxed);
++                g_mouse_dy.fetch_add(e.motion.yrel, std::memory_order_relaxed);
++            }
++            break;
 +        case SDL_EVENT_MOUSE_BUTTON_UP:
 +            if (e.button.button == SDL_BUTTON_LEFT)
 +                Message(WM_LBUTTONUP, 0, intptr_t(int(e.button.x) & 0xFFFF) | intptr_t(int(e.button.y) & 0xFFFF) << 16);
@@ -19417,6 +19545,13 @@ index 0000000..ec709c2
 +}
 +
 +void* Window() { return linuxapp::g_window.load(); }
++
++void CaptureMouse(bool on) { g_mouse_want = on; }  // the main loop takes it (ApplyMouse)
++bool MouseCaptured() { return g_mouse_held; }
++void TakeMouse(float& dx, float& dy) {
++    dx = g_mouse_dx.exchange(0, std::memory_order_relaxed);
++    dy = g_mouse_dy.exchange(0, std::memory_order_relaxed);
++}
 +
 +Mode WindowPixels() { return {linuxapp::g_pixel_w, linuxapp::g_pixel_h}; }
 +
@@ -19545,6 +19680,7 @@ index 0000000..ec709c2
 +            while (!closing && SDL_PollEvent(&e)) closing = app::Handle(e);
 +        }
 +        linuxapp::ApplyCursor();
++        app::ApplyMouse();
 +        // text typed into an ImGui field
 +        bool text = ImGui::GetIO().WantTextInput;
 +        if (text != SDL_TextInputActive(window)) text ? SDL_StartTextInput(window) : SDL_StopTextInput(window);
@@ -20843,10 +20979,10 @@ index 0000000..ecdacf9
 +}  // namespace gpu::linux_vk
 diff --git a/runtime/linux/win32.cpp b/runtime/linux/win32.cpp
 new file mode 100644
-index 0000000..4af696d
+index 0000000..610777f
 --- /dev/null
 +++ b/runtime/linux/win32.cpp
-@@ -0,0 +1,234 @@
+@@ -0,0 +1,246 @@
 +// Linux: the Win32 functions the shared sources call (linux/windows.h), over SDL's window, keyboard and message boxes
 +#ifndef _WIN32
 +#include "windows.h"
@@ -20996,6 +21132,18 @@ index 0000000..4af696d
 +        case VK_LBUTTON:
 +            down = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_LMASK) != 0;
 +            break;
++        case VK_RBUTTON:
++            down = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK) != 0;
++            break;
++        case VK_MBUTTON:
++            down = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_MMASK) != 0;
++            break;
++        case VK_XBUTTON1:
++            down = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_X1MASK) != 0;
++            break;
++        case VK_XBUTTON2:
++            down = (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_X2MASK) != 0;
++            break;
 +        default:
 +            for (int sc = 0; sc < SDL_SCANCODE_COUNT && !down; sc++)
 +                down = VirtualKey(SDL_Scancode(sc)) == vk && Held(SDL_Scancode(sc));
@@ -21083,10 +21231,10 @@ index 0000000..4af696d
 +#endif
 diff --git a/runtime/linux/windows.h b/runtime/linux/windows.h
 new file mode 100644
-index 0000000..a05d424
+index 0000000..a4859e8
 --- /dev/null
 +++ b/runtime/linux/windows.h
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,131 @@
 +#pragma once
 +// Linux: the Win32 names the shared sources use. The COM and base types are vkd3d's (D3D12 runs on it here); the few
 +// functions are SDL's window and keyboard underneath (linux/win32.cpp), the main loop's (app/main.cpp).
@@ -21206,7 +21354,8 @@ index 0000000..a05d424
 +
 +// virtual key codes (letters and digits are their capitals' and digits' ASCII codes)
 +enum {
-+    VK_LBUTTON = 0x01, VK_BACK = 0x08, VK_TAB = 0x09, VK_RETURN = 0x0D, VK_SHIFT = 0x10, VK_CONTROL = 0x11,
++    VK_LBUTTON = 0x01, VK_RBUTTON = 0x02, VK_MBUTTON = 0x04, VK_XBUTTON1 = 0x05, VK_XBUTTON2 = 0x06,
++    VK_BACK = 0x08, VK_TAB = 0x09, VK_RETURN = 0x0D, VK_SHIFT = 0x10, VK_CONTROL = 0x11,
 +    VK_MENU = 0x12, VK_PAUSE = 0x13, VK_CAPITAL = 0x14, VK_ESCAPE = 0x1B, VK_SPACE = 0x20, VK_PRIOR = 0x21,
 +    VK_NEXT = 0x22, VK_END = 0x23, VK_HOME = 0x24, VK_LEFT = 0x25, VK_UP = 0x26, VK_RIGHT = 0x27, VK_DOWN = 0x28,
 +    VK_SNAPSHOT = 0x2C, VK_INSERT = 0x2D, VK_DELETE = 0x2E, VK_LWIN = 0x5B, VK_RWIN = 0x5C, VK_NUMPAD0 = 0x60,
