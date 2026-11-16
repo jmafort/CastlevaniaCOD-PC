@@ -110,6 +110,8 @@ On top of Pazzi7054's port:
 - **Movies at their full brightness** - the Xbox release drew its movies (and so the HD ones) at half their
   brightness; here they play as bright as their own pictures. See [General](#general).
 - **The Spanish status screen's names** - Hielo and Oscuro, where the European release said Hieloo and Oscur.
+- **A steal's words in the middle** - in widescreen, a stolen item's long name stays in the middle of the burst
+  instead of going to the left edge with the Innocent Devil's panel.
 - **Launcher** - in the game's own look, with the title logo from your HD pack. It chooses the graphics card and says
   whether it has Direct3D 12, and has the button layout, the bonus and the pack switch.
 - **Launcher in seven languages** - English, Deutsch, Español, Français, Italiano, Português (Brasil) and Русский,
@@ -355,7 +357,10 @@ and the buttons held as it closes do not reach the game. By Calm-Consideration41
 - **HUD at the Screen Edges** - In widescreen the health bar, its numbers, the icon at the bottom left and the
   message box at the bottom right sit in the screen's corners, as they do on a 4:3 screen, instead of at the corners
   of the 4:3 middle (on by default; `hud_edges = false` keeps them in the middle). Menus, the map and story scenes
-  stay as they are.
+  stay as they are. A draw goes with a piece of the HUD only when it touches one of the piece's own draws, not
+  merely its outline: the Innocent Devil's panel is an L, its column of devils and the row of the devil's abilities
+  along the bottom, and through 1.11.1 the second line of a steal's words ("¡Ha robado / Instr. ceremonial!") lay in
+  the corner between them and went to the left edge with the panel, once the devil had two abilities (issue 19).
 - **No Overscan Streaks** - The rows a TV's overscan used to hide at the top and bottom of the picture no longer
   smear; the frame fills the screen.
 - **HDR** - Off by default. On a display with HDR on in Windows, or in a Linux desktop (Wayland: KDE Plasma 6, GNOME

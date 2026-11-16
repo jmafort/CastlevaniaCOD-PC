@@ -19,8 +19,10 @@ A scenario is JSON:
    "platforms": ["linux"],                optional: where it runs (windows, linux); elsewhere it is skipped
    "needs": ["textures"],                 optional: skipped without an HD texture pack in the textures folder the
                                           game finds (this repository's); "env:<VARIABLE>" without that folder named
-                                          in the environment (CV_MOVIES, CV_TEXTURES, CV_VENDOR_DIR)
-   "vendor": true,                        optional: AMD FSR's and NVIDIA's libraries copied beside the game from
+                                          in the environment (CV_MOVIES, CV_TEXTURES, CV_VENDOR_DIR); "save:<name>"
+                                          without that save in out/test/saves (a player's, sent with an issue: never
+                                          in the repository)
+   "vendor": true,                       optional: AMD FSR's and NVIDIA's libraries copied beside the game from
                                           CV_VENDOR_DIR (its DLLs and streamline folder), as the launcher downloads them
    "dump": "<va>:<bytes>,...",            optional: guest memory saved after every command (game/live/mem-<n>-<va>.bin)
    "telemetry": <frames>,                 optional: the state every that many frames, game/telemetry.jsonl
@@ -1281,8 +1283,11 @@ def skipped(scenario, install=None):
     if "textures" in scenario.get("needs", []) and not (install or any(textures.rglob("*.dds"))
                                                       or any(textures.rglob("*.png"))):
         return f"no HD texture pack in {textures}"
-    # env:<VARIABLE>: a folder the environment names (a movie pack, a texture pack, the vendors' libraries)
+    # env:<VARIABLE>: a folder the environment names (a movie pack, a texture pack, the vendors' libraries); save:<name>:
+    # a player's save in out/test/saves, which stays out of the repository
     for need in scenario.get("needs", []):
+        if need.startswith("save:") and not (SAVES / need[5:]).is_dir():
+            return f"no save {need[5:]} in {SAVES}"
         if need.startswith("env:"):
             v = os.environ.get(need[4:], "")
             if not v or not all(Path(p).exists() for p in v.split(";")):

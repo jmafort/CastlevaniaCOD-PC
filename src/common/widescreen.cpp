@@ -1100,9 +1100,11 @@ private:
         return left * 2 < right ? k - 1 : right * 2 < left ? 1 - k : 0.0f;
     }
 
-    // at a frame's start: the frame before's HUD draws, gathered into the pieces they touch one another in
+    // at a frame's start: the frame before's HUD draws, gathered into the pieces they touch one another in, each draw
+    // kept with its piece (members_) for the draws of this frame to be matched against
     void HudPieces() {
         pieces_.clear();
+        members_.clear();
         size_t n = rects_.size();
         std::vector<size_t> up(n);
         for (size_t i = 0; i < n; i++) up[i] = i;
@@ -1126,24 +1128,29 @@ private:
             p.y0 = std::min(p.y0, rects_[i].y0);
             p.y1 = std::max(p.y1, rects_[i].y1);
             p.named |= rects_[i].named;
+            members_.push_back({rects_[i], piece[r]});
         }
         for (Rect& p : pieces_) p.shift = p.named ? Side(p) : 0.0f;
         rects_.clear();
         if (frame_ % 60 == 0) std::erase_if(hud_kept_, [&](const auto& k) { return frame_ - k.second.seen > kHudKeep; });
     }
 
-    // a HUD draw's move: as the piece of the frame before it is in, else as a draw of this frame it touches, else a quad
-    // of the HUD's own textures by itself (a piece's first frame). Drawn frame after frame in its place (key), it keeps
-    // the side it has until it has wanted another for kHudSettle frames running: a part of the HUD that comes and goes
-    // for a frame or two joining a piece moves nothing, and a side taken wrongly (the HUD back all at once after a
-    // story scene, its pieces not yet drawn) is put right in a quarter of a second rather than kept
+    // a HUD draw's move: as the piece of the frame before it is in, one of whose draws it touches, else as a draw of
+    // this frame it touches, else a quad of the HUD's own textures by itself (a piece's first frame). A draw only within
+    // a piece's outline is not in it: the Innocent Devil's panel is an L, its column of devils and the row of the
+    // devil's abilities along the bottom, and the second line of a steal's words, of an item with a long name ("Instr.
+    // ceremonial!"), lay in the corner between them, so it went to the left edge with the panel and the first line
+    // stayed (issue 19; the abilities' row reaches that far once the devil has two). Drawn frame after frame in its
+    // place (key), it keeps the side it has until it has wanted another for kHudSettle frames running: a part of the
+    // HUD that comes and goes for a frame or two joining a piece moves nothing, and a side taken wrongly (the HUD back
+    // all at once after a story scene, its pieces not yet drawn) is put right in a quarter of a second rather than kept
     float HudShift(Rect r, bool quad, uint64_t key) {
         gw_ = d_.gw;
         float want = 0;
         bool found = false;
-        for (size_t i = 0; !found && i < pieces_.size(); i++)
-            if (Touch(pieces_[i], r)) {
-                want = pieces_[i].shift;
+        for (size_t i = 0; !found && i < members_.size(); i++)
+            if (Touch(members_[i].r, r)) {
+                want = pieces_[size_t(members_[i].piece)].shift;
                 found = true;
             }
         for (size_t i = 0; !found && i < rects_.size(); i++)
@@ -1609,6 +1616,11 @@ private:
     float menu_gw_ = 640;
     bool ui_ = false;        // the frame's UI has begun, for HDR (UiStart)
     std::vector<Rect> rects_, pieces_;  // this frame's HUD draws; the pieces of the frame before's
+    struct Member {
+        Rect r;
+        int piece;  // in pieces_
+    };
+    std::vector<Member> members_;  // the frame before's HUD draws, each with its piece
     Seen2D hud_seen_;                   // this frame's widest draw of the HUD's sheet so far, for tests
     // an area's name card, its crest, title and line drawn apart: all of it this frame, and the frame before's, which
     // goes to a side as one

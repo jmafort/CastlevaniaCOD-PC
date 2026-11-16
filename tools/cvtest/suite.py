@@ -189,6 +189,9 @@ def tests():
         # 1.10.3: the HUD's sheet has its words drawn in, one per language; only the English one was known, so in
         # Spanish the marker and the Innocent Devil's panel were not the HUD's (issues 5, 15)
         scenario("lockon", *eu, "--set", "game_language=5", test="lockon-eu-es"),
+        # 1.11.2: a steal's words in the middle beside the Innocent Devil's panel, not at the left with it (issue 19:
+        # with DJBLOPA's save, which stays out of the repository)
+        scenario("steal-words", *eu, needs=["save:user19eu"]),
         # in a game of its own: Hector's level up comes from the knights only at his first level (a session's game may
         # have him at his second)
         scenario("hud-levelup"),
@@ -337,6 +340,9 @@ def lacks(test):
             return f"no {need} folder in {CONFIG}"
         if need == "rtx" and not any("GeForce RTX" in g for g in gpus()):
             return "no GeForce RTX for NVIDIA DLSS"
+        # a player's save sent with an issue: in out/test/saves, never in the repository
+        if need.startswith("save:") and not (REPO / "out" / "test" / "saves" / need[5:]).is_dir():
+            return f"no save {need[5:]} in out/test/saves"
     return None
 
 
