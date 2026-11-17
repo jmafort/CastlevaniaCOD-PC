@@ -94,6 +94,8 @@ void RequestWarp(int map, int room, int entry);  // game/warp.cpp
 void HealPlayer();                               // telemetry.cpp
 void SetPlayTime(uint32_t seconds);              // telemetry.cpp
 void PokeGuest(uint32_t va, uint32_t value);     // telemetry.cpp
+bool PlayCameraFree();                           // telemetry.cpp: the play camera up, nothing over it
+bool TurnPlayCamera(float heading, float pitch); // telemetry.cpp: the play camera turned by the mouse
 void CopyGuest(uint32_t to, uint32_t from, uint32_t bytes);
 void MenuClick(const std::string& name);         // menu.cpp
 void MenuScrollEnd();                            // menu.cpp
@@ -387,16 +389,19 @@ const std::vector<Step>& Script() {
 }
 
 // a test's mouse moves (mouse=), taken with the mouse's own by MouseCamera, which a test's window behind the others
-// does not get (the mouse is held only in front)
+// does not get (the mouse is held only in front); once a frame, as the game reads the pad more often than that
 std::atomic<float> g_test_mouse_x{0}, g_test_mouse_y{0};
+int64_t g_test_mouse_frame = -1;
 
 // ms and frames since the script or command started
 void Press(input::Pad& p, const std::vector<Step>& steps, int64_t ms, int64_t frames) {
+    bool mouse_frame = frames != g_test_mouse_frame;
+    g_test_mouse_frame = frames;
     for (const Step& s : steps) {
         int64_t now = s.frames ? frames : ms;
         if (now < s.at || now >= s.until) continue;
-        if (s.mouse_x) g_test_mouse_x.fetch_add(s.mouse_x, std::memory_order_relaxed);
-        if (s.mouse_y) g_test_mouse_y.fetch_add(s.mouse_y, std::memory_order_relaxed);
+        if (s.mouse_x && mouse_frame) g_test_mouse_x.fetch_add(s.mouse_x, std::memory_order_relaxed);
+        if (s.mouse_y && mouse_frame) g_test_mouse_y.fetch_add(s.mouse_y, std::memory_order_relaxed);
         p.buttons |= s.buttons;
         for (int i = 0; i < 8; i++)
             if (s.analog >> i & 1) p.analog[i] = 0xFF;
@@ -730,7 +735,13 @@ void TitleCombo(input::Pad& p, bool menu) {
 }
 
 // The mouse turning the camera (mouse_camera): while the game window is in front and the settings menu closed, the
-// mouse is held in the window and hidden (the SDK's app::CaptureMouse) and its moves turn the camera through the right
+// mouse is held in the window and hidden (the SDK's app::CaptureMouse) and its moves turn the play camera itself: the
+// heading and pitch the camera turns to move as far as the mouse did (TurnPlayCamera, telemetry.cpp), kDegreesPerCount
+// a count at 100%, so a slow move turns it slowly and a fast one as fast, with nothing in between to cap it (issue 10:
+// through the stick, a fast move was held to the stick's top speed); the camera eases to them as it does for the stick,
+// most of the way in a frame. While a menu, a message box or a story scene is up there is nothing to turn.
+//
+// Before 1.14.0, and still where the play camera is not found, its moves turn the camera through the right
 // stick, as a controller's would. The game turns the camera at a speed the stick sets, measured in the first courtyard
 // at 60 frames a second: none up to an eighth of its throw (kStickDead), then kStickSlope degrees a frame for each
 // whole throw past that, to kTurnMax (1.9 degrees a frame) from 0.74 of it on; and it eases into each speed and out of
@@ -770,9 +781,18 @@ struct MouseAxis {
     }
 };
 
+// the mouse's turn of the play camera not yet given it, radians: heading and pitch
+static std::atomic<float> g_mouse_turn{0}, g_mouse_rise{0};
+
+static void AddTurn(std::atomic<float>& a, float v) {
+    float was = a.load(std::memory_order_relaxed);
+    while (!a.compare_exchange_weak(was, was + v, std::memory_order_relaxed)) {
+    }
+}
+
 void MouseCamera(input::Pad& p, bool menu) {
     static MouseAxis across, up;
-    static std::atomic<bool> said{false};
+    static std::atomic<bool> said{false}, said_direct{false};
     bool on = g_mouse_camera && !menu;
     app::CaptureMouse(on && Focused());
     float dx = 0, dy = 0;
@@ -784,6 +804,21 @@ void MouseCamera(input::Pad& p, bool menu) {
         return;
     }
     float k = kDegreesPerCount * float(std::clamp<uint32_t>(g_mouse_sensitivity, 10, 500)) / 100.0f;
+    // the play camera turned by the mouse itself, as far as it moved (issue 10): the heading it turns to more for the
+    // mouse moved right (the view turns right), the pitch less for it moved down (the camera rises, looks down)
+    constexpr float kRadians = 3.14159265f / 180.0f;
+    float turn = dx * k * kRadians, rise = -dy * k * kRadians;
+    if (g_invert_camera_x) turn = -turn;
+    if (g_invert_camera_y) rise = -rise;
+    if (PlayCameraFree()) {
+        across = up = {};
+        if (turn != 0 || rise != 0) {
+            AddTurn(g_mouse_turn, turn);  // MouseCameraFrame turns it, in the camera's update
+            AddTurn(g_mouse_rise, rise);
+            if (!said_direct.exchange(true)) LOGR("mouse: turning the camera itself (%u%%)", g_mouse_sensitivity);
+        }
+        return;
+    }
     across.owed -= dx * k;  // the mouse moved right (its x more) is the stick pushed left: the view turns right
     up.owed += dy * k;  // the mouse moved down (its y more) is the stick pushed up: the camera rises, looks down
     int16_t rx = across.Stick(), ry = up.Stick();
@@ -792,6 +827,13 @@ void MouseCamera(input::Pad& p, bool menu) {
     constexpr int kRest = 4096;
     if (rx && std::abs(p.rx) < kRest) p.rx = rx;
     if (ry && std::abs(p.ry) < kRest) p.ry = ry;
+}
+
+// in the camera update (game/warp.cpp), on the game's thread: the mouse's turn since then given to the play camera
+void MouseCameraFrame() {
+    float turn = g_mouse_turn.exchange(0, std::memory_order_relaxed);
+    float rise = g_mouse_rise.exchange(0, std::memory_order_relaxed);
+    if (turn != 0 || rise != 0) TurnPlayCamera(turn, rise);
 }
 
 // the game's rumble, a frame at a time (KeyboardRumble)

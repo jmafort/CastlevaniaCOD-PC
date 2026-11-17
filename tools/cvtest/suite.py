@@ -223,8 +223,10 @@ def tests():
         # 1.11.0: the keyboard's keys the launcher changed (common/keys.h): read at the start, listed in the settings
         # menu, changed while the game runs, kept when the menu saves; pressed, on Linux (keys-remap, below)
         scenario("keys-menu"),
-        # 1.12.0: the mouse turns the camera, as far as it moved, the way it moved (issue 25)
+        # 1.12.0: the mouse turns the camera, as far as it moved, the way it moved (issue 25); 1.14.0: the camera itself,
+        # a fast move as fast (issue 10), the play camera found by its callback in each release
         scenario("mouse-camera"),
+        scenario("mouse-camera", *eu, test="mouse-camera-eu"),
         # Hector's sprint, by a controller in both button layouts and both releases, and by the keyboard (Linux)
         scenario("sprint", quick=True),
         scenario("sprint", "--set", "button_layout=1", test="sprint-ps2"),

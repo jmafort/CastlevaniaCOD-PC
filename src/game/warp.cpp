@@ -24,6 +24,7 @@ X86_EXTERN_FUNC(CV_ORIGINAL(CV_CHANGE_ROOM));
 
 void ViewFrame(uint8_t* base);  // view.cpp: the field of view, draw distance and fog settings
 void SprintFrame(uint8_t* base);  // hooks.cpp: Hector's motions at their own pace when he is not sprinting
+void MouseCameraFrame();          // keyboard.cpp: the mouse's turn of the play camera
 
 namespace {
 
@@ -50,10 +51,12 @@ void RequestWarp(int map, int room, int entry) {
     LOGR("warp: asked for map %d room %d entry %d", map, room, entry);
 }
 
-// the camera update, each frame of play: a warp asked for goes here, and the view settings changed since
+// the camera update, each frame of play: a warp asked for goes here, the view settings changed since, and the
+// mouse's turn of the camera
 X86_FUNC(CV_HOOK(CV_CAMERA_UPDATE)) {
     ViewFrame(base);
     SprintFrame(base);
+    MouseCameraFrame();
     uint32_t w = g_warp.load();
     if (w && ctx.esp >= 0x10000 && mem::IsCommitted(ctx.esp - 256) &&
         Call(ctx, base, CV_ORIGINAL(CV_SCENE_FREE), {kRoomChange})) {

@@ -279,6 +279,39 @@ bool ModalUp() {
     return Read(cv::kModalFlags, at) && at && Read(at, flags) && ((flags >> 16) & 1);
 }
 
+// The mouse turning the camera (keyboard.cpp MouseCamera): the play camera's object (the view, kPlayCallback at its
+// +0x1D0) holds the heading and pitch it is turning to, the ones the right stick moves, as floats at +0x1E4 (pi less
+// the view's yaw, at +0x24) and +0x1E0 (less the view's pitch, at +0x20); the camera eases its own toward them, most
+// of the way in a frame. The stick moves them at most 1.9 degrees a frame; written here they move as far as the mouse
+// did. The game keeps the pitch within its bounds (about level to 45 degrees down on Hector) itself. Found here: the stick
+// held moved them, and either written turned the camera there and kept it (2026-11-17). Not while a menu, a message
+// box, a story scene or a room change is up, nor with another camera (the title's, the map's): 0 or false then.
+uint32_t PlayCamera() {
+    uint32_t cam = 0, callback = 0, menu = 0, scene = 0;
+    if (!Read(cv::kCameraView, cam) || !cam || !Read(cam + 0x1D0, callback) || callback != cv::kPlayCallback)
+        return 0;
+    if (!Read(cv::kMenu, menu) || menu || !Read(cv::kScene, scene) || (scene & (0x20000 | 0x8000)) || ModalUp())
+        return 0;
+    return cam;
+}
+
+bool PlayCameraFree() { return PlayCamera() != 0; }
+
+// written in the camera update (warp.cpp's hook, on the game's thread, just before the camera reads them): from the
+// pad's thread the camera's own turn of the frame, read before and written after, took the place of the mouse's
+bool TurnPlayCamera(float heading, float pitch) {
+    uint32_t cam = PlayCamera();
+    if (!cam) return false;
+    float w = 0, p = 0;
+    if (!Read(cam + 0x1E4, w) || !Read(cam + 0x1E0, p) || !std::isfinite(w) || !std::isfinite(p)) return false;
+    constexpr float kPi = 3.14159265f;
+    w = std::remainder(w + heading, 2 * kPi);
+    p += pitch;
+    std::memcpy(mem::Base() + cam + 0x1E4, &w, 4);
+    std::memcpy(mem::Base() + cam + 0x1E0, &p, 4);
+    return true;
+}
+
 // map * 256 + room, -1 before the game has one
 int RoomId() {
     int8_t map = 0, room = 0;

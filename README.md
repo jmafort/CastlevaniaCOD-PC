@@ -709,12 +709,11 @@ turns the camera, the view the way the mouse moves (right turns it right, up loo
 counts, so an 800 DPI mouse moved an inch turns it about 96 degrees). The settings menu, or the window behind others,
 gives the pointer back.
 
-The game turns its camera at a speed the right stick sets and eases into each speed and out of it, so the mouse
-turns it through that stick: its moves are degrees owed, and each frame the stick asks for the speed that turns what
-is owed less what the camera will still coast. The camera follows the mouse with the game's own easing, some 80 ms
-behind, and stops where the mouse put it (a steady move to within a tenth of a degree, a fling to within a tenth of
-the turn); at its fastest it turns 1.9 degrees a frame, so a fling of more than 60 degrees turns 60. A controller's
-right stick pushed, or the camera's keys held, win over the mouse. The invert settings turn it the other way too.
+The mouse turns the camera itself, as far as it moves: a slow move turns it slowly and precisely, a fast one as fast,
+with no top speed between them (since 1.14.0; before, it went through the right stick, which the game turns at most
+1.9 degrees a frame, so a fast move felt slow and a fling of more than 60 degrees turned 60). The camera then eases
+to where the mouse put it as it does for the stick, most of the way in a frame, so it follows smoothly. A controller's
+right stick, or the camera's keys, turn it at the same time. The invert settings turn it the other way too.
 
 Its buttons press what the keyboard's list gives them, as keys do: at first the left one attacks, the right one guards
 and the middle one locks on (the second keys of attack, guard and lock-on on / off). On the launcher's Controls page,

@@ -84,6 +84,8 @@ inline constexpr uint32_t kCameraView = CV_PICK(0xC36B74, 0xC3E4E4);
 inline constexpr uint32_t kCameraDescriptor = CV_PICK(0xC36B70, 0xC3E4E0);
 inline constexpr uint32_t kTitleCallback = CV_PICK(0x345020, 0x346C70);
 inline constexpr uint32_t kDebugCallback = CV_PICK(0x4E7D0, 0x4E7F0);
+// the play camera's callback: the camera Hector is followed by, which the right stick turns (keyboard.cpp's mouse)
+inline constexpr uint32_t kPlayCallback = CV_PICK(0x302840, 0x304010);
 // a story scene or a room change under way; the pause or inventory menu; a message box's flags, through a pointer
 inline constexpr uint32_t kScene = CV_PICK(0xB23410, 0xB2AD68);
 inline constexpr uint32_t kMenu = CV_PICK(0xB25518, 0xB2CE78);
