@@ -257,6 +257,34 @@ A pack with material maps (Calm-Consideration41's v4 has them, in its `materials
 depth: the launcher's Textures page has **Material maps** (on by default) and **Surface depth** (Off, Low, High: how
 deep the height maps look, on the settings menu's Graphics page too; off by default).
 
+### HD Extras
+
+The PS2 packs are made from the PS2's USA release, so they lack the pictures with words the Xbox and the European
+release have of their own. This project's HD extras pack has them, made from the game's own textures four times larger
+with Real-ESRGAN (the AI model the Panda_Venom and Stan21 pack looks made with):
+
+| Pack | Notes |
+|---|---|
+| [CastlevaniaCOD-PC HD extras v1](https://drive.google.com/file/d/1Rgc3qRZhmOvvLxTebD_jEQdCp8mNMcuC/view?usp=sharing) | On Google Drive, a 1.9 GB zip of 1,530 pictures. |
+
+- The Tips of the pause menu, all 22, in English, French, German, Italian and Spanish, and the Glide lesson (in
+  English in every release). Those with an Xbox Y in them have a version with the PS2's triangle, shown with
+  **Button layout** set to PS2 (from 1.14.0).
+- The European release's pictures in its other languages: the menus' words, the area names, the HUD's words, the
+  title and save screens, the shop, the map, the credits.
+- The Innocent Devil chart's pages and portraits and the bestiary's monsters no pack has, and the Xbox's own textures
+  no PS2 pack has: its button icons, the save screens' frame, the shop's sheets with the BACK button, the ending's
+  pictures.
+
+To add it, extract the zip and put its `CastlevaniaCOD-PC-HD-extras` folder inside `textures`, next to a pack's own
+folders (or alone). Pictures are matched by name, so only those of the release and language you play are used. Its
+`gaps-panda` folder is for the Panda_Venom and Stan21 pack: with another pack, leave it out. The pack's switch turns
+these off and on with it.
+
+With the Brazilian Portuguese [translation](#translations) on, the pictures it translates (the tips, the menus, the
+HUD, the area names, the save screens) are its own, so neither this pack nor the PS2 packs have them: they draw as the
+game does. The rest of both still applies.
+
 ## HD Movies
 
 Optional. Without them the game plays its own movies, as on the Xbox. Calm-Consideration41 upscaled every story movie
@@ -387,7 +415,7 @@ of the 2,000 met in a sweep of every room, 96.8% of their area). Of the rest, so
 doors, a few effects) and some the Xbox changed (the save screens say HARD DISK where the PS2's say MEMORY CARD; the
 HUD's icons have NEW! labels and the d-pad of its own), so the PS2's picture would be wrong for them.
 `tools\texpack\upscale.py` makes pictures for those from the game's own textures (see
-[tools/cvtest/TESTING.md](tools/cvtest/TESTING.md)): 48 pictures for the 24 textures, which put in `textures` cover the rest of that sweep. The switch applies at once, the launcher's before
+[tools/cvtest/TESTING.md](tools/cvtest/TESTING.md)): 48 pictures for the 24 textures, which put in `textures` cover the rest of that sweep; the [HD extras](#hd-extras) pack has them. The switch applies at once, the launcher's before
 **Play** or the settings menu's while playing (a game started without the pack reads its pictures' names in the
 background first); the size pictures load at applies from the next start.
 
