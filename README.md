@@ -265,7 +265,7 @@ with Real-ESRGAN (the AI model the Panda_Venom and Stan21 pack looks made with):
 
 | Pack | Notes |
 |---|---|
-| [CastlevaniaCOD-PC HD extras v1](https://drive.google.com/file/d/1Rgc3qRZhmOvvLxTebD_jEQdCp8mNMcuC/view?usp=sharing) | On Google Drive, a 1.9 GB zip of 1,530 pictures. |
+| [CastlevaniaCOD-PC HD extras v2](https://drive.google.com/file/d/1uwvML_Hxv7HrQVAR7qaANp7MVjVjvSJx/view?usp=sharing) | On Google Drive, a 2.2 GB zip of 1,773 pictures. |
 
 - The Tips of the pause menu, all 22, in English, French, German, Italian and Spanish, and the Glide lesson (in
   English in every release). Those with an Xbox Y in them have a version with the PS2's triangle, shown with
@@ -275,15 +275,15 @@ with Real-ESRGAN (the AI model the Panda_Venom and Stan21 pack looks made with):
 - The Innocent Devil chart's pages and portraits and the bestiary's monsters no pack has, and the Xbox's own textures
   no PS2 pack has: its button icons, the save screens' frame, the shop's sheets with the BACK button, the ending's
   pictures.
+- The Brazilian Portuguese [translation](#translations)'s pictures (the tips, the menus, the HUD, the area names, the
+  save screens and the shop it translates), in `translations\ptbr`: they replace the English ones, so no PS2 pack
+  has them, and are used only with the translation on. The translation is HNNEWGAMES', STR Brasil's, MATTH dubs' and
+  Os Aristocratas do Giz Vermelho's, as Neguchads made it into the Xbox game's files.
 
 To add it, extract the zip and put its `CastlevaniaCOD-PC-HD-extras` folder inside `textures`, next to a pack's own
 folders (or alone). Pictures are matched by name, so only those of the release and language you play are used. Its
 `gaps-panda` folder is for the Panda_Venom and Stan21 pack: with another pack, leave it out. The pack's switch turns
 these off and on with it.
-
-With the Brazilian Portuguese [translation](#translations) on, the pictures it translates (the tips, the menus, the
-HUD, the area names, the save screens) are its own, so neither this pack nor the PS2 packs have them: they draw as the
-game does. The rest of both still applies.
 
 ## HD Movies
 
@@ -337,9 +337,10 @@ not the translation.
 The pack is the one Neguchads made for his port, read as it is: its `files` are read in place of the disc's files of
 the same name (its menus, its pictures, its voices), and `ptbr_strings.bin` gives each of the game's texts in place of
 the English one, by its number. Its `textures` folder, his port's HD pictures of the title screen, is left out: HD
-textures come from the texture packs above, which draw a translated picture as the pack has it. Nothing on your disc
-or in your saves changes, and with **Translation** off the game is as it was. The pack's files are the USA release's,
-so the European release plays without it.
+textures come from the texture packs above, and the [HD extras](#hd-extras) pack has the translation's pictures in HD
+(the PS2 packs have the English ones it replaces). Nothing on your disc or in your saves changes, and with
+**Translation** off the game is as it was. The pack's files are the USA release's, so the European release plays
+without it.
 
 ## Features
 
