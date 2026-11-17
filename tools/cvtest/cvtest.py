@@ -26,6 +26,7 @@ A scenario is JSON:
    "vendor": true,                       optional: AMD FSR's and NVIDIA's libraries copied beside the game from
                                           CV_VENDOR_DIR (its DLLs and streamline folder), as the launcher downloads them
    "dump": "<va>:<bytes>,...",            optional: guest memory saved after every command (game/live/mem-<n>-<va>.bin)
+   A step may check a whole dumped range with "expect_bytes": {"0xADDRESS": "hex bytes"}.
    "telemetry": <frames>,                 optional: the state every that many frames, game/telemetry.jsonl
    "perf": true,                          optional: the SDK's timings (XBE_PERF, a log line set each second): a
                                           step's own, those of the seconds it played, are its perf, in the report
@@ -1490,6 +1491,10 @@ def play_steps(game, scenario, settings, shots, run, results):
                     r["warnings"].append(f"review: {e}")
                     seen = judge_warnings(screen["judge"], state, screen)
             lines = [line.split("] ", 1)[-1] for line in log]
+            for address, expected_hex in step.get("expect_bytes", {}).items():
+                capture = game.live / f"mem-{game.n}-{int(address, 0):08X}.bin"
+                if not capture.is_file() or capture.read_bytes() != bytes.fromhex(expected_hex):
+                    r["errors"].append(f"guest bytes at {address} did not match {expected_hex}")
             extra = {"log": lines, "runlog": runlog + lines, "saved": saved_settings(game.folder),
                      "window": {"w": img[0], "h": img[1]} if game.alive() and img else None,
                      "release": scenario.get("release") or "usa", "menu_controls": game.menu_controls()}

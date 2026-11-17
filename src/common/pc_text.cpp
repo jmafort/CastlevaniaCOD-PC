@@ -14,6 +14,7 @@
 #include <cstring>
 #include <iterator>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/log.h"
@@ -23,8 +24,12 @@ namespace {
 
 struct Message {
     uint32_t at;      // where it starts in the file
-    const char* was;  // the release's words
-    const char* now;  // the PC's, no longer
+    std::string_view was;  // original bytes, including the terminator and any explicitly reserved padding
+    std::string_view now;
+
+    template <size_t N>
+    constexpr Message(uint32_t offset, const char (&original)[N], std::string_view replacement)
+        : at(offset), was(original, N), now(replacement) {}
 };
 
 // every message of data\global2ue.dar with "Xbox" in it
@@ -135,6 +140,8 @@ constexpr Message kEI[] = {  // data\global2ei.dar
      "Verifica in corso...\nNon spegnere il PC"},
 };
 constexpr Message kEP[] = {  // data\global2ep.dar
+    // The stolen gold label has padding after its terminator. Use one byte for the space.
+    {0x9f848, "%dOro\0", "%d Oro"},
     {0xa9ef8, "Guardando... \nNo apagar la consola Xbox.",
      "Guardando... \nNo apagar el PC."},
     {0xaa0d0, "No hay datos de partida en la consola Xbox.",
@@ -210,7 +217,7 @@ constexpr File kFiles[] = {Of("global2ue.dar", kUE), Of("global2ee.dar", kEE), O
 static_assert([] {
     for (const File& f : kFiles)
         for (size_t i = 0; i < f.count; i++)
-            if (std::char_traits<char>::length(f.messages[i].now) > std::char_traits<char>::length(f.messages[i].was))
+            if (f.messages[i].now.size() >= f.messages[i].was.size())
                 return false;
     return true;
 }(), "a PC message is longer than the one it replaces");
@@ -237,17 +244,17 @@ void Read(const std::string& path, uint64_t offset, uint8_t* data, size_t size) 
     int changed = 0;
     for (size_t k = 0; k < file->count; k++) {
         const Message& m = file->messages[k];
-        size_t len = std::strlen(m.was) + 1, now = std::strlen(m.now);
+        size_t len = m.was.size(), now = m.now.size();
         uint64_t lo = std::max<uint64_t>(offset, m.at), hi = std::min<uint64_t>(offset + size, m.at + len);
         if (lo >= hi) continue;
         size_t from = size_t(lo - m.at), n = size_t(hi - lo);
         uint8_t* p = data + (lo - offset);
         // the release's bytes there (its zero at the end too)
-        if (std::memcmp(p, m.was + from, n) != 0) continue;
+        if (std::memcmp(p, m.was.data() + from, n) != 0) continue;
         for (size_t i = 0; i < n; i++) p[i] = from + i < now ? uint8_t(m.now[from + i]) : 0;
         changed++;
     }
-    if (changed) LOGR("pc text: %d of the save messages say \"your PC\" (%s)", changed, path.c_str());
+    if (changed) LOGR("pc text: %d localized messages updated (%s)", changed, path.c_str());
 }
 
 }  // namespace

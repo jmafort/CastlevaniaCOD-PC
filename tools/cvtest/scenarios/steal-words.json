@@ -4,11 +4,12 @@
   "needs": ["save:user19eu"],
   "settings": {"game_language": 5},
   "telemetry": 30,
+  "dump": "0x81BF38C8:7",
   "note": "Issue 19 (the European release in Spanish, with DJBLOPA's save, kept out of the repository: the Innocent Devil's panel of three devils, its devil with two abilities): a steal's words, '¡Ha robado' over the item's name, went with the HUD to the left edge when the name was long ('Instr. ceremonial!'). Its second line lay in the corner of the devil's panel, an L of its column of devils and the row of abilities along the bottom, and a draw was matched to the outline of a piece of the HUD rather than to its draws (widescreen.cpp HudShift). Skeletons only give gold, '10Oro', so the words are made long in memory: the message's format '¡Ha robado\n%s!' (0x81BF3978) becomes '¡Ha\n%s robado!' and gold's '%dOro' (0x81BF38C8) '%dInstr. ceremo', both as long as before, for '10Instr. ceremo robado!' (x 180..463 of the console's 640, y 242..266; the panel's outline reaches x 221 from y 223). Hector locks on to a skeleton of 5.3 and presses Final Attack (B) until he has stolen its gold: the second line is in the middle of the burst, not at the left.",
   "steps": [
     {"press": "0:wait:11000"},
     {"until": "player.active and not cutscene and not loading and not menu", "timeout": 90, "poll": "0:a,90f:wait", "poll_by": [["cutscene", "0:start,45f:wait"]]},
-    {"press": "0:warp=5.3,10f:wait:20f", "note": "the hall of skeletons, three of them near the door"},
+    {"press": "0:warp=5.3,10f:wait:20f", "expect_bytes": {"0x81BF38C8": "25 64 20 4f 72 6f 00"}, "note": "the original steal format is now %d Oro, including its terminator, before the long-name test changes it"},
     {"until": "room == 3 and player.active and not loading and not cutscene", "timeout": 40, "poll_by": [["cutscene", "0:start,45f:wait"], ["menu", "0:b,30f:wait"]]},
     {"press": "0:poke=81BF3978/0x6148A1C2,0:poke=81BF397C/0x2073250A,0:poke=81BF3980/0x61626F72,0:poke=81BF3984/0x00216F64,0:poke=81BF38C8/0x6E496425,0:poke=81BF38CC/0x2E727473,0:poke=81BF38D0/0x72656320,0:poke=81BF38D4/0x006F6D65,0f:wait:2f", "note": "the steal message's format and gold's words made long (both strings as long as before)"},
     {"until": "len(enemies) > 0 and enemies[0].dist < 450", "timeout": 40, "poll": "0f:wait:10f"},

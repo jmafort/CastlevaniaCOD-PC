@@ -7,6 +7,6 @@
     {"until": "frame >= 640", "timeout": 60, "shot": "title"},
     {"press": "600:down,1500:wait", "note": "Continue"},
     {"press": "0:a,2500:wait", "shot": "load", "note": "the load screen: no game data present on the PC, in the game's language",
-     "expect": ["found(runlog, r'pc text: 9 of the save messages say .{1,20}global2e' + {1: 'e', 3: 'g', 4: 'f', 5: 'p', 6: 'i'}[settings.game_language] + r'\\.dar')"]}
+     "expect": ["found(runlog, rf'pc text: {10 if settings.game_language == 5 else 9} localized messages updated .*global2e' + {1: 'e', 3: 'g', 4: 'f', 5: 'p', 6: 'i'}[settings.game_language] + r'\\.dar')"]}
   ]
 }
