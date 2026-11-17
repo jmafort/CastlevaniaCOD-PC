@@ -181,6 +181,8 @@ def tests():
         # 1.12.0: the PS2 layout's icons with no texture pack
         scenario("buttons", "--set", "button_layout=1", "--set", "texture_pack=false", test="buttons-ps2-own"),
         scenario("buttons-live", needs=["textures"]),  # the layout changed while the game runs
+        # 1.14.0: a picture's version for the PS2 layout (the HD extras pack's tips with a triangle for the Y)
+        scenario("button-pictures"),
         scenario("filters", test="filters-pack", needs=["textures"]),
         scenario("filters", "--set", "texture_pack=false", test="filters-nopack"),
         scenario("widescreen", quick=True),

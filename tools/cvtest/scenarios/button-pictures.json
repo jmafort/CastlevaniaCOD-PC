@@ -1,0 +1,19 @@
+{
+  "name": "button-pictures",
+  "note": "1.14.0: a picture's version for the PS2 button layout (texpack.cpp kPs2Variant: the same texture hash, its palette hash with kPs2Variant flipped in), as the HD extras pack has for the pictures with an Xbox Y drawn in (tip 22, the Glide lesson). With tools/cvtest/probe alone as the textures (a magenta picture named as the title logo's PS2 layout version, made here, no game art): the PS2 layout draws the logo magenta, the Xbox layout the game's own, and changed while the game runs it changes back.",
+  "settings": {"button_layout": 1},
+  "env": {"CV_TEXTURES": "{repo}/tools/cvtest/probe"},
+  "steps": [
+    {"press": "0:wait:11000", "expect": ["not player.active"], "judge": false},
+    {"until": "frame >= 640", "timeout": 60, "shot": "title-ps2", "judge": false,
+     "luma": {"logo": [0.2, 0.18, 0.8, 0.5]}, "tint": {"logo": [0.2, 0.18, 0.8, 0.5]},
+     "note": "the logo in the probe's magenta",
+     "expect": ["screen.tint.logo < -40", "found(runlog, 'texpack: 1 pictures')"]},
+    {"press": "0:set=button_layout=0,0f:wait:30f", "shot": "title-xbox", "judge": false,
+     "luma": {"logo": [0.2, 0.18, 0.8, 0.5]}, "tint": {"logo": [0.2, 0.18, 0.8, 0.5]},
+     "note": "the Xbox layout: the game's own logo, gold", "expect": ["screen.tint.logo > -10"]},
+    {"press": "0:set=button_layout=1,0f:wait:30f", "shot": "title-ps2-again", "judge": false,
+     "luma": {"logo": [0.2, 0.18, 0.8, 0.5]}, "tint": {"logo": [0.2, 0.18, 0.8, 0.5]},
+     "note": "and the PS2's again", "expect": ["screen.tint.logo < -40"]}
+  ]
+}

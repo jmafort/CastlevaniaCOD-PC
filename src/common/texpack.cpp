@@ -150,6 +150,11 @@ constexpr Key kPs2Buttons = {0x27818fa40a1117afull, 0x66279948575c23d7ull};
 constexpr uint64_t kOwnButtons = 1ull << 61;  // OwnButtons' replacement id (a pack picture's is its index + 1,
                                               // a movie frame's has bit 62, movies.cpp)
 
+// A picture with an Xbox button drawn in (a tip's Y, the Glide lesson's) may come with its PS2 layout's version (the
+// triangle there), named by the same texture hash and its palette hash with kPs2Variant flipped in: the PS2 layout
+// draws that one where there is one, the Xbox layout the picture itself.
+constexpr uint64_t kPs2Variant = 0x5053325F4C41594Full;  // "PS2_LAYO"
+
 // Xbox textures a pack has under other names. On the PS2 each of these used part of its texture only (the rest is
 // never sampled), and the rest held whatever else was in GS memory there, which PCSX2 hashed with it; the Xbox has
 // that part blank, so the names cannot match. The used parts are the same pictures: found by their colours (the
@@ -312,7 +317,8 @@ public:
     // the replacements' epoch (gpu::Extension::ReplaceEpoch), asked once a frame: the pack switched on or off while
     // the game runs moves it on, every texture then asking again; switched on for the first time, its pictures are
     // indexed on a thread of their own, the epoch moving on again once they are. The button layout changed moves it on
-    // too: the button sheet asks again, for the PS2's icons or the Xbox's (Match)
+    // too: the button sheet asks again, for the PS2's icons or the Xbox's (Match), and so do the pictures with a
+    // version for the PS2 layout (kPs2Variant)
     uint32_t Epoch() {
         uint32_t layout = g_button_layout;
         if (layout != layout_) {
@@ -550,9 +556,13 @@ private:
              missing ? (", " + std::to_string(missing) + " without both maps").c_str() : "");
     }
 
-    // the pack's picture for a texture, under its own name or the PS2's (kAliases)
+    // the pack's picture for a texture, under its own name or the PS2's (kAliases); in the PS2 layout its version
+    // for that layout first, where a pack has one (kPs2Variant)
     std::map<Key, uint32_t>::const_iterator Find(const Key& key) const {
-        auto it = index_.find(key);
+        auto it = index_.end();
+        if (g_button_layout == 1 && (it = index_.find(Key{key.texture, key.palette ^ kPs2Variant})) != index_.end())
+            return it;
+        it = index_.find(key);
         if (it != index_.end()) return it;
         for (const Alias& a : kAliases)
             if (a.xbox == key)

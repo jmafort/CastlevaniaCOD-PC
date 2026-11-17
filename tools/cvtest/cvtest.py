@@ -15,7 +15,8 @@ A scenario is JSON:
    "settings": {"display_mode": ...},     optional: castlevania.toml lines (windowed 960x540 by default, saved by this
                                           release: settings_version); a key set to null left out
    "env": {"CV_RUMBLE_TRACE": "1", ...},  optional: the game's environment besides (XBE_VIRTUAL_PAD=1: the presses go
-                                          to a virtual controller the game reads through SDL, src/common/keyboard.cpp)
+                                          to a virtual controller the game reads through SDL, src/common/keyboard.cpp;
+                                          {repo} in a value: this repository's folder)
    "platforms": ["linux"],                optional: where it runs (windows, linux); elsewhere it is skipped
    "needs": ["textures"],                 optional: skipped without an HD texture pack in the textures folder the
                                           game finds (this repository's); "env:<VARIABLE>" without that folder named
@@ -689,7 +690,7 @@ class Game:
         env = dict(os.environ if env is None else env, CV_PAD_LIVE=str(self.live))
         env["XBE_NO_PADS"] = "1"  # a controller plugged into the PC left out: the run's presses alone
         env["XBE_BACKGROUND"] = "1"  # its windows behind the others, never taking the focus from whoever uses the PC
-        env.update(scenario.get("env", {}))
+        env.update({k: v.replace("{repo}", str(REPO)) for k, v in scenario.get("env", {}).items()})  # {repo}: this repository
         self.menu_state = folder / "menu-state.json"  # where the settings menu's controls are (src/common/menu.cpp)
         env["CV_MENU_STATE"] = str(self.menu_state)
         if LINUX and WAYLAND:
