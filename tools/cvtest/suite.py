@@ -195,6 +195,8 @@ def tests():
         scenario("lockon", *eu, "--set", "game_language=5", test="lockon-eu-es"),
         # 1.12.0: a steal's words in the middle beside the Innocent Devil's panel, not at the left with it (issue 19:
         # with DJBLOPA's save, which stays out of the repository)
+        scenario("chain-punch", needs=["save:user19eu", "vendor"], env=folder_env("vendor", "CV_VENDOR_DIR")),
+        scenario("invincible-vase", needs=["save:user19eu", "vendor"], env=folder_env("vendor", "CV_VENDOR_DIR")),
         scenario("steal-words", *eu, needs=["save:user19eu"]),
         # 1.13.0: Evo Crystals (issue 18), DJBLOPA's save again: a crystal counts once as in the game, and 8 times with
         # the setting, when the devil evolves

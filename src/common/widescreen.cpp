@@ -536,6 +536,58 @@ public:
     // from a sheet, whose edges upscaled blend in the sheet's next picture (a faint line under each of the pause
     // menu's figures, beside "Weapon"). Not a whole frame quad (a fill, the frame pass, a picture widened to the
     // sides past its coordinates), nor one reading a target, nor the world
+    // The Vase's glass particles project v0 onto the screen, then use its console
+    // pixel coordinates for stage 1. Only the area sampled by this quad needs copying.
+    bool FeedbackBox(const gpu::State& s, const gpu::Assembled& a, int stage, const gpu::TextureDesc& d,
+                     const gpu::Target& t, D3D12_BOX& box) override {
+        constexpr uint64_t glass = 0xedf77f6cb59dbcbbULL;
+        if (d_.program != glass || stage != 1 || !s.ps || ((s.rs[gpu::kRsPsTextureModes] >> 5) & 31) != 1 ||
+            !d_.world || !d.linear || d.width != t.gw || d.height != t.gh || !t.gw || !t.gh || a.vertex_count != 4 ||
+            s.vsc[189][3] != 1 || s.vsc[kScreenOffset][3] != 0 || s.vsc[kScreenScale][3] != 1)
+            return false;
+        const auto& e = a.elements[0];
+        if (!(a.regs & 1) || e.buffer >= a.buffer_count || e.format != DXGI_FORMAT_R32G32B32_FLOAT) return false;
+        const auto& b = a.buffers[e.buffer];
+        if (!b.src || uint64_t(3) * b.stride + e.offset + 12 > b.bytes) return false;
+        Span columns, rows;
+        for (uint32_t i = 0; i < 4; ++i) {
+            float v[3];
+            std::memcpy(v, b.src + size_t(i) * b.stride + e.offset, sizeof(v));
+            auto dot = [&](const auto& c) { return v[0] * c[0] + v[1] * c[1] + v[2] * c[2] + c[3]; };
+            float w = dot(s.vsc[kCameraWorld + 3]);
+            if (!(w >= 1 && w <= 1e7f)) return false;
+            float y = dot(s.vsc[kCameraWorld + 1]) * s.vsc[kScreenScale][1] / w + s.vsc[kScreenOffset][1];
+            float x = dot(s.vsc[kCameraWorld]) * s.vsc[kScreenScale][0] / w + s.vsc[kScreenOffset][0];
+            if (!std::isfinite(x) || !std::isfinite(y)) return false;
+            columns.Add(x);
+            rows.Add(y);
+        }
+        // World draws may squeeze the feedback coordinate about the middle of the
+        // guest frame. Enclose both positions (also covers CV_WIDE_FEEDBACK=0).
+        if (app::Widescreen()) {
+            float half = d.width * 0.5f, squeeze = Squeeze();
+            float left = half + (columns.lo - half) * squeeze;
+            float right = half + (columns.hi - half) * squeeze;
+            columns.Add(left);
+            columns.Add(right);
+        }
+        // Include the half-pixel shift and filter taps. At a texture edge a wrap
+        // or mirror may read the other end, so retain that axis in full.
+        auto bounds = [](Span span, UINT host, UINT guest, UINT& lo, UINT& hi) {
+            float scale = float(host) / guest;
+            float pad = 8 * std::max(1.0f, scale);
+            float a = std::floor(span.lo * scale - pad), b = std::ceil(span.hi * scale + pad);
+            if (a >= 0 && b <= host && a < b) {
+                lo = UINT(a);
+                hi = UINT(b);
+            }
+        };
+        box = {0, 0, 0, t.w, t.h, 1};
+        bounds(columns, t.w, t.gw, box.left, box.right);
+        bounds(rows, t.h, t.gh, box.top, box.bottom);
+        return true;
+    }
+
     bool TexelBox(float* box) override {
         if (!d_.squeeze || d_.world || d_.whole || d_.target || !d_.textured || d_.count != 4 || d_.box_u.Empty() ||
             d_.box_v.Empty())

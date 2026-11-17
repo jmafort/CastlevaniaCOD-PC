@@ -1,0 +1,27 @@
+{
+  "name": "chain-punch",
+  "note": "Issue 28. Exercise Ironside's Chain Punch on a skeleton with motion vectors enabled.",
+  "save": "user19eu",
+  "needs": [
+    "save:user19eu"
+  ],
+  "vendor": true,
+  "perf": true,
+  "dump": "0xB2D7F0:4",
+  "settings": {
+    "game_language": 1,
+    "width": 1280,
+    "height": 720,
+    "antialiasing": 1
+  },
+  "steps": [
+    {"press": "0:wait:11000"},
+    {"until": "player.active and not cutscene and not loading and not menu", "timeout": 90, "poll": "0:a,90f:wait", "poll_by": [["cutscene", "0:start,45f:wait"]]},
+    {"press": "0:poke=B2D7D8/34,0:poke=B2D878/0,0:poke=B2D7EC/250,0:poke=B2D7E8/250,0:poke=B2D890/14,0:poke=B2D894/1,0:poke=B2D8C0/14,2f:wait:3f", "note": "Set the summoned fifth devil's form, learned abilities and selected ability in this test process."},
+    {"press": "0:warp=5.3,10f:wait:20f", "note": "the hall of skeletons"},
+    {"until": "room == 3 and player.active and not loading and not cutscene", "timeout": 40, "poll_by": [["cutscene", "0:start,45f:wait"], ["menu", "0:b,30f:wait"]]},
+    {"until": "len(enemies) > 0 and enemies[0].dist < 700 and not modal", "timeout": 90, "poll": "0f:wait:15f", "poll_by": [["modal", "0:a,50f:wait"]]},
+    {"press": "0:black,15f:wait:10f", "shot": "baseline"},
+    {"press": "0:poke=B2D7F0/100,0:y,15f:wait:225f", "shot": "ability", "expect": ["0 < int.from_bytes(guest_bytes(0xB2D7F0), 'little') <= 90", "found(runlog, r'motion: matching [0-9]+ repeated draws')"], "note": "Cast the selected ability while locked on and measure its effect."}
+  ]
+}
