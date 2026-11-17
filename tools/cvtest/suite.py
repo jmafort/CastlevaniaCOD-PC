@@ -4,6 +4,7 @@ which), run in full before every release, on Windows and on Linux.
 usage: python -I tools/cvtest/suite.py [--quick] [--only <test>[,<test>...]] [--from <test>] [--list]
                                        [--no-packages] [--alone] [--linux]
        python -I tools/cvtest/suite.py --check
+       python -I tools/cvtest/suite.py --retry-failed <full run folder>
 
 Runs here (Windows, or Linux and WSL) every test of the list below, one after another: the gameplay scenarios on
 this platform's dev build (cvtest.py), then the release packages in out/release as a player installs them
@@ -18,6 +19,8 @@ The summary is out/test/suite-<time>/summary.md, with each test's own report. A 
 --from) that passed with nothing skipped also writes out/test/suite-<platform>.json: the commits it ran on (this
 repository's and the SDK's beside it, neither with changes), the packages' SHA-256 and the time. --check says whether
 both platforms' are there for the commits checked out now and the packages in out/release, which a release needs.
+--retry-failed keeps a full run's passing results and logs and reruns its failed or skipped tests. It needs the same
+clean checkouts, package, dev binaries, configuration, and test list. Each attempt gets its own report folder.
 
 This PC's own paths are in out/test/suite.json (out/ is not in the repository):
   {"discs": {"usa": "<the USA xiso>", "eu": "<the European disc image>", "other": "<another release's image>",
@@ -455,6 +458,36 @@ def sha256(p):
     return h.hexdigest()
 
 
+def inputs(at, names):
+    """Identify the exact local build and release package a full run exercises."""
+    pkg = package()
+    if not at["port"] or not at["sdk"] or at["port_changes"] or at["sdk_changes"] or not pkg:
+        return None
+    exe, code = ("", ".so") if LINUX else (".exe", ".dll")
+    files = [name + suffix for name in ("Castlevania", "CastlevaniaEU") for suffix in (exe, code)]
+    files.append("CastlevaniaLauncher" + exe)
+    build = dev_build()
+    if not all((build / f).is_file() for f in files):
+        return None
+    settings = {k: v for k, v in os.environ.items() if k.startswith(("CV_", "XBE_", "VK_", "SDL_"))
+                or k in ("PULSE_SERVER", "GALLIUM_DRIVER", "XDG_RUNTIME_DIR")}
+    env_digest = hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest()
+    return dict(at, platform=PLATFORM, package=sha256(pkg), tests=names, environment=env_digest,
+                config=sha256(CONFIG) if CONFIG.is_file() else None, binaries={f: sha256(build / f) for f in files})
+
+
+def prior_passes(folder, identity):
+    """A completed full run's measured passes, with the original report and log paths."""
+    previous = json.loads((folder / "full-results.json").read_text(encoding="utf-8"))
+    if not identity or previous["inputs"] != identity:
+        raise ValueError("the full run used different inputs")
+    rows = previous["results"]
+    if set(rows) != set(identity["tests"]):
+        raise ValueError("the full run did not report every test")
+    return {name: row for name, row in rows.items()
+            if row["result"] == "passed" and Path(row["log"]).is_file()}
+
+
 def check():
     """whether both platforms passed the full suite on the commits checked out, with the packages in out/release"""
     now = commits()
@@ -510,14 +543,29 @@ def main():
     if "--no-packages" in args:
         chosen = [t for t in chosen if "package" not in t["needs"]]
     full = chosen == all_tests
+    at = commits()
+    names = [t["name"] for t in chosen]
+    identity = inputs(at, names) if full else None
+    results = {}
+    retry = None
+    if "--retry-failed" in args:
+        if not full or any(flag in args for flag in ("--linux", "--quick", "--only", "--from", "--no-packages")):
+            print("--retry-failed takes one platform and its whole test list")
+            return 2
+        try:
+            retry = Path(args[args.index("--retry-failed") + 1]).resolve()
+            results = prior_passes(retry, identity)
+        except (IndexError, KeyError, OSError, TypeError, ValueError) as e:
+            print(f"cannot resume the full suite: {e}")
+            return 2
     folder = OUT / f"suite-{time.strftime('%Y%m%d-%H%M%S')}-{PLATFORM}"
     folder.mkdir(parents=True)
-    at = commits()
-    results = {}
     started = time.time()
     print(f"suite on {PLATFORM}: {len(chosen)} tests, {folder}")
-    i = 0
-    for session, members in plan(chosen, "--alone" in args):
+    i = len(results)
+    if retry:
+        print(f"{i} passed previously in {retry}; retrying {len(chosen) - i}", flush=True)
+    for session, members in plan([t for t in chosen if t["name"] not in results], "--alone" in args):
         if session and len(members) > 1:
             print(f"  session {session}: {', '.join(t['name'] for t in members)} ...", flush=True)
             got = run_session(session, members, folder)
@@ -529,12 +577,14 @@ def main():
             results[name] = r
             line = f" {r['result']} ({r['seconds']} s){': ' + r['why'] if r['why'] else ''}"
             print(f"  [{i}/{len(chosen)}] {name} ...{line}" if session and len(members) > 1 else line, flush=True)
-    passed = all(r["result"] == "passed" for r in results.values())
+    passed = bool(results) and set(results) == set(names) and all(r["result"] == "passed" for r in results.values())
     lines = [f"# Regression suite on {PLATFORM}: {'passed' if passed else 'not passed'}", "",
              f"Port {at['port'][:7]}{' (with changes)' if at['port_changes'] else ''}, SDK {at['sdk'][:7]}"
              f"{' (with changes)' if at['sdk_changes'] else ''}, {time.strftime('%Y-%m-%d %H:%M')}, "
-             f"{round((time.time() - started) / 60)} minutes.", "",
-             "| test | result | seconds | played | why | report |", "|---|---|---|---|---|---|"]
+             f"{round((time.time() - started) / 60)} minutes.", ""]
+    if retry:
+        lines.extend([f"Passing tests carried forward from {retry}. Each result's log is in full-results.json.", ""])
+    lines.extend(["| test | result | seconds | played | why | report |", "|---|---|---|---|---|---|"])
     for name, r in results.items():
         lines.append(f"| {name} | {'**' + r['result'] + '**' if r['result'] == 'failed' else r['result']} | "
                      f"{r['seconds']} | {r.get('played', 'alone')} | {r['why'].replace('|', '/')} | "
@@ -543,13 +593,19 @@ def main():
     counts = {k: sum(r["result"] == k for r in results.values()) for k in ("passed", "failed", "skipped")}
     print(f"suite on {PLATFORM}: {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped: "
           f"{folder / 'summary.md'}")
-    pkg = package()
-    if full and passed and not at["port_changes"] and not at["sdk_changes"] and pkg:
-        (OUT / f"suite-{PLATFORM}.json").write_text(json.dumps(dict(at, package=sha256(pkg), when=time.strftime(
-            "%Y-%m-%d %H:%M"), results={k: v["result"] for k, v in results.items()}), indent=1), encoding="utf-8")
+    verified = identity is not None and inputs(commits(), names) == identity
+    if full and verified:
+        receipt = dict(inputs=identity, results=results, previous=str(retry) if retry else None)
+        (folder / "full-results.json").write_text(json.dumps(receipt, indent=1), encoding="utf-8")
+    if full and passed and verified:
+        stamp = dict(at, package=identity["package"], when=time.strftime("%Y-%m-%d %H:%M"),
+                     results={k: v["result"] for k, v in results.items()}, report=str(folder))
+        temp = folder / "release-record.tmp"
+        temp.write_text(json.dumps(stamp, indent=1), encoding="utf-8")
+        temp.replace(OUT / f"suite-{PLATFORM}.json")
         print(f"full suite passed: out/test/suite-{PLATFORM}.json")
     elif full and passed:
-        print("passed, but with changes not committed or no package: no record for a release")
+        print("passed, but the build inputs were missing, dirty, or changed: no record for a release")
     code = 0 if passed else 1
     if "--linux" in args and not LINUX:
         code |= linux_half([a for a in args if a != "--linux"])

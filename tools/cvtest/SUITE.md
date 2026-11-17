@@ -9,6 +9,11 @@ on the platform it runs on; a release is made only from a commit both platforms 
     python -I tools\cvtest\suite.py --quick       the shorter list, during work
     python -I tools\cvtest\suite.py --check       both platforms passed on this commit, with these packages
 
+After a completed full run, `suite.py --retry-failed <run folder>` reruns every failed or skipped test on that
+platform. It verifies the port and SDK commits, clean working trees, package and dev binary hashes, configuration,
+and test list before carrying forward a passing result with its original log. The new report links to the earlier
+run. Every listed test must pass before the runner writes the release record.
+
 This PC's discs and WSL setup are in `out/test/suite.json` (see `suite.py`), with the folders some tests need: an HD
 movie pack (`movies`), a texture pack with material maps (`materials`, PlatinumMimic's v4) and AMD's and NVIDIA's
 libraries as the launcher downloads them (`vendor`); without one its tests are skipped, and said so. Tests marked
