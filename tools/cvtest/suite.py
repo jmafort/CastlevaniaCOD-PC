@@ -228,6 +228,8 @@ def tests():
         scenario("stick"),
         scenario("vpad", quick=True),
         scenario("vpad", "--set", "button_layout=1", test="vpad-ps2"),
+        # 1.14.1 (issue 34): a controller SDL does not find read through XInput itself, its stand-in a test's
+        scenario("xinput", platforms=("windows",)),
         # 1.10.2: one controller seen twice (DS4Windows) in the PS2 layout: R1 and L1 leave the lock-on as it is
         scenario("lock-twin"),
         scenario("menu", quick=True),

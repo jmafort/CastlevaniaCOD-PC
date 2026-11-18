@@ -649,6 +649,10 @@ Supports Xbox, PlayStation and Switch controllers, with hot plugging and rumble.
   controllers together, and a controller seen twice, a PlayStation controller and the Xbox controller DS4Windows or
   DualSenseX makes of it, used to press both layouts at once: R1 guarded and turned the lock-on off, L1 reset the camera
   and changed the target.
+- **A controller only the launcher sees** - The game reads controllers through SDL (Windows.Gaming.Input for Xbox
+  controllers, HIDAPI for PlayStation and Switch ones), the launcher through XInput. A controller the first does not
+  hand over walked the launcher and the settings menu and did nothing in the game: while SDL has no controller at
+  all, the game now reads XInput's itself (1.14.1; the log says "through XInput").
 - **A controller seen twice** - `logs\castlevania.log` names each controller plugged in. Two for one (the controller
   and a program's copy of it) still give the game each press twice, sometimes a frame apart, which can turn a toggle
   such as Lock-On ON/OFF on and off again: hide the controller from games in that program (DS4Windows: Hide DS4
