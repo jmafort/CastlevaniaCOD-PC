@@ -407,7 +407,7 @@ index 15f8ab1..5379649 100644
  SRC="$SRC $(ls "$H"/*.cpp) ${EXTRA[*]}"
  for x in "${EXCL[@]}"; do SRC=$(echo $SRC | tr ' ' '\n' | grep -Ev -- "$x"); done
 diff --git a/runtime/app/app.h b/runtime/app/app.h
-index e1c1254..2a6c8b9 100644
+index e1c1254..16a960c 100644
 --- a/runtime/app/app.h
 +++ b/runtime/app/app.h
 @@ -1,5 +1,6 @@
@@ -532,7 +532,7 @@ index e1c1254..2a6c8b9 100644
      std::vector<Option> options;
      // the settings file's toml::table, for what options cannot hold
      void (*load)(const void* table);
-@@ -98,10 +169,31 @@ struct GameInfo {
+@@ -98,10 +169,34 @@ struct GameInfo {
      void (*ui)(double fps);        // each frame inside the ImGui frame, UiLock held
      void (*pad)(int port, input::Pad& pad);  // a polled pad before the game gets it
      void (*rumble)(int port, uint16_t& left, uint16_t& right);
@@ -562,6 +562,9 @@ index e1c1254..2a6c8b9 100644
 +bool MouseCaptured();  // held now
 +// the mouse's moves since the last call, in its own counts (right and down positive); none while it is not held
 +void TakeMouse(float& dx, float& dy);
++// its wheel's turns since the last call, in notches (away from the hand positive; a smooth wheel gives parts of one);
++// none while it is not held
++float TakeMouseWheel();
  
  }  // namespace app
 diff --git a/runtime/app/game_code.cpp b/runtime/app/game_code.cpp
@@ -943,7 +946,7 @@ index 0000000..a8e985f
 +
 +}  // namespace app
 diff --git a/runtime/app/main.cpp b/runtime/app/main.cpp
-index e36f7ac..a093b12 100644
+index e36f7ac..3641a64 100644
 --- a/runtime/app/main.cpp
 +++ b/runtime/app/main.cpp
 @@ -1,4 +1,5 @@
@@ -991,14 +994,14 @@ index e36f7ac..a093b12 100644
  namespace {
  
  HWND g_hwnd = nullptr;
-@@ -36,6 +52,38 @@ constexpr UINT kApplyDisplay = WM_APP + 1, kOpenWindow = WM_APP + 2;
+@@ -36,6 +52,39 @@ constexpr UINT kApplyDisplay = WM_APP + 1, kOpenWindow = WM_APP + 2;
  bool g_mode_changed = false;
  bool g_apply_posted = false;  // a display apply is waiting in the queue or running
  
 +// the mouse for the game's own use (CaptureMouse): asked for, held now (window thread), its moves since TakeMouse
 +constexpr UINT kMouseCapture = WM_APP + 3;
 +std::atomic<bool> g_mouse_want{false}, g_mouse_held{false};
-+std::atomic<float> g_mouse_dx{0}, g_mouse_dy{0};
++std::atomic<float> g_mouse_dx{0}, g_mouse_dy{0}, g_mouse_wheel{0};
 +
 +// window thread: the mouse held as asked, while the window is in front and not minimized; its raw input taken (the
 +// moves, past the window's edge too), the pointer kept inside the window's client area and hidden there
@@ -1022,6 +1025,7 @@ index e36f7ac..a093b12 100644
 +        ClipCursor(nullptr);
 +        g_mouse_dx = 0;
 +        g_mouse_dy = 0;
++        g_mouse_wheel = 0;
 +    }
 +    g_mouse_held = hold;
 +    LOGR("mouse: %s", hold ? "held for the game" : "the desktop's");
@@ -1030,7 +1034,7 @@ index e36f7ac..a093b12 100644
  // crash dump in CrashDumps beside the exe
  LONG WINAPI WriteCrashDump(EXCEPTION_POINTERS* e) {
      // the dump holds no guest memory: the guest registers and return addresses go to the log
-@@ -110,16 +158,22 @@ void ApplyNow() {
+@@ -110,16 +159,22 @@ void ApplyNow() {
          int w = r.right - r.left, h = r.bottom - r.top;
          const RECT& a = mi.rcWork;
          SetWindowLongPtrW(g_hwnd, GWL_STYLE, WS_OVERLAPPEDWINDOW | visible);
@@ -1056,7 +1060,7 @@ index e36f7ac..a093b12 100644
      {
          std::lock_guard lock(UiLock());
          if (ImGui::GetCurrentContext() && ImGui_ImplWin32_WndProcHandler(hwnd, msg, wp, lp)) return 1;
-@@ -129,7 +183,25 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+@@ -129,7 +184,31 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
          case WM_KEYDOWN:
              if (wp == VK_F3) DumpThreads();
              return 0;
@@ -1065,9 +1069,15 @@ index e36f7ac..a093b12 100644
 +                RAWINPUT ri;
 +                UINT size = sizeof(ri);
 +                if (GetRawInputData(HRAWINPUT(lp), RID_INPUT, &ri, &size, sizeof(RAWINPUTHEADER)) != UINT(-1) &&
-+                    ri.header.dwType == RIM_TYPEMOUSE && !(ri.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
-+                    g_mouse_dx.fetch_add(float(ri.data.mouse.lLastX), std::memory_order_relaxed);
-+                    g_mouse_dy.fetch_add(float(ri.data.mouse.lLastY), std::memory_order_relaxed);
++                    ri.header.dwType == RIM_TYPEMOUSE) {
++                    if (!(ri.data.mouse.usFlags & MOUSE_MOVE_ABSOLUTE)) {
++                        g_mouse_dx.fetch_add(float(ri.data.mouse.lLastX), std::memory_order_relaxed);
++                        g_mouse_dy.fetch_add(float(ri.data.mouse.lLastY), std::memory_order_relaxed);
++                    }
++                    // the wheel: its turn as a signed count, WHEEL_DELTA a notch
++                    if (ri.data.mouse.usButtonFlags & RI_MOUSE_WHEEL)
++                        g_mouse_wheel.fetch_add(float(int16_t(ri.data.mouse.usButtonData)) / float(WHEEL_DELTA),
++                                                std::memory_order_relaxed);
 +                }
 +            }
 +            break;  // DefWindowProc lets the input go
@@ -1082,7 +1092,7 @@ index e36f7ac..a093b12 100644
              if (LOWORD(wp) == WA_INACTIVE) {
                  // a changed display mode steps aside for the desktop, minimized, and comes back on return; not while
                  // handing over to the next instance, which runs in the same mode
-@@ -158,8 +230,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+@@ -158,8 +237,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
          case kOpenWindow:
              CloseSplash();
              if (wp) ApplyNow();
@@ -1092,7 +1102,7 @@ index e36f7ac..a093b12 100644
              return 0;
          case WM_CLOSE:
              DestroyWindow(hwnd);
-@@ -173,6 +244,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+@@ -173,6 +251,16 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
  
  }  // namespace
  
@@ -1104,11 +1114,12 @@ index e36f7ac..a093b12 100644
 +    dx = g_mouse_dx.exchange(0, std::memory_order_relaxed);
 +    dy = g_mouse_dy.exchange(0, std::memory_order_relaxed);
 +}
++float TakeMouseWheel() { return g_mouse_wheel.exchange(0, std::memory_order_relaxed); }
 +
  std::filesystem::path ExeDir() {
      wchar_t p[MAX_PATH];
      GetModuleFileNameW(nullptr, p, MAX_PATH);
-@@ -189,6 +269,12 @@ int Instance() {
+@@ -189,6 +277,12 @@ int Instance() {
  
  void* Window() { return g_hwnd; }
  
@@ -1121,7 +1132,7 @@ index e36f7ac..a093b12 100644
  std::recursive_mutex& UiLock() {
      static std::recursive_mutex m;
      return m;
-@@ -230,7 +316,8 @@ void Pace() {
+@@ -230,7 +324,8 @@ void Pace() {
          next = now;
          return;
      }
@@ -1131,7 +1142,7 @@ index e36f7ac..a093b12 100644
      next += period;
      if (next < now - period) next = now;
      while (clock::now() + std::chrono::milliseconds(2) < next) Sleep(1);
-@@ -244,18 +331,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -244,18 +339,26 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
      std::signal(SIGABRT, [](int) { app::WriteCrashDump(nullptr); });
      timeBeginPeriod(1);
      SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -1161,7 +1172,7 @@ index e36f7ac..a093b12 100644
      if (!app::PrepareGameCode(game)) return 1;
  
      bool splash = app::OpenSplash(), handover = app::StartHandover();
-@@ -265,6 +360,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -265,6 +368,10 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
      wc.lpfnWndProc = app::WndProc;
      wc.hInstance = inst;
      wc.hIcon = LoadIconW(inst, MAKEINTRESOURCEW(1));
@@ -1172,7 +1183,7 @@ index e36f7ac..a093b12 100644
      wc.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
      wc.lpszClassName = app::kGame.name;
      RegisterClassExW(&wc);
-@@ -275,7 +374,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -275,7 +382,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
          app::ApplyNow();
      } else if (!splash) {
          app::ApplyNow();
@@ -1181,7 +1192,7 @@ index e36f7ac..a093b12 100644
      }
  
      IMGUI_CHECKVERSION();
-@@ -305,3 +404,4 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
+@@ -305,3 +412,4 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR, int) {
      logx::Flush();
      kernel::Shutdown(0);
  }
@@ -19365,10 +19376,10 @@ index 0000000..08dbd97
 +#endif
 diff --git a/runtime/linux/main.cpp b/runtime/linux/main.cpp
 new file mode 100644
-index 0000000..304ce36
+index 0000000..cb86ae3
 --- /dev/null
 +++ b/runtime/linux/main.cpp
-@@ -0,0 +1,391 @@
+@@ -0,0 +1,398 @@
 +// Linux: the host's window and main loop (app/main.cpp's), on SDL. The main thread takes SDL's events: ImGui's input,
 +// the window messages GameInfo::message knows, controllers plugged in or out, the display settings; the game and
 +// the renderer run on threads of their own as on Windows.
@@ -19411,7 +19422,7 @@ index 0000000..304ce36
 +
 +// the mouse for the game's own use (CaptureMouse): asked for, held now (main loop), its moves since TakeMouse
 +std::atomic<bool> g_mouse_want{false}, g_mouse_held{false};
-+std::atomic<float> g_mouse_dx{0}, g_mouse_dy{0};
++std::atomic<float> g_mouse_dx{0}, g_mouse_dy{0}, g_mouse_wheel{0};
 +
 +// main loop: the mouse held as asked while the window has the focus, by SDL's relative mode (the pointer hidden and
 +// kept in the window, the moves reported past its edge)
@@ -19423,6 +19434,7 @@ index 0000000..304ce36
 +    if (!hold) {
 +        g_mouse_dx = 0;
 +        g_mouse_dy = 0;
++        g_mouse_wheel = 0;
 +    }
 +    g_mouse_held = hold;
 +    LOGR("mouse: %s", hold ? "held for the game" : "the desktop's");
@@ -19566,6 +19578,11 @@ index 0000000..304ce36
 +                g_mouse_dy.fetch_add(e.motion.yrel, std::memory_order_relaxed);
 +            }
 +            break;
++        case SDL_EVENT_MOUSE_WHEEL:  // notches, away from the hand positive whichever way the desktop scrolls
++            if (g_mouse_held)
++                g_mouse_wheel.fetch_add(e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED ? -e.wheel.y : e.wheel.y,
++                                        std::memory_order_relaxed);
++            break;
 +        case SDL_EVENT_MOUSE_BUTTON_UP:
 +            if (e.button.button == SDL_BUTTON_LEFT)
 +                Message(WM_LBUTTONUP, 0, intptr_t(int(e.button.x) & 0xFFFF) | intptr_t(int(e.button.y) & 0xFFFF) << 16);
@@ -19623,6 +19640,7 @@ index 0000000..304ce36
 +    dx = g_mouse_dx.exchange(0, std::memory_order_relaxed);
 +    dy = g_mouse_dy.exchange(0, std::memory_order_relaxed);
 +}
++float TakeMouseWheel() { return g_mouse_wheel.exchange(0, std::memory_order_relaxed); }
 +
 +Mode WindowPixels() { return {linuxapp::g_pixel_w, linuxapp::g_pixel_h}; }
 +
