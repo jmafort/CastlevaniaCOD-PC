@@ -1,0 +1,16 @@
+{
+  "name": "hud-panel",
+  "save": "user19eu",
+  "needs": ["save:user19eu"],
+  "telemetry": 30,
+  "note": "1.14.0 (a report on Reddit, 2026-11-16): the Innocent Devil's panel at the screen's corner (hud_edges) once the health bar has faded, with DJBLOPA's save (kept out of the repository), whose devil is out, on the rampart of 5.7. The HUD's draws are known from the first of a frame that takes one of its textures (widescreen.cpp kHudSheet, kHud), and with the bar gone the panel's are the first: drawn from the HUD's sheet, one picture per language since its labels are in it. The Brazilian Portuguese translation has a sheet of its own ('Jogador' over the health bar), not known through 1.13.0: the panel went back to the 4:3 middle as the bar faded while its red frames, of another texture, stayed at the screen's edge beside it. Played as the game is and, as hud-panel-ptbr, with the translation (--set translation=PTBR-PS2, CV_MODS its mods folder). wide.hud is the sheet's widest draw of the last frame and its move: the health bar's frame while that shows (over 150 of the console's 640 wide), then a part of the panel.",
+  "steps": [
+    {"press": "0:wait:11000"},
+    {"until": "player.active and not cutscene and not loading and not menu", "timeout": 90, "poll": "0:a,90f:wait", "poll_by": [["cutscene", "0:start,45f:wait"]]},
+    {"press": "0:warp=5.7,10f:wait:20f", "note": "the rampart: nothing near to fight"},
+    {"until": "room == 7 and player.active and not loading and not cutscene", "timeout": 40, "poll_by": [["cutscene", "0:start,45f:wait"], ["menu", "0:b,30f:wait"]], "shot": "bar", "expect": ["wide.hud.ago < 3", "wide.hud.x[1] - wide.hud.x[0] > 150", "wide.hud.move < 0"], "note": "the health bar up as the room comes in, at the screen's left edge"},
+    {"until": "wide.hud.ago < 3 and wide.hud.x[1] - wide.hud.x[0] < 120", "timeout": 40, "poll": "0f:wait:30f", "note": "the health bar faded: the sheet's draws are the panel's alone"},
+    {"press": "0f:wait:60f", "shot": "panel", "note": "the panel at the screen's left edge, its red frames on its devils and abilities", "expect": ["wide.hud.ago < 3", "wide.hud.x[1] < 250", "wide.hud.move < 0"]},
+    {"press": "0f:wait:120f", "shot": "panel-kept", "note": "and it stays there", "expect": ["wide.hud.ago < 3", "wide.hud.x[1] < 250", "wide.hud.move < 0"]}
+  ]
+}

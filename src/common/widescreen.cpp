@@ -171,9 +171,11 @@ constexpr uint64_t kHud[] = {0x9d83fce80f5f78f6ull, 0x8d0b7015b1ee08baull};
 // and its sheet (the health bar's frame, digits and icons, the Innocent Devil's panel), one per language since its
 // labels are in the picture: English (the USA release, the European in English), then the European release's German,
 // French, Spanish and Italian. Through 1.10.2 only the English one was known, so in another language the devil's
-// panel at the bottom left went back to the 4:3 middle once the health bar had faded (issue 15)
+// panel at the bottom left went back to the 4:3 middle once the health bar had faded (issue 15). The last is the
+// Brazilian Portuguese fan translation's (mods\PTBR-PS2, on the USA release: "Jogador" over the health bar), not known
+// through 1.13.0: with it the panel went back so too, and its red frames, of kHud, stayed at the screen's edge
 constexpr uint64_t kHudSheet[] = {0x3ff08a280ddd7171ull, 0x8c4e862ec618c8d1ull, 0x4861efdb951737bfull,
-                                  0x54fa81eeabbeac29ull, 0x1a59c855d8a3b444ull};
+                                  0x54fa81eeabbeac29ull, 0x1a59c855d8a3b444ull, 0x6cb3dadcdad8c432ull};
 bool HudSheet(uint64_t name) { return std::find(std::begin(kHudSheet), std::end(kHudSheet), name) != std::end(kHudSheet); }
 // an area's name card's effects drawn apart from the picture the game composed of it: the red flame it scrolls over
 // the crest as the card burns away. They go with the card

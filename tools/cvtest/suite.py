@@ -201,6 +201,11 @@ def tests():
         scenario("chain-punch", needs=["save:user19eu", "vendor"], env=folder_env("vendor", "CV_VENDOR_DIR")),
         scenario("invincible-vase", needs=["save:user19eu", "vendor"], env=folder_env("vendor", "CV_VENDOR_DIR")),
         scenario("steal-words", *eu, needs=["save:user19eu"]),
+        # 1.14.0: the Innocent Devil's panel at the screen's corner once the health bar has faded, in English and with
+        # the Brazilian Portuguese translation, whose HUD has a sheet of its own (a report on Reddit)
+        scenario("hud-panel", needs=["save:user19eu"]),
+        scenario("hud-panel", "--set", "translation=PTBR-PS2", test="hud-panel-ptbr",
+                 needs=["save:user19eu", "translation"], env=folder_env("translation", "CV_MODS")),
         # 1.13.0: Evo Crystals (issue 18), DJBLOPA's save again: a crystal counts once as in the game, and 8 times with
         # the setting, when the devil evolves
         scenario("evo-crystals", *eu, needs=["save:user19eu"]),
