@@ -27,6 +27,9 @@ and the game on a virtual X display of their own), with each disc linked into it
   - the HD texture pack's row: none in the textures folder, then three pictures found and in use, switched off
   - the update row in every language (CV_UPDATE_SHOW: a release on offer, and its update failed): the words end
     before the Release notes and Update buttons and wrap under themselves, the note under both
+  - the Desktop shortcut row (Game; CV_SHORTCUT_DIR stands for the desktop): Create makes a shortcut to the
+    launcher in its folder, its icon the crest made from the game's files (castlevania.ico, four sizes; on Linux
+    castlevania.png and a desktop entry in the applications folder and on the desktop)
   - the Game files page: each copy's verdict (the USA release's patched xiso, the European one, another release's
     with --other, a file that is no Xbox disc)
   - no graphics that run the game (CV_NO_D3D12=1): the home page says so
@@ -739,6 +742,67 @@ def main():
     set_settings(pkg, launcher_language="en")
     results.append(result("the update row in every language: its words end before its buttons, on offer and failed "
                           "(update-<language>.png)", errors))
+
+    # the Desktop shortcut row: a shortcut to this launcher, its icon made from the game's own files
+    errors = []
+    desk = pkg / "shortcut-test"
+    shutil.rmtree(desk, ignore_errors=True)
+    desk.mkdir()
+    icon = pkg / ("castlevania.png" if LINUX else "castlevania.ico")
+    icon.unlink(missing_ok=True)
+    made = desk / ("castlevania-cod-pc.desktop" if LINUX else "Castlevania Curse of Darkness.lnk")
+    la = Launcher(pkg, env, out, ["--page", "game"], more_env={"CV_SHORTCUT_DIR": str(desk)})
+    if not la.click_until("shortcut", made.is_file):
+        errors.append(f"Create made no {made.name} in the desktop's folder")
+    la.shot("shortcut")
+    la.close()
+    launcher_exe = pkg / ("CastlevaniaLauncher" + EXE)
+    own_icon = release.is_dir() and not LINUX  # a Windows dev build's programs have the crest in them
+    if made.is_file() and LINUX:
+        entry = dict(l.split("=", 1) for l in made.read_text(encoding="utf-8").splitlines() if "=" in l)
+        menu = desk / "applications" / made.name
+        if not menu.is_file() or menu.read_text(encoding="utf-8") != made.read_text(encoding="utf-8"):
+            errors.append("no desktop entry in the applications folder like the desktop's")
+        if entry.get("Exec") != f'"{launcher_exe}"' or entry.get("Path") != str(pkg) or entry.get("Type") != "Application":
+            errors.append(f"the desktop entry starts {entry.get('Exec')} in {entry.get('Path')}, not the launcher in its folder")
+        if entry.get("Icon") != str(icon):
+            errors.append(f"the desktop entry's icon is {entry.get('Icon')}, not {icon}")
+        if not os.access(made, os.X_OK):
+            errors.append("the desktop entry may not be run")
+        if not icon.is_file() or icon.read_bytes()[:8] != b"\x89PNG\r\n\x1a\n":
+            errors.append(f"{icon.name} is no PNG")
+    elif made.is_file():
+        script = ("$s = (New-Object -ComObject WScript.Shell).CreateShortcut($env:CV_SHORTCUT_FILE); "
+                  "$s.TargetPath; $s.WorkingDirectory; $s.IconLocation")
+        got = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True,
+                             env=dict(os.environ, CV_SHORTCUT_FILE=str(made))).stdout.splitlines()
+        got += [""] * (3 - len(got))
+        same = lambda a, b: os.path.normcase(os.path.normpath(a)) == os.path.normcase(os.path.normpath(str(b)))  # noqa: E731
+        if not same(got[0], launcher_exe) or not same(got[1], pkg):
+            errors.append(f"the shortcut starts {got[0]} in {got[1]}, not the launcher in its folder")
+        if not own_icon and not same(got[2].rsplit(",", 1)[0], icon):
+            errors.append(f"the shortcut's icon is {got[2]}, not {icon}")
+        data = icon.read_bytes() if icon.is_file() else b""
+        if not own_icon:
+            count = int.from_bytes(data[4:6], "little") if data[:4] == bytes([0, 0, 1, 0]) else 0
+            sizes = [data[6 + 16 * i] or 256 for i in range(count)]
+            if sizes != [256, 48, 32, 16]:
+                errors.append(f"{icon.name} has the sizes {sizes}, not 256, 48, 32 and 16")
+            else:
+                at = int.from_bytes(data[6 + 12:6 + 16], "little")
+                head = data[at:at + 40]
+                width, height, bits = (int.from_bytes(head[4:8], "little"), int.from_bytes(head[8:12], "little"),
+                                       int.from_bytes(head[14:16], "little"))
+                pixels = data[at + 40:at + 40 + 256 * 256 * 4]
+                seen = sum(1 for a in pixels[3::4] if a > 128)
+                if (width, height, bits) != (256, 512, 32) or len(pixels) != 256 * 256 * 4:
+                    errors.append(f"{icon.name}'s first picture is {width} x {height} at {bits} bits")
+                elif not 256 * 256 // 5 < seen:
+                    errors.append(f"{icon.name}'s picture is all but empty ({seen} pixels that show)")
+                elif len(set(pixels[0::64])) < 8:
+                    errors.append(f"{icon.name}'s picture is one flat colour")
+    results.append(result("the Desktop shortcut row: a shortcut to the launcher, its icon the crest from the game's "
+                          "files (shortcut.png)", errors))
 
     # the Game files page's verdicts
     errors = []

@@ -364,6 +364,12 @@ makes it itself), and under **Play** the pack's row: how many pictures the `text
 or a button that opens the folder when it has none. The files are looked at again whenever the launcher comes back to
 the front, so a pack copied in meanwhile shows.
 
+**Desktop shortcut** (the Game page's **Create**, from 1.14.1) puts a shortcut to the launcher on your desktop with the
+game's crest as its icon. A release's programs have no icon in them, as they pack nothing of the game, so the icon is
+a file the launcher makes from your own copy, beside itself: `castlevania.ico` on Windows; on Linux `castlevania.png`,
+with an entry in the applications menu (`~/.local/share/applications`) and a copy on the desktop where there is a
+Desktop folder.
+
 The launcher speaks English (the default), German, Spanish, French, Italian, Brazilian Portuguese and Russian: the
 dropdown with the globe at the bottom of its sidebar switches it at once (`launcher_language` in `castlevania.toml`:
 `en`, `de`, `es`, `fr`, `it`, `pt-BR` or `ru`; **Reset to defaults** keeps it). The game itself and its in-game

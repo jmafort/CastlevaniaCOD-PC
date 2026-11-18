@@ -19,6 +19,7 @@
 #include <dwmapi.h>
 #include <dxgi1_6.h>
 #include <shellapi.h>
+#include <shlobj.h>
 #include <urlmon.h>
 #include <wincodec.h>
 #include <wininet.h>
@@ -279,6 +280,162 @@ fs::path ExeDir() {
 #else
     std::error_code ec;
     return fs::read_symlink("/proc/self/exe", ec).parent_path();
+#endif
+}
+
+// --- a desktop shortcut (issue 33) -------------------------------------------------------------------------------
+// A shortcut to the launcher with the game's crest as its icon. A release's programs carry no icon of their own (they
+// pack nothing of the game), so the icon is a file made here, beside the launcher, from the crest the launcher makes
+// of the player's own files (MakeCrest): castlevania.ico on Windows, the shortcut a .lnk on the desktop; on Linux
+// castlevania.png and a desktop entry in the applications menu's folder, and a copy on the desktop where there is a
+// Desktop folder. CV_SHORTCUT_DIR, for tests: that folder stands for the desktop (and its "applications" for the
+// menu's), so a run leaves the PC's own alone.
+
+// an .ico of a square 32-bit picture (BGRA, top row first) at 256, 48, 32 and 16 pixels: each an uncompressed bitmap,
+// bottom row first, with its mask of no bits after it
+bool WriteIco(const fs::path& to, const std::vector<uint8_t>& bgra, int size) {
+    if (size <= 0 || bgra.size() < size_t(size) * size * 4) return false;
+    constexpr int kSizes[] = {256, 48, 32, 16};
+    auto put = [](std::vector<uint8_t>& out, uint32_t v, int bytes) {
+        for (int i = 0; i < bytes; i++) out.push_back(uint8_t(v >> (8 * i)));
+    };
+    std::vector<std::vector<uint8_t>> images;
+    for (int n : kSizes) {
+        std::vector<uint8_t> img;
+        put(img, 40, 4);
+        put(img, uint32_t(n), 4);
+        put(img, uint32_t(n * 2), 4);  // the picture's rows and the mask's
+        put(img, 1, 2);
+        put(img, 32, 2);
+        for (int i = 0; i < 6; i++) put(img, 0, 4);
+        for (int y = n - 1; y >= 0; y--)
+            for (int x = 0; x < n; x++) {
+                // the mean of the pixels this one covers
+                int x0 = x * size / n, x1 = std::max((x + 1) * size / n, x0 + 1), y0 = y * size / n,
+                    y1 = std::max((y + 1) * size / n, y0 + 1);
+                uint32_t sum[4] = {}, count = 0, alpha = 0;
+                for (int sy = y0; sy < y1; sy++)
+                    for (int sx = x0; sx < x1; sx++) {
+                        const uint8_t* p = &bgra[(size_t(sy) * size + sx) * 4];
+                        for (int c = 0; c < 3; c++) sum[c] += uint32_t(p[c]) * p[3];
+                        alpha += p[3];
+                        count++;
+                    }
+                for (int c = 0; c < 3; c++) img.push_back(alpha ? uint8_t(sum[c] / alpha) : 0);
+                img.push_back(uint8_t(alpha / count));
+            }
+        img.insert(img.end(), size_t((n + 31) / 32 * 4) * n, 0);
+        images.push_back(std::move(img));
+    }
+    std::vector<uint8_t> out;
+    put(out, 0, 2);
+    put(out, 1, 2);
+    put(out, uint32_t(std::size(kSizes)), 2);
+    uint32_t at = 6 + 16 * uint32_t(std::size(kSizes));
+    for (size_t i = 0; i < images.size(); i++) {
+        out.push_back(uint8_t(kSizes[i] & 0xFF));  // 0 stands for 256
+        out.push_back(uint8_t(kSizes[i] & 0xFF));
+        put(out, 0, 2);
+        put(out, 1, 2);
+        put(out, 32, 2);
+        put(out, uint32_t(images[i].size()), 4);
+        put(out, at, 4);
+        at += uint32_t(images[i].size());
+    }
+    for (const auto& img : images) out.insert(out.end(), img.begin(), img.end());
+    std::ofstream f(to, std::ios::binary | std::ios::trunc);
+    f.write(reinterpret_cast<const char*>(out.data()), std::streamsize(out.size()));
+    return bool(f);
+}
+
+// the shortcut made: to this launcher, in its folder, its icon the crest's pixels (256 across; none: the program's own)
+bool MakeShortcut(const std::vector<uint8_t>& crest) {
+    std::error_code ec;
+    fs::path dir = ExeDir();
+#ifdef _WIN32
+    fs::path desktop;
+    if (const wchar_t* test = _wgetenv(L"CV_SHORTCUT_DIR"); test && *test) {
+        desktop = test;
+    } else {
+        PWSTR known = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Desktop, 0, nullptr, &known))) desktop = known;
+        CoTaskMemFree(known);
+    }
+    if (desktop.empty() || !fs::is_directory(desktop, ec)) return false;
+    wchar_t exe[MAX_PATH];
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    fs::path icon = dir / L"castlevania.ico";
+    bool own_icon = !crest.empty() && WriteIco(icon, crest, 256);
+    HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    bool made = false;
+    IShellLinkW* link = nullptr;
+    if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW,
+                                   reinterpret_cast<void**>(&link))) && link) {
+        link->SetPath(exe);
+        link->SetWorkingDirectory(dir.c_str());
+        link->SetDescription(L"Castlevania: Curse of Darkness");
+        if (own_icon) link->SetIconLocation(icon.c_str(), 0);
+        IPersistFile* file = nullptr;
+        if (SUCCEEDED(link->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&file))) && file) {
+            made = SUCCEEDED(file->Save((desktop / L"Castlevania Curse of Darkness.lnk").c_str(), TRUE));
+            file->Release();
+        }
+        link->Release();
+    }
+    if (SUCCEEDED(init)) CoUninitialize();
+    return made;
+#else
+    fs::path exe = fs::read_symlink("/proc/self/exe", ec);
+    if (exe.empty()) return false;
+    fs::path icon = dir / "castlevania.png";
+    bool own_icon = !crest.empty() && linuximage::WritePng(icon, crest.data(), 256, 256, 256 * 4);
+    const char* test = std::getenv("CV_SHORTCUT_DIR");
+    const char* home = std::getenv("HOME");
+    const char* data = std::getenv("XDG_DATA_HOME");
+    fs::path menu, desktop;
+    if (test && *test) {
+        menu = fs::path(test) / "applications";
+        desktop = test;
+    } else if (home && *home) {
+        menu = (data && *data ? fs::path(data) : fs::path(home) / ".local" / "share") / "applications";
+        if (FILE* p = popen("xdg-user-dir DESKTOP 2>/dev/null", "r")) {
+            char line[1024] = {};
+            if (std::fgets(line, sizeof(line), p)) {
+                std::string s(line);
+                while (!s.empty() && (s.back() == '\n' || s.back() == '\r')) s.pop_back();
+                // without a desktop folder of its own xdg-user-dir answers the home folder
+                if (!s.empty() && fs::path(s) != fs::path(home)) desktop = s;
+            }
+            pclose(p);
+        }
+        if (desktop.empty()) desktop = fs::path(home) / "Desktop";
+    }
+    if (menu.empty()) return false;
+    // a desktop entry's Exec: in double quotes, with a backslash before each of the characters the quotes keep special
+    auto quoted = [](const std::string& s) {
+        std::string out = "\"";
+        for (char c : s) {
+            if (c == '"' || c == '`' || c == '$' || c == '\\') out += '\\';
+            out += c;
+        }
+        return out + "\"";
+    };
+    std::string entry = "[Desktop Entry]\nType=Application\nName=Castlevania: Curse of Darkness\nExec=" +
+                        quoted(exe.string()) + "\nPath=" + dir.string() + "\n" +
+                        (own_icon ? "Icon=" + icon.string() + "\n" : std::string()) + "Terminal=false\nCategories=Game;\n";
+    auto write = [&](const fs::path& folder) {
+        fs::path to = folder / "castlevania-cod-pc.desktop";
+        std::ofstream f(to, std::ios::binary | std::ios::trunc);
+        f << entry;
+        f.close();
+        if (!f) return false;
+        fs::permissions(to, fs::perms::owner_exec | fs::perms::group_exec | fs::perms::others_exec, fs::perm_options::add, ec);
+        return true;
+    };
+    fs::create_directories(menu, ec);
+    bool made = write(menu);
+    if (fs::is_directory(desktop, ec)) made = write(desktop) || made;
+    return made;
 #endif
 }
 
@@ -4563,6 +4720,24 @@ private:
         BeginSetting(T("Keep launcher open"), T("Leave this window open while the game runs."));
         ToggleRight("keep", settings_.keep_open);
         EndSetting();
+        BeginSetting(T("Desktop shortcut"),
+                     T(CV_WIN_LINUX("Puts a shortcut to this launcher on your desktop, with the game's crest as its icon. The icon is made from your own game files.",
+                                    "Adds this launcher to your applications menu, and to your desktop if it has a Desktop folder, with the game's crest as its icon. The icon is made from your own game files.")));
+        {
+            const char* create = T("Create");
+            float bw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, create).x + S(48);
+            ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - bw);
+            if (Button(create, {bw, S(34)}, Kind::Secondary)) {
+                // the crest as the window's icon has it: a dev build's own icon needs no file
+                std::vector<uint8_t> px;
+                if (!icon_) MakeCrest(files_, &px).Release();
+                shortcut_ = MakeShortcut(px) ? 1 : 2;
+            }
+            g_marks.Mark("shortcut");
+            if (shortcut_ == 1) ControlNote(kGreen, T("Shortcut created"));
+            else if (shortcut_ == 2) ControlNote(kRed, T("The shortcut could not be created"));
+        }
+        EndSetting();
 #ifdef _WIN32
         BeginSetting(T("Check for updates on start"),
                      T("Looks up the newest release on GitHub each time the launcher opens and offers it on the Home page. An update replaces only the program files: saves, settings and textures are never touched."));
@@ -5000,6 +5175,7 @@ private:
     std::string status_, saved_, shown_language_;
     double status_time_ = -100;
     bool rescan_ = false;
+    int shortcut_ = 0;  // the Desktop shortcut row's last try: 1 made, 2 not
     std::vector<cv::TranslationPack> packs_;  // the fan translations in mods (common/translation_packs.h)
     int page_ = 0;
     int page_scrolled_ = 0;  // the page the page area's scroll belongs to
