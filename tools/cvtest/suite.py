@@ -193,6 +193,11 @@ def tests():
         # 1.14.1: the status page's bars run off a wide screen's right edge, the menu's columns in the middle and out
         scenario("pause-bars"),
         scenario("pause-bars", "--set", "menu_spread=true", test="pause-bars-spread"),
+        # and in the European release (Spanish) and with the Brazilian Portuguese translation: the screen's last column
+        # in step there too (the USA release's frame pass alone left it to the frame under it)
+        scenario("pause-bars", *eu, "--set", "game_language=5", test="pause-bars-eu-es"),
+        scenario("pause-bars", "--set", "translation=PTBR-PS2", test="pause-bars-ptbr", needs=["translation"],
+                 env=folder_env("translation", "CV_MODS")),
         # 1.14.1: an Innocent Devil's name on its page's title bar, whole (DJBLOPA's save: Charizard)
         scenario("devil-name", needs=["save:user19eu"]),
         # 1.14.1 (issue 31): the sky of the scene before the Wyvern's fight, seen from straight below, to the screen's

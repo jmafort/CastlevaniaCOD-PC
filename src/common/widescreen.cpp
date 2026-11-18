@@ -262,6 +262,13 @@ public:
     // Curse and the rest, drawn 30 pixels past it, where a 4:3 screen ends): its vertices past the frame's edge go to
     // the screen's, the others as any draw's, so it runs off the screen as it did. They ended in the air beside the
     // 4:3 middle, or a pixel or two short of the screen's edge with the menu's columns moved out
+    // ext.z 6: the frame pass, placed pixel for pixel a pixel up and left (Placement: ext.x, ext.y, ext.w, ext2.x). The
+    // USA release's reads its copy's columns 0 to 640, so placed it ends a console pixel short of the screen's right
+    // edge, and that last column showed the frame under the pass, the same picture a pixel lower: a row that reaches
+    // the edge (the status page's bars) had its last pixels stepped down. A corner that lands within a pixel and a
+    // half of the screen's right or bottom edge goes to the edge, its texture coordinates (stage 0's, in texels) on by
+    // as many texels, so the pass stays pixel for pixel and its copy's last column and row are read again there
+    // (ext2.z, ext2.w: half the console frame's width and height, a clip unit in pixels)
     // ext.x and ext.y otherwise scale across and down, ext.w and ext2.x then move across and down, in clip space (the
     // frame pass placed pixel for pixel: Placement)
     // ext2.z n: stage n - 1 reads the target drawn into (the "Level up" letters' glass, the frame behind them bent):
@@ -285,7 +292,12 @@ public:
                "    float across = saturate((o.pos.x / o.pos.w + 0.1) * 5);\n"
                "    o.pos.x = at_edge ? sign(o.pos.x) * o.pos.w : o.pos.x * ext.x;\n"
                "    o.pos.x += (sides || past ? 0 : strip ? lerp(ext.y, ext.w, across) : ext.w) * o.pos.w;\n"
-               "    o.pos.y = at_top ? sign(o.pos.y) * o.pos.w : o.pos.y * (strip ? 1 : ext.y) + ext2.x * o.pos.w;\n";
+               "    o.pos.y = at_top ? sign(o.pos.y) * o.pos.w : o.pos.y * (strip ? 1 : ext.y) + ext2.x * o.pos.w;\n"
+               "    if (ext.z > 5.5) {\n"
+               "        float short_x = (1 - o.pos.x / o.pos.w) * ext2.z, short_y = (o.pos.y / o.pos.w + 1) * ext2.w;\n"
+               "        if (short_x > 0 && short_x < 1.5) { o.pos.x = o.pos.w; oT0.x += short_x; }\n"
+               "        if (short_y > 0 && short_y < 1.5) { o.pos.y = -o.pos.w; oT0.y += short_y; }\n"
+               "    }\n";
     }
     // ext2.y 1 (3): only the texture's own columns are drawn (stage 0's, in texels: a linear texture), not its edge
     // ones repeated past them (the European release's intro movie, squeezed). 2 (3): a movie's frame, its colour
@@ -821,13 +833,15 @@ public:
                         !fill && d_.count == 4 && !d_.x.Empty() && !d_.y.Empty() && d_.x.lo >= 0 && d_.x.lo < d_.gw &&
                         d_.x.hi > d_.gw + 8 && d_.x.hi <= d_.gw + 64 && d_.y.hi - d_.y.lo <= 40 &&
                         d_.x.hi - d_.x.lo >= 100;
-        ext[2] = sides ? 2.0f : edges ? 1.0f : menu.strip ? 3.0f : fill ? 4.0f : off_edge ? 5.0f : 0.0f;
+        bool pass = placed && d_.frame && !sides && !edges && !menu.strip && !fill && !off_edge;
+        ext[2] = sides ? 2.0f : edges ? 1.0f : menu.strip ? 3.0f : fill ? 4.0f : off_edge ? 5.0f : pass ? 6.0f : 0.0f;
         ext[3] = sides ? (d_.u.lo + d_.u.hi) * 0.5f : menu.strip ? menu.right : placed ? across * d_.move[0] : shift;
         ext[4] = placed ? d_.move[1] : 0.0f;
         Subtitle(movie, my, ext);
         ext[5] = placed && squeeze && d_.tex.linear ? 1.0f : 0.0f;
         if (back_buffer_ && d_.whole && d_.textured && MoviesBrighten(d_.tex)) ext[5] += 2.0f;
-        ext[6] = ext[7] = 0;
+        ext[6] = pass ? d_.gw * 0.5f : 0.0f;
+        ext[7] = pass ? d_.gh * 0.5f : 0.0f;
         // CV_WATER_HIDE: the water's draws (Water) left out, to see which they are
         static const bool hide_water = std::getenv("CV_WATER_HIDE") != nullptr;
         // a sky's lid seen from below: the frame's own shape across the screen, and the game's own field of view
