@@ -273,9 +273,11 @@ def main_linux(release, game, scenario):
     else:
         (pkg / "assets" / game.name).symlink_to(game)
     # a desktop session's own variables: no build tools' or this PC's XBE_ and CV_ settings. The graphics drivers the
-    # machine is set up with pass (in WSL, VK_DRIVER_FILES picks Mesa's dozen, Vulkan on the PC's GPU)
+    # machine is set up with pass (in WSL, VK_DRIVER_FILES picks Mesa's dozen, Vulkan on the PC's GPU), and the sound
+    # device SDL is told to use (SDL_AUDIODRIVER=dummy, its silent one, where the machine's sound server is down: WSL's
+    # stops now and then, and the game without a device logs an error, which fails a test)
     env = {k: os.environ[k] for k in ("HOME", "USER", "LANG", "XDG_RUNTIME_DIR", "PULSE_SERVER", "VK_DRIVER_FILES",
-                                      "VK_ICD_FILENAMES", "GALLIUM_DRIVER") if k in os.environ}
+                                      "VK_ICD_FILENAMES", "GALLIUM_DRIVER", "SDL_AUDIODRIVER") if k in os.environ}
     env["PATH"] = "/usr/local/bin:/usr/bin:/bin"
     checks.append(check_fonts(pkg / "CastlevaniaLauncher", env))
     if json.loads(scenario.read_text(encoding="utf-8")).get("vendor"):

@@ -286,9 +286,18 @@ bool ModalUp() {
 // did. The game keeps the pitch within its bounds (about level to 45 degrees down on Hector) itself. Found here: the stick
 // held moved them, and either written turned the camera there and kept it (2026-11-17). Not while a menu, a message
 // box, a story scene or a room change is up, nor with another camera (the title's, the map's): 0 or false then.
+//
+// Nor locked on. The play camera is its own view: the camera in use (kCameraDescriptor) and the view drawn from
+// (kCameraView) are the one object. Locked on, the game uses its lock-on camera (the USA release's at 0xC719A0) with a
+// view apart (0xC36990), which has no such fields: 0x1D0 past that view is a word that holds kPlayCallback all the
+// same, and 0x1E0 and 0x1E4 past it are kCameraDescriptor and kCameraView themselves. 1.14.0's first build took the
+// view alone for the play camera, so the mouse moved while locked on wrote its turn over those two pointers and the
+// game crashed at its next use of them (the user, 2026-11-18). So both must be the one object, and what is there must
+// read as the angles they are (TurnPlayCamera).
 uint32_t PlayCamera() {
-    uint32_t cam = 0, callback = 0, menu = 0, scene = 0;
-    if (!Read(cv::kCameraView, cam) || !cam || !Read(cam + 0x1D0, callback) || callback != cv::kPlayCallback)
+    uint32_t cam = 0, view = 0, callback = 0, menu = 0, scene = 0;
+    if (!Read(cv::kCameraDescriptor, cam) || !cam || !Read(cv::kCameraView, view) || view != cam ||
+        !Read(cam + 0x1D0, callback) || callback != cv::kPlayCallback)
         return 0;
     if (!Read(cv::kMenu, menu) || menu || !Read(cv::kScene, scene) || (scene & (0x20000 | 0x8000)) || ModalUp())
         return 0;
@@ -297,14 +306,22 @@ uint32_t PlayCamera() {
 
 bool PlayCameraFree() { return PlayCamera() != 0; }
 
+// an angle as the play camera keeps one: 0 or a normal number, of some turns at most. A pointer or a count read as a
+// float is a denormal one (its exponent 0), and is never written over. Not held to one turn: locked on, the game
+// turns the heading on past it (the mouse then turned nothing after the lock-on, on Linux, while it was)
+static bool Angle(float v) {
+    int kind = std::fpclassify(v);
+    return (kind == FP_ZERO || kind == FP_NORMAL) && std::fabs(v) < 1000.0f;
+}
+
 // written in the camera update (warp.cpp's hook, on the game's thread, just before the camera reads them): from the
 // pad's thread the camera's own turn of the frame, read before and written after, took the place of the mouse's
 bool TurnPlayCamera(float heading, float pitch) {
     uint32_t cam = PlayCamera();
-    if (!cam) return false;
-    float w = 0, p = 0;
-    if (!Read(cam + 0x1E4, w) || !Read(cam + 0x1E0, p) || !std::isfinite(w) || !std::isfinite(p)) return false;
+    if (!cam || !std::isfinite(heading) || !std::isfinite(pitch)) return false;
     constexpr float kPi = 3.14159265f;
+    float w = 0, p = 0;
+    if (!Read(cam + 0x1E4, w) || !Read(cam + 0x1E0, p) || !Angle(w) || !Angle(p)) return false;
     w = std::remainder(w + heading, 2 * kPi);
     p += pitch;
     std::memcpy(mem::Base() + cam + 0x1E4, &w, 4);

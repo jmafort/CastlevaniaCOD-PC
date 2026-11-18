@@ -232,6 +232,7 @@ struct Step {
     std::string click;                  // click=<control>: the settings menu's
     bool menu_scroll = false;           // menuscroll: the settings menu's page scrolled to its end
     float mouse_x = 0, mouse_y = 0;     // mouse=<x>/<y>: the mouse moved so many counts each frame it is held
+    float wheel = 0;                    // wheel=<notches>: its wheel turned so many notches each frame it is held
     BotGoal bot{};
     float guard = 0;  // guard=<r>, for the bot's walks
     std::string set;  // set=<setting>=<value>
@@ -293,6 +294,7 @@ std::vector<Step> ParseScript(std::string text) {
             else if (b.rfind("ls=", 0) == 0) Stick(b.substr(3), s.lx, s.ly);
             else if (b.rfind("rs=", 0) == 0) Stick(b.substr(3), s.rx, s.ry);
             else if (b.rfind("mouse=", 0) == 0) std::sscanf(b.c_str() + 6, "%f/%f", &s.mouse_x, &s.mouse_y);
+            else if (b.rfind("wheel=", 0) == 0) s.wheel = std::strtof(b.c_str() + 6, nullptr);
             else if (b == "heal") s.heal = true;
             else if (b.rfind("playtime=", 0) == 0) s.play_time = std::strtoll(b.c_str() + 9, nullptr, 10);
             else if (b.rfind("poke=", 0) == 0) {
@@ -388,9 +390,10 @@ const std::vector<Step>& Script() {
     return steps;
 }
 
-// a test's mouse moves (mouse=), taken with the mouse's own by MouseCamera, which a test's window behind the others
-// does not get (the mouse is held only in front); once a frame, as the game reads the pad more often than that
-std::atomic<float> g_test_mouse_x{0}, g_test_mouse_y{0};
+// a test's mouse moves (mouse=) and wheel turns (wheel=), taken with the mouse's own by MouseCamera, which a test's
+// window behind the others does not get (the mouse is held only in front); once a frame, as the game reads the pad
+// more often than that
+std::atomic<float> g_test_mouse_x{0}, g_test_mouse_y{0}, g_test_wheel{0};
 int64_t g_test_mouse_frame = -1;
 
 // ms and frames since the script or command started
@@ -402,6 +405,7 @@ void Press(input::Pad& p, const std::vector<Step>& steps, int64_t ms, int64_t fr
         if (now < s.at || now >= s.until) continue;
         if (s.mouse_x && mouse_frame) g_test_mouse_x.fetch_add(s.mouse_x, std::memory_order_relaxed);
         if (s.mouse_y && mouse_frame) g_test_mouse_y.fetch_add(s.mouse_y, std::memory_order_relaxed);
+        if (s.wheel && mouse_frame) g_test_wheel.fetch_add(s.wheel, std::memory_order_relaxed);
         p.buttons |= s.buttons;
         for (int i = 0; i < 8; i++)
             if (s.analog >> i & 1) p.analog[i] = 0xFF;
@@ -741,8 +745,8 @@ void TitleCombo(input::Pad& p, bool menu) {
 // through the stick, a fast move was held to the stick's top speed); the camera eases to them as it does for the stick,
 // most of the way in a frame. While a menu, a message box or a story scene is up there is nothing to turn.
 //
-// Before 1.14.0, and still where the play camera is not found, its moves turn the camera through the right
-// stick, as a controller's would. The game turns the camera at a speed the stick sets, measured in the first courtyard
+// Before 1.14.0, and still where the play camera is not the one in use (locked on, the game's lock-on camera is: it
+// looks at the enemy by itself), its moves turn the camera through the right stick, as a controller's would. The game turns the camera at a speed the stick sets, measured in the first courtyard
 // at 60 frames a second: none up to an eighth of its throw (kStickDead), then kStickSlope degrees a frame for each
 // whole throw past that, to kTurnMax (1.9 degrees a frame) from 0.74 of it on; and it eases into each speed and out of
 // it, a fifth of the way each frame (kEase), so after a push it coasts on as far as it lost at the start, and a push
@@ -790,6 +794,39 @@ static void AddTurn(std::atomic<float>& a, float v) {
     }
 }
 
+// The mouse's wheel changes the enemy locked on (1.14.0, the user's ask): a notch, either way, is a press of Change
+// lock-on (White, as the game's Controller Config has it at first: the lock-on goes to the next enemy, and with none
+// locked on it does nothing). The game has the one button for it, so both ways go to the next. A press is held
+// kWheelHold frames and the next waits as many, for the game to see each begin; turns past kWheelMost presses waiting
+// are let go, so a spun wheel does not go on changing it. Only with the mouse turning the camera, as its buttons.
+constexpr int kWheelHold = 4, kWheelMost = 3;
+
+static void MouseWheel(input::Pad& p, float notches, bool on) {
+    static std::mutex m;
+    static float turned = 0;   // the part of a notch a smooth wheel has turned, either way
+    static int owed = 0;       // presses yet to begin
+    static int64_t held_to = 0, free_at = 0;  // the press in hand, in frames shown: held until, the next from
+    static std::atomic<bool> said{false};
+    std::lock_guard lock(m);
+    if (!on) {
+        turned = 0;
+        owed = 0;
+        held_to = 0;
+        return;
+    }
+    turned += std::isfinite(notches) ? notches : 0;
+    for (; std::fabs(turned) >= 1; turned -= std::copysign(1.0f, turned))
+        if (owed < kWheelMost) owed++;
+    int64_t frame = int64_t(d3d::Swaps());
+    if (frame >= held_to && owed > 0 && frame >= free_at) {
+        owed--;
+        held_to = frame + kWheelHold;
+        free_at = held_to + kWheelHold;
+        if (!said.exchange(true)) LOGR("mouse: the wheel changes the lock-on");
+    }
+    if (frame < held_to) p.analog[kWhite] = 0xFF;
+}
+
 void MouseCamera(input::Pad& p, bool menu) {
     static MouseAxis across, up;
     static std::atomic<bool> said{false}, said_direct{false};
@@ -799,6 +836,7 @@ void MouseCamera(input::Pad& p, bool menu) {
     app::TakeMouse(dx, dy);
     dx += g_test_mouse_x.exchange(0, std::memory_order_relaxed);
     dy += g_test_mouse_y.exchange(0, std::memory_order_relaxed);
+    MouseWheel(p, app::TakeMouseWheel() + g_test_wheel.exchange(0, std::memory_order_relaxed), on);
     if (!on) {
         across = up = {};
         return;

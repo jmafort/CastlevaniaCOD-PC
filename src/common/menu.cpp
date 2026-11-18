@@ -647,7 +647,8 @@ void ControlsTab(bool& save) {
     if (Section("Mouse", "mouse")) {
         Row("Mouse camera", "The mouse turns the camera, held in the game's window and hidden while you play, and its "
                             "buttons press what the keyboard's list below gives them: at first the left attacks, the "
-                            "right guards and the middle locks on. The settings menu has the pointer back.");
+                            "right guards and the middle locks on; the wheel changes the enemy locked on. The "
+                            "settings menu has the pointer back.");
         save |= Check("##mousecam", &g_mouse_camera);
         Row("Mouse sensitivity", "How far the camera turns for a move of the mouse, from 10% to 500% of its turn at first.");
         int sens = int(std::clamp<uint32_t>(g_mouse_sensitivity, 10, 500));

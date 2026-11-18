@@ -234,6 +234,10 @@ def tests():
         # a fast move as fast (issue 10), the play camera found by its callback in each release
         scenario("mouse-camera"),
         scenario("mouse-camera", *eu, test="mouse-camera-eu"),
+        # 1.14.0: the mouse moved while locked on (the lock-on camera's view was taken for the play camera and the
+        # game's camera pointers written over: a crash), and its wheel changing the enemy locked on; both releases
+        scenario("mouse-lockon"),
+        scenario("mouse-lockon", *eu, test="mouse-lockon-eu"),
         # Hector's sprint, by a controller in both button layouts and both releases, and by the keyboard (Linux)
         scenario("sprint", quick=True),
         scenario("sprint", "--set", "button_layout=1", test="sprint-ps2"),

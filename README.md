@@ -745,9 +745,14 @@ to where the mouse put it as it does for the stick, most of the way in a frame, 
 right stick, or the camera's keys, turn it at the same time. The invert settings turn it the other way too.
 
 Its buttons press what the keyboard's list gives them, as keys do: at first the left one attacks, the right one guards
-and the middle one locks on (the second keys of attack, guard and lock-on on / off). On the launcher's Controls page,
-click a key, then click the mouse button to use on that key (the left, right, middle, 4 or 5). The mouse's buttons
-press only with Mouse Camera on, so a click that brings the window to the front presses nothing.
+and the middle one (the wheel, clicked) locks on (the second keys of attack, guard and lock-on on / off). On the
+launcher's Controls page, click a key, then click the mouse button to use on that key (the left, right, middle, 4 or
+5). The mouse's buttons press only with Mouse Camera on, so a click that brings the window to the front presses
+nothing.
+
+The wheel changes the enemy locked on (since 1.14.0): a notch up or down goes to the next one, as the game's Change
+lock-on button does (the game has the one button for it, so both ways go to the next). While locked on, the camera is
+the game's lock-on camera, which looks at the enemy by itself: the mouse then moves it as the right stick would.
 
 ### Miscellaneous
 - **Boot Splash** - Place a `splash.png` (or `.bmp`) beside the exe to display a splash screen at launch.
