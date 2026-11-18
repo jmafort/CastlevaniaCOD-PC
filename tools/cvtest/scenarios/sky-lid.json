@@ -1,0 +1,13 @@
+{
+  "name": "sky-lid",
+  "after": "newgame.json",
+  "telemetry": 10,
+  "note": "Issue 31: the scene before the Wyvern's fight (the Baljhet Mountains' boss arena, 13.12) looks straight up at the dragon crossing the sky, a square layer of clouds at the top of a dome of plain dusk, framed so the layer just covers a 4:3 picture. A wide screen showed past the layer's edges, the dome's blue at two corners of the tilted square. Seen from below that steeply the sky's draws keep the frame's own shape across the screen (widescreen.cpp kSkyLid, SkyLid): wide.sky.lid counts them and lid_across is how wide they were drawn, 1 the frame's shape (0.75 squeezed, as the rest of the 3D is on 16:9). As sky-lid-fov with a wider field of view (--set fov=150), which this scene takes as play does: the sky then drawn by as much larger, at the game's own. The camera down on the arena again, none is.",
+  "steps": [
+    {"press": "0:warp=13.12,10f:wait:20f", "note": "into the Wyvern's arena: its scene plays"},
+    {"until": "map == 13 and room == 12 and wide.sky.lid > 0", "timeout": 60, "poll": "0f:wait:10f", "note": "the camera straight up at the sky"},
+    {"press": "0f:wait:60f", "shot": "sky", "note": "the clouds to the screen's corners, the dragon over them",
+     "expect": ["wide.sky.lid >= 3", "abs(wide.sky.lid_across - (1 if settings.fov in (None, 100) else 1.5)) < 0.02"]},
+    {"until": "wide.sky.lid == 0", "timeout": 60, "poll": "0f:wait:10f", "shot": "arena", "note": "the camera down on the arena: the sky as the rest of the 3D", "expect": ["map == 13 and room == 12"]}
+  ]
+}

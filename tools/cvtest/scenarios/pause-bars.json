@@ -1,0 +1,12 @@
+{
+  "name": "pause-bars",
+  "after": "newgame.json",
+  "settings": {"menu_spread": false},
+  "note": "The pause menu's status page on a wide screen: the bars of its rows (Poison, Curse and the rest) run off the screen's right edge, as they ran off a 4:3 screen's. The game draws them 30 pixels past the console frame's right edge, and in widescreen they ended in the air beside the 4:3 middle (found by the judge in October, about 35 pixels out at 960 wide). Their vertices past the frame's edge now go to the screen's (widescreen.cpp, ext.z 5). With the menu's columns left in the middle (menu_spread off), where the bars ended well short of the screen's edge: at the edge the first row's bright band and the dark of the next row's top, which were both the backdrop's grey before. As pause-bars-spread with the columns moved out (the default).",
+  "steps": [
+    {"press": "0:start,2500:wait", "shot": "status",
+     "luma": {"band": [0.955, 0.181, 0.99, 0.194], "between": [0.955, 0.206, 0.99, 0.219]},
+     "expect": ["menu", "screen.luma.band - screen.luma.between > 50"]},
+    {"press": "0:b,1000:wait", "expect": ["not menu"]}
+  ]
+}

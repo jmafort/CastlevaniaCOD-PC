@@ -92,6 +92,7 @@ uint64_t TexturePackReplace(const gpu::TextureDesc& d, const uint8_t* guest, con
 extern bool g_hud_edges;  // menu.cpp
 bool PauseMenuUp();       // telemetry.cpp
 bool ViewBackdrop(float game[2], float drawn[2], float& far_z, uint32_t& room);  // game/view.cpp
+bool ViewFov(double& game, double& drawn);  // game/view.cpp: the vertical field of view, the game's and as drawn, in degrees
 bool ModalUp();           // telemetry.cpp
 bool CameraSpecial();     // telemetry.cpp: the title's camera, the map screen's or a debug view's
 uint32_t SceneWord();     // telemetry.cpp
@@ -110,6 +111,7 @@ bool MoviesBrighten(const gpu::TextureDesc& d);  // the movie's frame, drawn twi
 bool MoviesOwn(uint64_t id);
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id);
 bool MoviesScale(const gpu::TextureDesc& d, float squeeze, float qx, float qy, float& sx, float& sy);
+bool MoviesPictureRows(const gpu::TextureDesc& d, float& top, float& bottom);  // the movie's frame: its picture's rows
 
 // the skies of kSky with their room's own fog (Backdrop): off unless CV_BACKDROPS=1. It was made for the rampart's
 // strips showing as hard-edged cards, which were their scrolled texture clamped rather than wrapped (the SDK's
@@ -141,6 +143,12 @@ uint64_t g_frame = 0;
 uint32_t g_sky_fogged = 0, g_sky_held = 0;
 uint32_t g_sky_cards = 0;  // and the doors' arrows held back, parked past the far plane (kSkyCards)
 uint32_t g_sky_arrows = 0;  // the doors' arrows drawn (kSkyCards)
+// a movie's subtitles in the frame before: their draws, and how far down they went with the picture's bottom edge, in
+// the console frame's pixels (Widescreen::Subtitle)
+uint32_t g_subs = 0;
+float g_subs_drop = 0;
+uint32_t g_sky_lid = 0;     // a sky's lid's draws kept at the frame's own shape (kSkyLid), and how wide they were
+float g_sky_lid_across = 0;  // drawn: 1 the frame's own shape across the screen, under it squeezed toward the middle
 // pictures of the 3D drawn apart laid over the whole frame in the frame before: at the screen's shape, squeezed
 uint32_t g_apart_wide = 0, g_apart_squeezed = 0;
 
@@ -164,6 +172,27 @@ constexpr uint64_t kSky[] = {
 constexpr uint64_t kSkyCards[] = {
     0xc26555aa0ffd586dull,  // an arrow's carved face, a grey glow and a dark diamond
 };
+// a sky's lid, by its textures' Names: the Baljhet Mountains' boss arena (13.12) has a square layer of clouds over
+// it, 40000 across at the top of a dome of plain dusk. The scene before the Wyvern's fight looks straight up at the
+// dragon crossing it, framed so the layer just covers a 4:3 picture: a wide screen's sides showed past its edges, the
+// dome's plain blue at two corners of the tilted square (issue 31), and a wider field of view all round it. Seen from
+// below more steeply than the play camera ever looks (SkyLid), these draws keep the frame's own shape and the game's
+// own field of view: the sky as the scene framed it, across the screen, the dragon before it as wide as it is
+constexpr uint64_t kSkyLid[] = {
+    0x840d9746149dbd47ull,  // the clouds' layer and the dome's sides
+    0xf3cd72eecf64b73bull,  // the layer of thinner cloud under it
+};
+// how steeply up the camera looks, as its view axis's part along the world's up: none of it under kLidFrom (53 degrees
+// up; the play camera's 2.5 at most, a lock-on's a little more), all of it from kLidWhole (67), in between by degrees
+constexpr float kLidFrom = 0.80f, kLidWhole = 0.92f;
+// A movie's subtitles (the European release in French, German, Spanish and Italian; a fan translation's): the game
+// draws their letters over the movie's frame, one to three lines whose last ends on row 418 of the frame's 480, a
+// few rows up from the picture's bottom edge (row 424 as the game draws the frame; under it the frame's black bar).
+// With the picture drawn larger (movie_view: as tall as a 16:9 screen, or filling it) its bottom edge goes down to the
+// screen's and the words stayed where they were, a seventh of the screen up over the picture (issue 32). They go down
+// as far as the picture's bottom edge did, no nearer the screen's bottom than kSubMargin. Words anywhere else over a
+// movie are not subtitles (a text that scrolls): none of that movie's move then
+constexpr float kSubTop = 300, kSubBottom = 418, kSubSlack = 12, kSubMargin = 22;
 constexpr int kFrameTexCoord = 2;  // the frame pass's texture coordinates, in texels
 constexpr int kTexCoord = 2;       // a 2D draw's, as the game's programs take them
 // the HUD's textures by their Name (CV_WIDE_TRACE shows them): the health bar's fill, the icon at the bottom left
@@ -229,6 +258,10 @@ public:
     // ext.z 4: a fade or tint over the whole frame (a loading screen's black, a door's): a vertex at any of the console
     // frame's edges goes exactly to the screen's, top and bottom too (the PS2's grid puts it under a pixel in, which
     // left a line of the picture under it at the left and top of the screen)
+    // ext.z 5: a pause menu's row that runs off the console frame's right edge (the status page's bars beside Poison,
+    // Curse and the rest, drawn 30 pixels past it, where a 4:3 screen ends): its vertices past the frame's edge go to
+    // the screen's, the others as any draw's, so it runs off the screen as it did. They ended in the air beside the
+    // 4:3 middle, or a pixel or two short of the screen's edge with the menu's columns moved out
     // ext.x and ext.y otherwise scale across and down, ext.w and ext2.x then move across and down, in clip space (the
     // frame pass placed pixel for pixel: Placement)
     // ext2.z n: stage n - 1 reads the target drawn into (the "Level up" letters' glass, the frame behind them bent):
@@ -244,13 +277,14 @@ public:
                "    if (abs(ext2.z - 4) < 0.5) oT3.x = ext2.w + (oT3.x - ext2.w) * ext.x + ext.w * ext2.w;\n"
                "    bool sides = ext.z > 1.5 && ext.z < 2.5;\n"
                "    bool strip = ext.z > 2.5 && ext.z < 3.5;\n"
-               "    bool fill = ext.z > 3.5;\n"
+               "    bool fill = ext.z > 3.5 && ext.z < 4.5;\n"
+               "    bool past = ext.z > 4.5 && abs(o.pos.x / o.pos.w) > 1.02;\n"
                "    if (sides) oT0.x = ext.w + (oT0.x - ext.w) / ext.x;\n"
-               "    bool at_edge = (ext.z > 0.5 && ext.z < 2.5 || fill) && abs(abs(o.pos.x / o.pos.w) - 1) < 0.008;\n"
+               "    bool at_edge = (ext.z > 0.5 && ext.z < 2.5 || fill) && abs(abs(o.pos.x / o.pos.w) - 1) < 0.008 || past;\n"
                "    bool at_top = fill && abs(abs(o.pos.y / o.pos.w) - 1) < 0.008;\n"
                "    float across = saturate((o.pos.x / o.pos.w + 0.1) * 5);\n"
                "    o.pos.x = at_edge ? sign(o.pos.x) * o.pos.w : o.pos.x * ext.x;\n"
-               "    o.pos.x += (sides ? 0 : strip ? lerp(ext.y, ext.w, across) : ext.w) * o.pos.w;\n"
+               "    o.pos.x += (sides || past ? 0 : strip ? lerp(ext.y, ext.w, across) : ext.w) * o.pos.w;\n"
                "    o.pos.y = at_top ? sign(o.pos.y) * o.pos.w : o.pos.y * (strip ? 1 : ext.y) + ext2.x * o.pos.w;\n";
     }
     // ext2.y 1 (3): only the texture's own columns are drawn (stage 0's, in texels: a linear texture), not its edge
@@ -296,6 +330,7 @@ public:
         if (p.camera) d_.matrix = p.world ? kCameraWorld : kCamera;
         if (p.camera) {
             Distance(s, a, p);
+            if (kTrace3D) Probe(s, a, p);
             // frame generation's view (View): the draws of the world matrix, found again in the next frame by what
             // they draw: their first vertices' positions, their first indices, their counts (the texture is added in
             // SeeWorld). The game streams its meshes into buffers that move from frame to frame, so not by address
@@ -422,10 +457,18 @@ public:
                 g_sky_held = sky_held_;
                 g_sky_cards = sky_cards_;
                 g_sky_arrows = sky_arrows_;
+                g_sky_lid = sky_lid_;
+                g_subs = subs_;
+                g_subs_drop = subs_ ? sub_drop_ : 0.0f;
+                g_sky_lid_across = sky_lid_across_;
                 g_apart_wide = apart_wide_;
                 g_apart_squeezed = apart_squeezed_;
             }
-            sky_fogged_ = sky_held_ = sky_cards_ = sky_arrows_ = apart_wide_ = apart_squeezed_ = 0;
+            sky_fogged_ = sky_held_ = sky_cards_ = sky_arrows_ = apart_wide_ = apart_squeezed_ = sky_lid_ = 0;
+            sky_lid_across_ = 0;
+            subs_ = 0;
+            sub_drop_ = 0;
+            if (frame_ > movie_frame_ + 30) sub_scroll_ = false;  // that movie is over
             if (TexturePackCensus() && frame_ % 300 == 0) TexturePackCensusFlush();
             pack_epoch_ = TexturePackEpoch();
             MoviesFrame(frame_);
@@ -772,14 +815,32 @@ public:
         float across = squeeze ? Squeeze() : 1.0f;
         ext[0] = across * (placed ? d_.scale[0] : 1.0f) * mx;
         ext[1] = menu.strip ? menu.left : (placed ? d_.scale[1] : 1.0f) * my;
-        ext[2] = sides ? 2.0f : edges ? 1.0f : menu.strip ? 3.0f : fill ? 4.0f : 0.0f;
+        // a pause menu's row off the frame's right edge: a quad that starts on the frame and ends 8 to 64 pixels past
+        // it, a strip (no taller than 40, at least 100 long)
+        bool off_edge = squeeze && menu_ && !d_.world && !d_.whole && !d_.target && !sides && !edges && !menu.strip &&
+                        !fill && d_.count == 4 && !d_.x.Empty() && !d_.y.Empty() && d_.x.lo >= 0 && d_.x.lo < d_.gw &&
+                        d_.x.hi > d_.gw + 8 && d_.x.hi <= d_.gw + 64 && d_.y.hi - d_.y.lo <= 40 &&
+                        d_.x.hi - d_.x.lo >= 100;
+        ext[2] = sides ? 2.0f : edges ? 1.0f : menu.strip ? 3.0f : fill ? 4.0f : off_edge ? 5.0f : 0.0f;
         ext[3] = sides ? (d_.u.lo + d_.u.hi) * 0.5f : menu.strip ? menu.right : placed ? across * d_.move[0] : shift;
         ext[4] = placed ? d_.move[1] : 0.0f;
+        Subtitle(movie, my, ext);
         ext[5] = placed && squeeze && d_.tex.linear ? 1.0f : 0.0f;
         if (back_buffer_ && d_.whole && d_.textured && MoviesBrighten(d_.tex)) ext[5] += 2.0f;
         ext[6] = ext[7] = 0;
         // CV_WATER_HIDE: the water's draws (Water) left out, to see which they are
         static const bool hide_water = std::getenv("CV_WATER_HIDE") != nullptr;
+        // a sky's lid seen from below: the frame's own shape across the screen, and the game's own field of view
+        if (float lid = back_buffer_ ? SkyLid(vsc) : 0.0f; lid > 0) {
+            double game = 0, drawn = 0;
+            float wider = 1;
+            if (ViewFov(game, drawn) && drawn > game && game > 0)
+                wider = float(std::tan(drawn * 3.14159265358979 / 360) / std::tan(game * 3.14159265358979 / 360));
+            ext[0] += (wider - ext[0]) * lid;
+            ext[1] += (wider - ext[1]) * lid;
+            sky_lid_++;
+            sky_lid_across_ = ext[0];
+        }
         if (Backdrop(vsc) || SkyCard()) ext[0] = ext[1] = ext[3] = ext[4] = 0;  // not drawn: every vertex at the centre
         else if (hide_water && Water()) ext[0] = ext[1] = 0;
         else if (back_buffer_ && d_.world && d_.mesh && vsc) SeeWorld(vsc, ext[0]);
@@ -833,7 +894,15 @@ public:
                  trace_rt_, trace_device_ ? " device" : "", d_.count, d_.tex.width, d_.tex.height,
                  (unsigned long long)d_.name, d_.blend, d_.zwrite ? " zwrite" : "", d_.ntex ? " pack " : "",
                  d_.ntex ? TexturePackName(d_.texs[0]).c_str() : "");
-        else if (trace_now_ && d_.squeeze)
+        if (trace_now_ && d_.world && kTrace3D)
+            LOGR("wide %llu: 3D %016llx%s own x %.0f..%.0f y %.0f..%.0f z %.0f..%.0f, frame x %.0f..%.0f y %.0f..%.0f, "
+                 "matrix [%g %g %g %g | %g %g %g %g | %g %g %g %g | %g %g %g %g]",
+                 (unsigned long long)frame_, (unsigned long long)d_.name, d_.matrix == kCameraWorld ? " world" : " camera",
+                 d_.local[0].lo, d_.local[0].hi, d_.local[1].lo, d_.local[1].hi, d_.local[2].lo, d_.local[2].hi,
+                 d_.on_frame[0].lo, d_.on_frame[0].hi, d_.on_frame[1].lo, d_.on_frame[1].hi, d_.m[0][0], d_.m[0][1],
+                 d_.m[0][2], d_.m[0][3], d_.m[1][0], d_.m[1][1], d_.m[1][2], d_.m[1][3], d_.m[2][0], d_.m[2][1], d_.m[2][2],
+                 d_.m[2][3], d_.m[3][0], d_.m[3][1], d_.m[3][2], d_.m[3][3]);
+        if (trace_now_ && !d_.world && d_.squeeze)
             LOGR("wide %llu: into %08x%s n %u x %.0f..%.0f y %.0f..%.0f tex %ux%u at %08x %016llx u %g..%g v %g..%g%s blend %u%s%s: %s%s",
                  (unsigned long long)frame_, trace_rt_, trace_device_ ? " device" : "", d_.count, d_.x.lo, d_.x.hi,
                  d_.y.lo, d_.y.hi, d_.tex.width, d_.tex.height, d_.tex.data, (unsigned long long)d_.name, d_.u.lo, d_.u.hi,
@@ -842,6 +911,7 @@ public:
                  d_.ntex ? TexturePackName(d_.texs[0]).c_str() : "", d_.whole ? "whole, " : "",
                  sides ? "to the sides" : edges ? "edges out" : menu.strip ? "menu strip" : menu.backdrop ? "menu backdrop"
                  : placed ? "placed" : movie ? "movie" : d_.at_point ? "at a point" : boss_bar ? "boss bar, centred"
+                 : off_edge ? (shift > 0 ? "menu right, off the screen's edge" : "off the screen's edge")
                  : shift < 0 ? (menu_ ? "menu left" : "hud left") : shift > 0 ? (menu_ ? "menu right" : "hud right")
                  : squeeze ? "squeezed" : "kept");
         // CV_WIDE_ODD: the draws drawn at the console's shape, each kind once (an enemy's spawn: the 4:3 shape it
@@ -1476,6 +1546,24 @@ private:
         d_.past = ahead ? float(past) / float(ahead) : 0.0f;
     }
 
+    // CV_WIDE_3D, with CV_WIDE_TRACE: a 3D draw's vertices in its own space, where they come on the console frame (those
+    // ahead of the camera) and the matrix that takes them there, for the trace
+    void Probe(const gpu::State& s, const gpu::Assembled& a, const Program& p) {
+        uint32_t m = p.world ? kCameraWorld : kCamera;
+        for (int r = 0; r < 4; r++)
+            for (int c = 0; c < 4; c++) d_.m[r][c] = s.vsc[m + r][c];
+        for (int i = 0; i < 3; i++) d_.local[i] = Read(a, 0, [i](const float* v, uint32_t) { return v[i]; });
+        auto row = [&](int r, const float* v, uint32_t comps) {
+            const auto& c = s.vsc[m + r];
+            return v[0] * c[0] + v[1] * c[1] + v[2] * c[2] + (comps == 4 ? v[3] : 1.0f) * c[3];
+        };
+        for (int i = 0; i < 2; i++)
+            d_.on_frame[i] = Read(a, 0, [&, i](const float* v, uint32_t comps) {
+                float w = row(3, v, comps);
+                return w > 0 ? row(i, v, comps) / w * s.vsc[kScreenScale][i] + s.vsc[kScreenOffset][i] : NAN;
+            });
+    }
+
     // a glow's depth as the doors' arrows' program finds it (SkyCard): the vertex times c103, through the object's
     // matrix in c105 to c108, then the camera's world matrix's depth row (its last, c184)
     void ArrowDepth(const gpu::State& s, const gpu::Assembled& a) {
@@ -1504,6 +1592,42 @@ private:
     }
 
     static bool Sky(uint64_t name) { return std::find(std::begin(kSky), std::end(kSky), name) != std::end(kSky); }
+
+    // A movie's frame says how far its picture's bottom edge went down, drawn larger (my: how much, about the frame's
+    // middle; scaled is false at movie_view 0, the frame as the game draws it); the letters drawn over it after, in
+    // the subtitles' rows, go down as far (ext[4], in clip space), by kSubMargin short of the screen's bottom at most
+    void Subtitle(bool scaled, float my, float* ext) {
+        if (!back_buffer_ || d_.world || d_.target || !d_.textured || d_.y.Empty()) return;
+        float top = 0, bottom = 0;
+        if (d_.whole && d_.sampled && MoviesPictureRows(d_.tex, top, bottom)) {
+            movie_frame_ = frame_;
+            // the frame's row on the screen: the quad reads its rows (box_v) over its height
+            float rows = d_.box_v.Empty() ? 0.0f : d_.box_v.hi - d_.box_v.lo;
+            if (!(rows > 0)) return;
+            float edge = d_.y.lo + (bottom - d_.box_v.lo) * (d_.y.hi - d_.y.lo) / rows;
+            float drawn = scaled ? std::min(d_.gh * 0.5f + (edge - d_.gh * 0.5f) * my, d_.gh) : edge;
+            sub_drop_ = std::clamp(drawn - edge, 0.0f, d_.gh - kSubMargin - kSubBottom);
+            return;
+        }
+        if (movie_frame_ != frame_ || d_.whole || d_.count != 4 || d_.at_point) return;
+        if (d_.y.lo < kSubTop || d_.y.hi > kSubBottom + kSubSlack) sub_scroll_ = true;
+        if (sub_scroll_) return;
+        subs_++;
+        ext[4] = -2 * sub_drop_ / d_.gh;
+    }
+
+    // how much of a sky's lid's draw (kSkyLid) the camera sees from below: 0 for any other draw and while it looks no
+    // more steeply up than kLidFrom, 1 from kLidWhole. The camera's view axis is its matrix's last row, the world's up
+    // the other way along y
+    float SkyLid(float (*vsc)[4]) const {
+        if (!vsc || !d_.world || !d_.matrix || !d_.name ||
+            std::find(std::begin(kSkyLid), std::end(kSkyLid), d_.name) == std::end(kSkyLid))
+            return 0;
+        const float* axis = vsc[d_.matrix + 3];
+        float length = std::sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+        if (!(length > 0)) return 0;
+        return std::clamp((-axis[1] / length - kLidFrom) / (kLidWhole - kLidFrom), 0.0f, 1.0f);
+    }
 
     // a draw of the doors' arrows (kSkyCards) with the view pushed out (game/view.cpp), wholly past the room's own far
     // plane (parked): not drawn (true), as the game's own view does not show it. CV_SKY_CARDS logs their depths, the
@@ -1634,6 +1758,8 @@ private:
         Span x, y, u, v;  // on the console frame; the first texture coordinates, for one quad on it (v for the trace)
         bool at_point = false;  // a 2D draw placed at a point of the world, by that point's depth
         Span box_u, box_v;  // a quad's texture coordinates, on the frame or not (TexelBox)
+        Span local[3], on_frame[2];  // CV_WIDE_3D: a 3D draw's vertices in its own space and on the console frame
+        float m[4][4] = {};          // and its matrix (Probe)
         gpu::TextureDesc tex;
         struct Stage {
             const gpu::Target* target = nullptr;  // the target it reads, null for a texture
@@ -1693,6 +1819,12 @@ private:
     uint32_t sky_fogged_ = 0, sky_held_ = 0;  // this frame's sky draws, Backdrop's
     uint32_t sky_cards_ = 0;                  // and the doors' arrows held back, SkyCard's
     uint32_t sky_arrows_ = 0;                 // and the ones drawn
+    uint32_t sky_lid_ = 0;                    // g_sky_lid's
+    uint64_t movie_frame_ = 0;                // the frame a movie's frame was last drawn in
+    float sub_drop_ = 0;                      // this frame's subtitles' way down, in the console frame's pixels
+    uint32_t subs_ = 0;                       // this frame's subtitle draws
+    bool sub_scroll_ = false;                 // this movie's words are no subtitles: some lay outside their rows
+    float sky_lid_across_ = 0;                // g_sky_lid_across's
     uint32_t apart_wide_ = 0, apart_squeezed_ = 0;  // g_apart_wide's, g_apart_squeezed's
     uint32_t pack_epoch_ = 0;                 // TexturePackEpoch's at the frame's first draw
     // backdrops (Backdrop): the room's own fog coefficients and far plane, the fog drawn, the backdrops' textures
@@ -1708,6 +1840,7 @@ private:
     std::unordered_map<uint64_t, Seen> seen_;  // CV_SKY_TRACE: each texture's draws in the room
     static inline const bool kSkyTrace = std::getenv("CV_SKY_TRACE") != nullptr;
     static inline const bool kSkyHide = std::getenv("CV_SKY_HIDE") != nullptr;
+    static inline const bool kTrace3D = std::getenv("CV_WIDE_3D") != nullptr;
     Hooks hooks_;
     std::unordered_map<uint64_t, Program> programs_;
     std::unordered_map<uint32_t, uint64_t> names_;  // each texture's Name, by its guest address, as last uploaded
@@ -1731,12 +1864,12 @@ std::string WideJson() {
         out += b;
     }
     if (g_frame) {
-        char b[192];
+        char b[256];
         std::snprintf(b, sizeof(b),
-                      "%s\"sky\":{\"fogged\":%u,\"held\":%u,\"cards\":%u,\"arrows\":%u},"
-                      "\"apart\":{\"wide\":%u,\"squeezed\":%u}",
-                      out.empty() ? "" : ",", g_sky_fogged, g_sky_held, g_sky_cards, g_sky_arrows, g_apart_wide,
-                      g_apart_squeezed);
+                      "%s\"sky\":{\"fogged\":%u,\"held\":%u,\"cards\":%u,\"arrows\":%u,\"lid\":%u,\"lid_across\":%.4f},"
+                      "\"apart\":{\"wide\":%u,\"squeezed\":%u},\"subs\":{\"draws\":%u,\"drop\":%.2f}",
+                      out.empty() ? "" : ",", g_sky_fogged, g_sky_held, g_sky_cards, g_sky_arrows, g_sky_lid,
+                      g_sky_lid_across, g_apart_wide, g_apart_squeezed, g_subs, g_subs_drop);
         out += b;
     }
     return out.empty() ? out : "{" + out + "}";

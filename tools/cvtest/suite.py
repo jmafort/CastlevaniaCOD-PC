@@ -190,6 +190,14 @@ def tests():
         scenario("filters", "--set", "texture_pack=false", test="filters-nopack"),
         scenario("widescreen", quick=True),
         scenario("widescreen", *eu, test="widescreen-eu"),
+        # 1.14.1: the status page's bars run off a wide screen's right edge, the menu's columns in the middle and out
+        scenario("pause-bars"),
+        scenario("pause-bars", "--set", "menu_spread=true", test="pause-bars-spread"),
+        # 1.14.1 (issue 31): the sky of the scene before the Wyvern's fight, seen from straight below, to the screen's
+        # corners; with a wider field of view too, and in the European release
+        scenario("sky-lid"),
+        scenario("sky-lid", "--set", "fov=150", test="sky-lid-fov"),
+        scenario("sky-lid", *eu, test="sky-lid-eu"),
         scenario("qol"),
         scenario("lockon", quick=True),
         scenario("lockon", *eu, test="lockon-eu"),
@@ -293,6 +301,8 @@ def tests():
         # 1.11.1: the movies as bright as their own pictures, where the console drew them at half (issue 22)
         scenario("movie-brightness"),
         scenario("movie-brightness", "--release", "eu", test="movie-brightness-eu"),
+        # 1.14.1 (issue 32): a movie's subtitles down with its picture's bottom edge (the European release in Spanish)
+        scenario("subtitles", "--release", "eu"),
         # 1.11.1: the volumes, the whole sound and the music and the sound effects apart (issue 24)
         scenario("volume"),
         scenario("surface", needs=["materials"], env=folder_env("materials", "CV_TEXTURES")),

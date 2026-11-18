@@ -1,0 +1,29 @@
+{
+  "name": "subtitles",
+  "settings": {"game_language": 5},
+  "telemetry": 10,
+  "note": "Issue 32 (the European release in Spanish): a movie's subtitles under a picture drawn larger. The game draws their letters over the movie's frame, the last line ending on row 418 of 480, a few rows up from the picture's bottom edge. With the picture as tall as a 16:9 screen (movie_view 1, Fit) or filling it (2) the words stayed there, a seventh of the screen up over the picture; they now go down with the picture's bottom edge, to 22 rows from the screen's bottom at most (widescreen.cpp Subtitle): 40 rows on 16:9. A new game's second movie (st01_00, Hector and Isaac), its first words: wide.subs has the frame's subtitle draws and how far down they went, and the shot has the letters' edges in the rows under where the words were (rows 428 to 458), which at movie_view 0 are the frame's black bar. At movie_view 0, the frame as the game draws it, they stay. The opening's crawl before it is words in the movie's own frames, the Spanish one a movie of its own: no draws.",
+  "steps": [
+    {"press": "0:wait:11000", "note": "the logos to the title"},
+    {"until": "frame >= 640", "timeout": 60},
+    {"press": "1000:a,4000:a,4600:a,5200:a,6000:start,7000:a,9000:a,13000:left,14000:a,18000:a,21000:a,24000:a,26000:wait", "note": "New Game, name AAA, the save made; the movies then play"},
+    {"until": "movies.name != ''", "poll": "0f:wait:5f", "timeout": 40, "note": "the opening's crawl"},
+    {"press": "0f:wait:120f", "expect": ["wide.subs.draws == 0"], "note": "its words are the movie's own"},
+    {"press": "0f:start:5f,5f:wait:60f", "note": "skipped"},
+    {"until": "movies.name == 'st01_00'", "poll": "0f:wait:10f", "timeout": 40},
+    {"until": "wide.subs.draws > 0", "poll": "0f:wait:5f", "timeout": 60, "note": "its first words"},
+    {"press": "0f:wait:10f", "shot": "fit", "note": "the picture as tall as the screen: the words down by it",
+     "measure": {"low": [0.3, 0.895, 0.7, 0.955]},
+     "expect": ["wide.subs.draws > 0", "abs(wide.subs.drop - 40) < 0.5", "screen.edges.low > 4"]},
+    {"press": "0:set=movie_view=0,0f:wait:10f"},
+    {"until": "wide.subs.draws > 0", "poll": "0f:wait:5f", "timeout": 60},
+    {"press": "0f:wait:10f", "shot": "frame", "note": "the frame as the game draws it: the words where the game has them",
+     "measure": {"low": [0.3, 0.895, 0.7, 0.955]},
+     "expect": ["wide.subs.draws > 0", "wide.subs.drop == 0", "screen.edges.low < 1.5", "screen.edges.low * 3 < shots['fit'].edges.low"]},
+    {"press": "0:set=movie_view=2,0f:wait:10f"},
+    {"until": "wide.subs.draws > 0", "poll": "0f:wait:5f", "timeout": 60},
+    {"press": "0f:wait:10f", "shot": "fill", "note": "the screen filled: down again",
+     "measure": {"low": [0.3, 0.895, 0.7, 0.955]},
+     "expect": ["wide.subs.draws > 0", "abs(wide.subs.drop - 40) < 0.5", "screen.edges.low > 4"]}
+  ]
+}

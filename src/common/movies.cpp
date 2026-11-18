@@ -687,6 +687,24 @@ public:
         return active_ && std::find(std::begin(textures_), std::end(textures_), d.data) != std::end(textures_);
     }
 
+    // a draw of a texture is the movie's frame: the rows its picture lies on in the 640x480 frame, the first and the
+    // one after the last (the bars above and under it are the frame's rest)
+    bool PictureRows(const gpu::TextureDesc& d, float& top, float& bottom) {
+        if (!MovieTexture(d)) return false;
+        std::lock_guard lock(m_);
+        if (!active_ || std::find(std::begin(textures_), std::end(textures_), d.data) == std::end(textures_)) return false;
+        uint32_t y, h;
+        if (const Movie* mv = Current()) {
+            y = mv->crop_y;
+            h = mv->crop_h;
+        } else {
+            DefaultCrop(name_, y, h);
+        }
+        top = float(y);
+        bottom = float(y + h);
+        return h > 0;
+    }
+
     // telemetry's "movies" (telemetry.cpp): the movie playing (its name, empty when none) and the frames drawn from its
     // HD video so far
     std::string Telemetry() {
@@ -861,6 +879,7 @@ bool MoviesBrighten(const gpu::TextureDesc& d) { return g_movies.Brighten(d); }
 bool MoviesOwn(uint64_t id) { return (id & kTag) != 0; }
 std::string MoviesJson() { return g_movies.Telemetry(); }
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id) { return g_movies.Replaced(id); }
+bool MoviesPictureRows(const gpu::TextureDesc& d, float& top, float& bottom) { return g_movies.PictureRows(d, top, bottom); }
 bool MoviesScale(const gpu::TextureDesc& d, float squeeze, float qx, float qy, float& sx, float& sy) {
     return g_movies.Scale(d, squeeze, qx, qy, sx, sy);
 }
