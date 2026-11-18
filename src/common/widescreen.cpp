@@ -92,7 +92,8 @@ uint64_t TexturePackReplace(const gpu::TextureDesc& d, const uint8_t* guest, con
 extern bool g_hud_edges;  // menu.cpp
 bool PauseMenuUp();       // telemetry.cpp
 bool ViewBackdrop(float game[2], float drawn[2], float& far_z, uint32_t& room);  // game/view.cpp
-bool ViewFov(double& game, double& drawn);  // game/view.cpp: the vertical field of view, the game's and as drawn, in degrees
+float ViewWider();  // game/view.cpp: how much wider than the game's the view is drawn (the tan of its half angle's ratio)
+uint32_t MoviesSerial();  // movies.cpp: counts the movies started
 bool ModalUp();           // telemetry.cpp
 bool CameraSpecial();     // telemetry.cpp: the title's camera, the map screen's or a debug view's
 uint32_t SceneWord();     // telemetry.cpp
@@ -212,8 +213,10 @@ constexpr uint64_t kCardFx[] = {0xe8728269d4380016ull};
 
 // whole pictures that widen to the screen's sides with their middle as it was: the quad to the sides, its texture
 // coordinates stretched with it, so past the 4:3 middle they reach out of the picture: the misty castle behind the
-// title's logo, a panorama the game scrolls (wrapping, it goes on), and the Konami logo, on white to its edges
-constexpr uint64_t kSides[] = {0x538892ce4eebc65cull, 0x5aa1017e3e7eb511ull};
+// title's logo, a panorama the game scrolls (wrapping, it goes on), and the Konami logo, on white to its edges. The
+// last is the castle of the Brazilian Portuguese fan translation's title (mods\PTBR-PS2: its title file is its own,
+// the castle in it too), not known through 1.14.0: its title stood as a 4:3 box, black at the screen's sides
+constexpr uint64_t kSides[] = {0x538892ce4eebc65cull, 0x5aa1017e3e7eb511ull, 0x93757600c441c038ull};
 // Hector's cloth, which the game moves itself and draws through the world matrix rather than by his skinned
 // program: his sash (the texture pack's 161bdbe2e3dc5cf4-82307fa6d17c2ea5-00000013, its draws in pairs), a
 // character's to the ray tracing (Character). Not c26555aa0ffd586d, listed here once for the coat: that is the doors'
@@ -285,7 +288,7 @@ public:
                "    bool sides = ext.z > 1.5 && ext.z < 2.5;\n"
                "    bool strip = ext.z > 2.5 && ext.z < 3.5;\n"
                "    bool fill = ext.z > 3.5 && ext.z < 4.5;\n"
-               "    bool past = ext.z > 4.5 && abs(o.pos.x / o.pos.w) > 1.02;\n"
+               "    bool past = ext.z > 4.5 && ext.z < 5.5 && abs(o.pos.x / o.pos.w) > 1.02;\n"
                "    if (sides) oT0.x = ext.w + (oT0.x - ext.w) / ext.x;\n"
                "    bool at_edge = (ext.z > 0.5 && ext.z < 2.5 || fill) && abs(abs(o.pos.x / o.pos.w) - 1) < 0.008 || past;\n"
                "    bool at_top = fill && abs(abs(o.pos.y / o.pos.w) - 1) < 0.008;\n"
@@ -846,10 +849,7 @@ public:
         static const bool hide_water = std::getenv("CV_WATER_HIDE") != nullptr;
         // a sky's lid seen from below: the frame's own shape across the screen, and the game's own field of view
         if (float lid = back_buffer_ ? SkyLid(vsc) : 0.0f; lid > 0) {
-            double game = 0, drawn = 0;
-            float wider = 1;
-            if (ViewFov(game, drawn) && drawn > game && game > 0)
-                wider = float(std::tan(drawn * 3.14159265358979 / 360) / std::tan(game * 3.14159265358979 / 360));
+            float wider = std::max(1.0f, ViewWider());
             ext[0] += (wider - ext[0]) * lid;
             ext[1] += (wider - ext[1]) * lid;
             sky_lid_++;
@@ -1586,10 +1586,11 @@ private:
         uint32_t m = p.world ? kCameraWorld : kCamera;
         for (int r = 0; r < 4; r++)
             for (int c = 0; c < 4; c++) d_.m[r][c] = s.vsc[m + r][c];
-        for (int i = 0; i < 3; i++) d_.local[i] = Read(a, 0, [i](const float* v, uint32_t) { return v[i]; });
+        for (int i = 0; i < 3; i++)
+            d_.local[i] = Read(a, 0, [i](const float* v, uint32_t comps) { return uint32_t(i) < comps ? v[i] : 0.0f; });
         auto row = [&](int r, const float* v, uint32_t comps) {
             const auto& c = s.vsc[m + r];
-            return v[0] * c[0] + v[1] * c[1] + v[2] * c[2] + (comps == 4 ? v[3] : 1.0f) * c[3];
+            return v[0] * c[0] + v[1] * c[1] + (comps >= 3 ? v[2] : 0.0f) * c[2] + (comps == 4 ? v[3] : 1.0f) * c[3];
         };
         for (int i = 0; i < 2; i++)
             d_.on_frame[i] = Read(a, 0, [&, i](const float* v, uint32_t comps) {
@@ -1635,6 +1636,12 @@ private:
         float top = 0, bottom = 0;
         if (d_.whole && d_.sampled && MoviesPictureRows(d_.tex, top, bottom)) {
             movie_frame_ = frame_;
+            // another movie started: its words are judged anew (one that follows a movie with words elsewhere at once,
+            // inside the 30 frames that otherwise end a movie, kept that movie's verdict)
+            if (uint32_t serial = MoviesSerial(); serial != movie_serial_) {
+                movie_serial_ = serial;
+                sub_scroll_ = false;
+            }
             // the frame's row on the screen: the quad reads its rows (box_v) over its height
             float rows = d_.box_v.Empty() ? 0.0f : d_.box_v.hi - d_.box_v.lo;
             if (!(rows > 0)) return;
@@ -1858,6 +1865,7 @@ private:
     float sub_drop_ = 0;                      // this frame's subtitles' way down, in the console frame's pixels
     uint32_t subs_ = 0;                       // this frame's subtitle draws
     bool sub_scroll_ = false;                 // this movie's words are no subtitles: some lay outside their rows
+    uint32_t movie_serial_ = 0;               // MoviesSerial's when sub_scroll_ was last cleared
     float sky_lid_across_ = 0;                // g_sky_lid_across's
     uint32_t apart_wide_ = 0, apart_squeezed_ = 0;  // g_apart_wide's, g_apart_squeezed's
     uint32_t pack_epoch_ = 0;                 // TexturePackEpoch's at the frame's first draw

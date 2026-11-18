@@ -1764,7 +1764,7 @@ index 200d6b4..cdb1efa 100644
  inline const std::filesystem::path& CaptureDir() {
      static const std::filesystem::path dir = [] {
 diff --git a/runtime/core/input.cpp b/runtime/core/input.cpp
-index bb7f3a9..300c10a 100644
+index bb7f3a9..fe2dc83 100644
 --- a/runtime/core/input.cpp
 +++ b/runtime/core/input.cpp
 @@ -2,12 +2,25 @@
@@ -1793,12 +1793,15 @@ index bb7f3a9..300c10a 100644
  #include "app/app.h"
  #include "core/log.h"
  
-@@ -20,14 +33,201 @@ std::mutex g_lock;
+@@ -20,14 +33,223 @@ std::mutex g_lock;
  bool g_sdl = false;
  SDL_Gamepad* g_pads[4] = {};
  
 +bool IsVirtual(SDL_JoystickID id);
 +bool LeftOut(SDL_JoystickID id);
++#ifdef _WIN32
++void XInputHandOver();
++#endif
 +
  void AddPad(SDL_JoystickID id) {
      for (SDL_Gamepad* pad : g_pads)
@@ -1817,6 +1820,9 @@ index bb7f3a9..300c10a 100644
 +        LOGW("input: controller %d failed to open: %s", int(slot - g_pads) + 1, name ? name : "");
 +        return;
 +    }
++#ifdef _WIN32
++    XInputHandOver();  // SDL has a controller now: XInput's are let go
++#endif
 +    // what a controller is and whether it says it can rumble, in every log: a controller that does not rumble is
 +    // first looked for here
 +    SDL_PropertiesID props = SDL_GetGamepadProperties(*slot);
@@ -1878,7 +1884,7 @@ index bb7f3a9..300c10a 100644
 +// virtual one, or none): a controller plugged into the PC would press into the run.
 +struct XInputPort {
 +    bool connected = false;
-+    uint64_t read = 0, probe = 0;  // when it was last read, and looked for (GetTickCount64)
++    uint64_t probe = 0;  // when an empty port was last looked at (GetTickCount64)
 +    XINPUT_STATE state = {};
 +};
 +struct {
@@ -1914,8 +1920,24 @@ index bb7f3a9..300c10a 100644
 +    return std::none_of(std::begin(g_pads), std::end(g_pads), [](SDL_Gamepad* pad) { return pad != nullptr; });
 +}
 +
-+// the controller XInput has on that port, read at most once a millisecond; a port without one looked at once a second
-+// (XInput takes its time over an empty port). g_lock held
++// SDL has opened a controller, so XInput's are no longer read (XInputAllowed): one the game left rumbling would keep
++// its motors on, its stop going to SDL's controller instead. Each is stopped and forgotten. g_lock held
++void XInputHandOver() {
++    if (kXInputFake) return;
++    for (int port = 0; port < 4; port++) {
++        XInputPort& x = g_xinput.ports[port];
++        if (!x.connected) continue;
++        XINPUT_VIBRATION still{0, 0};
++        if (g_xinput.set) g_xinput.set(DWORD(port), &still);
++        x.connected = false;
++        x.probe = 0;
++        LOGR("input: controller %d (XInput) let go: SDL has a controller", port + 1);
++    }
++}
++
++// the controller XInput has on that port, read at every call (a tick of GetTickCount64 is up to 16 ms long: a read
++// kept for one would hand the game a stale report); a port without one looked at once a second (XInput takes its
++// time over an empty port). g_lock held
 +const XINPUT_STATE* XInputPad(int port) {
 +    if (port < 0 || port >= 4 || !XInputAllowed()) return nullptr;
 +    if (!g_xinput.tried) {
@@ -1938,8 +1960,8 @@ index bb7f3a9..300c10a 100644
 +    if (!g_xinput.get) return nullptr;
 +    XInputPort& x = g_xinput.ports[port];
 +    uint64_t now = GetTickCount64();
-+    if (x.connected ? now == x.read : x.probe && now - x.probe < 1000) return x.connected ? &x.state : nullptr;
-+    x.read = x.probe = now;
++    if (!x.connected && x.probe && now - x.probe < 1000) return nullptr;
++    x.probe = now;
 +    bool connected = g_xinput.get(DWORD(port), &x.state) == ERROR_SUCCESS;
 +    if (connected != x.connected)
 +        LOGR(connected ? "input: controller %d through XInput: SDL found no controller"
@@ -1996,7 +2018,7 @@ index bb7f3a9..300c10a 100644
  }
  
  void RemovePad(SDL_JoystickID id) {
-@@ -45,12 +245,17 @@ void UpdatePads() {
+@@ -45,12 +267,17 @@ void UpdatePads() {
      uint64_t now = SDL_GetTicks();
      if (!g_sdl || now == last) return;
      last = now;
@@ -2014,7 +2036,7 @@ index bb7f3a9..300c10a 100644
  }
  
  }  // namespace
-@@ -73,6 +278,7 @@ void Init() {
+@@ -73,6 +300,7 @@ void Init() {
      LOGI("input: SDL %d.%d.%d", SDL_VERSIONNUM_MAJOR(v), SDL_VERSIONNUM_MINOR(v), SDL_VERSIONNUM_MICRO(v));
      std::lock_guard lock(g_lock);
      g_sdl = true;
@@ -2022,7 +2044,7 @@ index bb7f3a9..300c10a 100644
      int count = 0;
      if (SDL_JoystickID* ids = SDL_GetGamepads(&count)) {
          for (int i = 0; i < count; i++) AddPad(ids[i]);
-@@ -80,7 +286,8 @@ void Init() {
+@@ -80,7 +308,8 @@ void Init() {
      }
  }
  
@@ -2032,7 +2054,7 @@ index bb7f3a9..300c10a 100644
      Pad p;
      {
          std::lock_guard lock(g_lock);
-@@ -108,7 +315,28 @@ Pad Poll(int port) {
+@@ -108,7 +337,28 @@ Pad Poll(int port) {
              p.rx = int16_t(axis(SDL_GAMEPAD_AXIS_RIGHTX));
              p.ry = int16_t(-1 - axis(SDL_GAMEPAD_AXIS_RIGHTY));
          }
@@ -2061,7 +2083,7 @@ index bb7f3a9..300c10a 100644
      if (app::kGame.pad) app::kGame.pad(port, p);
      return p;
  }
-@@ -123,14 +351,133 @@ uint16_t HeldOnAnyController() {
+@@ -123,14 +373,132 @@ uint16_t HeldOnAnyController() {
      for (SDL_Gamepad* pad : g_pads)
          for (auto [button, mask] : kFaceButtons)
              if (pad && SDL_GetGamepadButton(pad, button)) held |= mask;
@@ -2149,7 +2171,6 @@ index bb7f3a9..300c10a 100644
 +    if (kXInputFake) {
 +        g_xinput.fake_plugged = plugged;
 +        g_xinput.ports[0].probe = 0;  // looked for again at the next read
-+        g_xinput.ports[0].read = 0;
 +        return;
 +    }
 +#endif

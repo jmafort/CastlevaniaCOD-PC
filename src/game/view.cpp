@@ -176,6 +176,13 @@ void ViewMake(const X86Context& ctx, uint8_t* base) {
              Get<float>(base, kFogB));
 }
 
+// for the renderer (widescreen.cpp SkyLid): how much wider than the game's the view is drawn, the tan of its half
+// angle over the game's (1 at the game's own, in story scenes and menus). One value set whole by the game's thread as
+// it sets the screen distance: the game's distance and the one drawn read apart, from the renderer's thread, could be
+// of two camera updates
+std::atomic<float> g_view_wider{1.0f};
+float ViewWider() { return g_view_wider.load(std::memory_order_relaxed); }
+
 // for the in-game menu: the vertical field of view, in degrees, of the game's camera now and as it is drawn
 bool ViewFov(double& game, double& drawn) {
     const uint8_t* base = g_view.base;
@@ -216,6 +223,7 @@ X86_FUNC(CV_HOOK(CV_SCREEN_DISTANCE)) {
     bool menu = fov != 100 && MenuView();
     int32_t used = fov == 100 || scene || menu || d <= 0 ? d : std::max<int32_t>(1, int32_t(std::lround(d * 100.0 / fov)));
     g_view.drawn = used != d ? used : 0;
+    g_view_wider.store(used > 0 && d > 0 ? float(d) / float(used) : 1.0f, std::memory_order_relaxed);
     static uint32_t n = 0;
     static int32_t traced = -1;
     if (kTrace && used != traced && n++ < 400) {

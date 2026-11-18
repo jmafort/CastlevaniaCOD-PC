@@ -784,7 +784,9 @@ def main():
             errors.append(f"the shortcut's icon is {got[2]}, not {icon}")
         data = icon.read_bytes() if icon.is_file() else b""
         if not own_icon:
-            count = int.from_bytes(data[4:6], "little") if data[:4] == bytes([0, 0, 1, 0]) else 0
+            count = int.from_bytes(data[4:6], "little") if data[:4] == bytes([0, 0, 1, 0]) and len(data) >= 6 else 0
+            if len(data) < 6 + 16 * count:  # the list of pictures cut short
+                count = 0
             sizes = [data[6 + 16 * i] or 256 for i in range(count)]
             if sizes != [256, 48, 32, 16]:
                 errors.append(f"{icon.name} has the sizes {sizes}, not 256, 48, 32 and 16")

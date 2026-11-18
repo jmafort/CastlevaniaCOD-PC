@@ -362,8 +362,18 @@ bool MakeShortcut(const std::vector<uint8_t>& crest) {
         CoTaskMemFree(known);
     }
     if (desktop.empty() || !fs::is_directory(desktop, ec)) return false;
-    wchar_t exe[MAX_PATH];
-    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    // the launcher's own path, whole: one cut short at MAX_PATH would make a shortcut to nothing
+    std::wstring exe(MAX_PATH, L'\0');
+    for (;;) {
+        DWORD n = GetModuleFileNameW(nullptr, exe.data(), DWORD(exe.size()));
+        if (!n) return false;
+        if (n < exe.size()) {
+            exe.resize(n);
+            break;
+        }
+        if (exe.size() >= 32768) return false;
+        exe.resize(exe.size() * 2);
+    }
     fs::path icon = dir / L"castlevania.ico";
     bool own_icon = !crest.empty() && WriteIco(icon, crest, 256);
     HRESULT init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -371,12 +381,11 @@ bool MakeShortcut(const std::vector<uint8_t>& crest) {
     IShellLinkW* link = nullptr;
     if (SUCCEEDED(CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW,
                                    reinterpret_cast<void**>(&link))) && link) {
-        link->SetPath(exe);
-        link->SetWorkingDirectory(dir.c_str());
+        bool aimed = SUCCEEDED(link->SetPath(exe.c_str())) && SUCCEEDED(link->SetWorkingDirectory(dir.c_str()));
         link->SetDescription(L"Castlevania: Curse of Darkness");
         if (own_icon) link->SetIconLocation(icon.c_str(), 0);
         IPersistFile* file = nullptr;
-        if (SUCCEEDED(link->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&file))) && file) {
+        if (aimed && SUCCEEDED(link->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&file))) && file) {
             made = SUCCEEDED(file->Save((desktop / L"Castlevania Curse of Darkness.lnk").c_str(), TRUE));
             file->Release();
         }
@@ -411,18 +420,34 @@ bool MakeShortcut(const std::vector<uint8_t>& crest) {
         if (desktop.empty()) desktop = fs::path(home) / "Desktop";
     }
     if (menu.empty()) return false;
-    // a desktop entry's Exec: in double quotes, with a backslash before each of the characters the quotes keep special
+    // a desktop entry's Exec: in double quotes, with a backslash before each of the characters the quotes keep special,
+    // and a percent sign doubled (a single one starts a field code: a folder named "100%fun" would have %f in it)
     auto quoted = [](const std::string& s) {
         std::string out = "\"";
         for (char c : s) {
             if (c == '"' || c == '`' || c == '$' || c == '\\') out += '\\';
+            if (c == '%') out += '%';
             out += c;
         }
         return out + "\"";
     };
+    // a desktop entry's value: a backslash, a new line, a tab and a return written as their escapes, so a path with one
+    // in it stays one value on its line
+    auto value = [](const std::string& s) {
+        std::string out;
+        for (char c : s) {
+            if (c == '\\') out += "\\\\";
+            else if (c == '\n') out += "\\n";
+            else if (c == '\t') out += "\\t";
+            else if (c == '\r') out += "\\r";
+            else out += c;
+        }
+        return out;
+    };
     std::string entry = "[Desktop Entry]\nType=Application\nName=Castlevania: Curse of Darkness\nExec=" +
-                        quoted(exe.string()) + "\nPath=" + dir.string() + "\n" +
-                        (own_icon ? "Icon=" + icon.string() + "\n" : std::string()) + "Terminal=false\nCategories=Game;\n";
+                        value(quoted(exe.string())) + "\nPath=" + value(dir.string()) + "\n" +
+                        (own_icon ? "Icon=" + value(icon.string()) + "\n" : std::string()) +
+                        "Terminal=false\nCategories=Game;\n";
     auto write = [&](const fs::path& folder) {
         fs::path to = folder / "castlevania-cod-pc.desktop";
         std::ofstream f(to, std::ios::binary | std::ios::trunc);
@@ -3862,7 +3887,23 @@ private:
     void LanguageChoice() {
         int cur = words::Current();
         std::string preview = Icon(kIconGlobe) + "  " + words::kLanguages[cur].name;
-        ImGui::PushFont(g_body);
+        // the language's name whole in its box: without the globe where it does not fit beside it, and in the small
+        // font where it still does not ("Português (Brasil)" ended at "Português (Bra" under the box's arrow)
+        ImFont* font = g_body;
+        {
+            ImGui::PushFont(g_body);
+            float side = ImGui::GetFrameHeight();
+            float room = ImGui::GetContentRegionAvail().x - side - S(6) - side - ImGui::GetStyle().FramePadding.x * 2;
+            ImGui::PopFont();
+            auto fits = [&](ImFont* f, const std::string& text) {
+                return f->CalcTextSizeA(f->FontSize, FLT_MAX, 0, text.c_str()).x <= room;
+            };
+            if (!fits(g_body, preview)) {
+                preview = words::kLanguages[cur].name;
+                if (!fits(g_body, preview)) font = g_small;
+            }
+        }
+        ImGui::PushFont(font);
         float side = ImGui::GetFrameHeight();
         ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - side - S(6));
         bool open = ImGui::BeginCombo("##language", preview.c_str());

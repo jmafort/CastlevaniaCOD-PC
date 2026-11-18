@@ -705,6 +705,12 @@ public:
         return h > 0;
     }
 
+    // how many movies have started (it goes on at each start): one movie from the next for the subtitles' place
+    uint32_t Serial() {
+        std::lock_guard lock(m_);
+        return serial_;
+    }
+
     // telemetry's "movies" (telemetry.cpp): the movie playing (its name, empty when none) and the frames drawn from its
     // HD video so far
     std::string Telemetry() {
@@ -880,6 +886,7 @@ bool MoviesOwn(uint64_t id) { return (id & kTag) != 0; }
 std::string MoviesJson() { return g_movies.Telemetry(); }
 std::shared_ptr<const gpu::Replacement> MoviesReplaced(uint64_t id) { return g_movies.Replaced(id); }
 bool MoviesPictureRows(const gpu::TextureDesc& d, float& top, float& bottom) { return g_movies.PictureRows(d, top, bottom); }
+uint32_t MoviesSerial() { return g_movies.Serial(); }
 bool MoviesScale(const gpu::TextureDesc& d, float squeeze, float qx, float qy, float& sx, float& sy) {
     return g_movies.Scale(d, squeeze, qx, qy, sx, sy);
 }
