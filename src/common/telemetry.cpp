@@ -307,8 +307,8 @@ uint32_t PlayCamera() {
 bool PlayCameraFree() { return PlayCamera() != 0; }
 
 // an angle as the play camera keeps one: 0 or a normal number, of some turns at most. A pointer or a count read as a
-// float is a denormal one (its exponent 0), and is never written over. Not held to one turn: locked on, the game
-// turns the heading on past it (the mouse then turned nothing after the lock-on, on Linux, while it was)
+// float is a denormal one (its exponent 0), and is never written over. Not held to one turn: the game does not keep
+// the heading within one
 static bool Angle(float v) {
     int kind = std::fpclassify(v);
     return (kind == FP_ZERO || kind == FP_NORMAL) && std::fabs(v) < 1000.0f;
