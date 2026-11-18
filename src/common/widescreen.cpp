@@ -1414,6 +1414,21 @@ private:
                            std::max(a.r.x0, b.r.x0) - std::min(a.r.x1, b.r.x1) <= 0.1f * gw;
                 if (same && (Touch(a.r, b.r) || row)) up[root(i)] = root(j);
             }
+        // a word, before it joins what it is written on: draws of one texture that touch or share a row. Written on
+        // the title bar (an Innocent Devil's name after the page's title, one draw of all its letters), less tall than
+        // the bar and inside its height, it moves whole with the bar's end it starts at: as part of the strip its
+        // letters over the frame's middle tenth, where the bar stretches, were pulled wide ("Charizard" with a long
+        // "izard"). The bar's own pieces are as tall as it is
+        std::vector<size_t> word(n);
+        std::vector<float> word_lo(n, 1e30f), word_hi(n, -1e30f), word_top(n, 1e30f), word_bottom(n, -1e30f);
+        for (size_t i = 0; i < n; i++) {
+            size_t w = word[i] = root(i);
+            const Rect& r = menu_before_[i].r;
+            word_lo[w] = std::min(word_lo[w], r.x0);
+            word_hi[w] = std::max(word_hi[w], r.x1);
+            word_top[w] = std::min(word_top[w], r.y0);
+            word_bottom[w] = std::max(word_bottom[w], r.y1);
+        }
         // a draw onto those before it joins the one it covers most, only: the cursor on the Options button also lies
         // over the figures of EXP and Next, which would join the stats column to the buttons
         for (size_t j = 1; j < n; j++) {
@@ -1427,11 +1442,13 @@ private:
                 }
             if (most < n) up[root(most)] = root(j);
         }
-        std::vector<float> lo(n, 1e30f), hi(n, -1e30f);
+        std::vector<float> lo(n, 1e30f), hi(n, -1e30f), top(n, 1e30f), bottom(n, -1e30f);
         for (size_t i = 0; i < n; i++) {
             size_t r = root(i);
             lo[r] = std::min(lo[r], menu_before_[i].r.x0);
             hi[r] = std::max(hi[r], menu_before_[i].r.x1);
+            top[r] = std::min(top[r], menu_before_[i].r.y0);
+            bottom[r] = std::max(bottom[r], menu_before_[i].r.y1);
         }
         // the screen's extra width at each side, in console pixels, and the room each side's groups leave: of what
         // lies on the frame (a list's rows that run off its right edge run off the screen's)
@@ -1442,7 +1459,10 @@ private:
         for (size_t i = 0; i < n; i++) {
             size_t r = root(i);
             int side = MenuSide(lo[r], hi[r], gw);
-            menu_before_[i].side = side;
+            size_t w = word[i];
+            bool letters = side == kMenuStrip && word_hi[w] - word_lo[w] < 0.5f * gw && word_top[w] >= top[r] + 2 &&
+                           word_bottom[w] <= bottom[r] - 2;
+            menu_before_[i].side = letters ? (word_lo[w] < 0.5f * gw ? -1 : 1) : side;
             if (r != i) continue;
             if (side < 0 || side == kMenuStrip) room[0] = std::min(room[0], std::max(lo[r], 0.0f) + margin - pad);
             if (side == 1 || side == kMenuStrip) room[1] = std::min(room[1], gw + margin - pad - std::min(hi[r], gw));

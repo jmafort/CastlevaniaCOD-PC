@@ -1,0 +1,17 @@
+{
+  "name": "devil-name",
+  "save": "user19eu",
+  "needs": ["save:user19eu"],
+  "settings": {"width": 1600, "height": 900},
+  "note": "An Innocent Devil's name on its page's title bar, the pause menu's columns moved out on a wide screen (menu_spread, the default), with DJBLOPA's save (kept out of the repository), whose devil is named Charizard. The title bar is a strip that stretches about the frame's middle tenth, and what is written on it went with it: the name, one draw of all its letters after 'Innocent Devil', had those over the middle pulled wide ('Charizard' with a long 'izard', to past the frame's middle). Words on the bar, less tall than it, now move whole with the end of the bar they start at (widescreen.cpp MenuGroups). The shot has the name's letters where the name is and the bar's plain orange where they were stretched to.",
+  "steps": [
+    {"press": "0:wait:11000"},
+    {"until": "player.active and not cutscene and not loading and not menu", "timeout": 90, "poll": "0:a,90f:wait", "poll_by": [["cutscene", "0:start,45f:wait"]]},
+    {"press": "0f:wait:60f"},
+    {"press": "0:start,1500:wait", "expect": ["menu"]},
+    {"press": "0:rt,2500:wait", "shot": "devil", "note": "the first Innocent Devil's page",
+     "measure": {"name": [0.3, 0.13, 0.42, 0.185], "past": [0.45, 0.13, 0.56, 0.185]},
+     "expect": ["menu", "screen.edges.name > 8", "screen.edges.past < 3"]},
+    {"press": "0:b,1500:wait"}
+  ]
+}
