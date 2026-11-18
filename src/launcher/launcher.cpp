@@ -1149,6 +1149,37 @@ HttpAnswer HttpRequest(const std::string& url, const fs::path* to, bool follow);
 // GitHub turning a request away: its API's limit for an address without an account (403, 429), or the site busy (503)
 bool GitHubBusy(int status) { return status == 403 || status == 429 || status == 503; }
 
+// a release is a later one than another, by their numbers ("1.14.0" than "1.13.0", "1.10" than "1.9.2"): false when
+// either is not numbers between dots. A build of a release not yet published (a test of the next one) is not offered
+// the newest published one as its update, which would put the older one in its place
+bool LaterRelease(const std::string& a, const std::string& b) {
+    auto parts = [](const std::string& v, std::vector<uint32_t>& out) {
+        uint32_t n = 0;
+        bool digit = false;
+        for (char c : v) {
+            if (c >= '0' && c <= '9') {
+                if (n > 100000) return false;
+                n = n * 10 + uint32_t(c - '0');
+                digit = true;
+            } else if (c == '.' && digit) {
+                out.push_back(n);
+                n = 0;
+                digit = false;
+            } else {
+                return false;
+            }
+        }
+        if (!digit) return false;
+        out.push_back(n);
+        return true;
+    };
+    std::vector<uint32_t> x, y;
+    if (!parts(a, x) || !parts(b, y)) return false;
+    x.resize((std::max)(x.size(), y.size()));
+    y.resize(x.size());
+    return x > y;
+}
+
 // the newest release, from GitHub's API (one request): Busy when GitHub turns it away, Unreachable when no answer comes
 // (or no release is there)
 UpdateState LookUpLatest(const std::string& own, PortRelease& out) {
@@ -1165,7 +1196,7 @@ UpdateState LookUpLatest(const std::string& own, PortRelease& out) {
     fs::remove(list, ec);
     if (GitHubBusy(a.status)) return UpdateState::Busy;
     if (a.status != 200 || !NewestRelease(text, out)) return UpdateState::Unreachable;
-    return out.tag == own ? UpdateState::UpToDate : UpdateState::Available;
+    return out.tag == own || LaterRelease(own, out.tag) ? UpdateState::UpToDate : UpdateState::Available;
 }
 
 // what an update leaves alone: the player's own places and files, by their first folder or name under the game's
@@ -2880,17 +2911,31 @@ bool NavItem(const char* label, bool selected) {
 }
 
 // a status line: coloured icon and text
-void Status(uint32_t icon, ImU32 col, const std::string& text) {
+// wrap: where its words end, across the card (0 its right edge), for a row with buttons at its right
+void Status(uint32_t icon, ImU32 col, const std::string& text, float wrap = 0.0f) {
     ImGui::PushFont(g_semi);
     ImGui::PushStyleColor(ImGuiCol_Text, col);
     ImGui::TextUnformatted(Icon(icon).c_str());
     ImGui::PopStyleColor();
     ImGui::SameLine(0, S(10));
-    ImGui::PushTextWrapPos(0.0f);  // a long line (some languages') wraps under itself, not out of its card
+    ImGui::PushTextWrapPos(wrap);  // a long line (some languages') wraps under itself, not out of its card
     ImGui::TextUnformatted(text.c_str());
     g_marks.Mark("status:" + text);
     ImGui::PopTextWrapPos();
     ImGui::PopFont();
+}
+
+// A row's words (Status) with a button or a switch at the row's right: they end before it (end, across the card) and
+// go on under themselves, their lines' middle at the row's (y its top, row its height). The row's end across the
+// card's height: lower than y + row for more lines than fit it. Before, a long line (in most languages) went on under
+// the button
+float RowStatus(uint32_t icon, ImU32 col, const std::string& text, float y, float row, float end) {
+    float x = ImGui::GetCursorPosX() + g_semi->CalcTextSizeA(g_semi->FontSize, FLT_MAX, 0, Icon(icon).c_str()).x + S(10);
+    end = (std::max)(end, x + S(60));
+    float h = g_semi->CalcTextSizeA(g_semi->FontSize, FLT_MAX, end - x, text.c_str()).y;
+    ImGui::SetCursorPosY(y + (std::max)(0.0f, (row - h) * 0.5f));
+    Status(icon, col, text, end);
+    return (std::max)(y + row, ImGui::GetItemRectMax().y - ImGui::GetWindowPos().y + ImGui::GetScrollY());
 }
 
 // a keyboard key drawn as a keycap
@@ -3451,6 +3496,20 @@ public:
         // CV_NO_UPDATE_CHECK: tests that open the launcher again and again leave GitHub alone (its API answers 60
         // requests an hour from an address without an account)
         updater_.Check(settings_.update_check && !std::getenv("CV_NO_UPDATE_CHECK"));
+        // CV_UPDATE_SHOW=<release>[,failed]: the update card as with that release on offer, or as after its update
+        // failed, for a test of the row's words and buttons in each language (launcher_test.py); nothing was asked of
+        // GitHub (CV_NO_UPDATE_CHECK with it) and no package is named
+        if (const char* show = std::getenv("CV_UPDATE_SHOW"); show && *show) {
+            std::string v = show;
+            bool failed = v.size() > 7 && v.compare(v.size() - 7, 7, ",failed") == 0;
+            if (failed) v.resize(v.size() - 7);
+            updater_.own = "1.0.0";
+            updater_.latest = {};
+            updater_.latest.tag = v;
+            updater_.latest.date = "2026-01-01";
+            updater_.error = "12007";
+            updater_.state = failed ? Updater::State::Failed : Updater::State::Available;
+        }
     }
 
     // the page shown, by the sidebar's order: --page on the command line, for screenshots of a page
@@ -3691,59 +3750,96 @@ private:
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", T("The release Play starts, of those in your game files"));
     }
 
-    // the port's own update (Updater): where it stands, and the button that brings it in; one row, as the pack's
+    // the port's own update (Updater): where it stands, and the buttons that bring it in. One row, as the pack's, while
+    // its words fit before the buttons at its right; words too long for that (a release on offer, in every language at
+    // the window's first size) have the row to themselves, and the buttons the next one, the note beside them. Before
+    // 1.14.0 the buttons were drawn over such a line (the user's "Atualização disponível: 1.13.0, 2026-11-16 (você tem
+    // 1.14.0)")
     void UpdateCard() {
         using State = Updater::State;
         State st = updater_.state;
         BeginCard("update", S(12));
         float row = S(38), y = ImGui::GetCursorPosY(), mid = y + (row - g_semi->FontSize) * 0.5f;
+        float card_left = ImGui::GetCursorPosX();
         ImGui::SetCursorPosY(mid);
         Text(g_semi, kText, T("Updates"));
         ImGui::SameLine(0, S(26));
-        ImGui::SetCursorPosY(mid);
         const PortRelease& r = updater_.latest;
+        bool buttons = st == State::Available || st == State::Failed;
+        const char* update = T("Update");
+        const char* notes = T("Release notes");
+        float bw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, update).x + S(40) + row * 0.6f;
+        float nw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, notes).x + S(40) + row * 0.6f;
+        float right = ImGui::GetContentRegionMax().x, left = right - bw - nw - S(10);  // the buttons' two edges
+        float bottom = y + row;  // the words' row's end
+        bool beside = true;      // the buttons on the words' row
+        auto status = [&](uint32_t icon, ImU32 col, const std::string& text) {
+            float x = ImGui::GetCursorPosX() + g_semi->CalcTextSizeA(g_semi->FontSize, FLT_MAX, 0, Icon(icon).c_str()).x + S(10);
+            float one = g_semi->CalcTextSizeA(g_semi->FontSize, FLT_MAX, 0, text.c_str()).x;
+            beside = !buttons || x + one <= left - S(18);
+            bottom = RowStatus(icon, col, text, y, row, buttons && beside ? left - S(18) : right);
+        };
+        ImGui::SetCursorPosY(mid);
         switch (st) {
-            case State::Off: Status(kIconCheck, kMuted, T("Update checks are off.")); break;
-            case State::Developer: Status(kIconCheck, kMuted, T("Development build: no update checks.")); break;
-            case State::Checking: Status(kIconGlobe, kMuted, T("Checking for updates...")); break;
-            case State::Unreachable: Status(kIconWarn, kAmber, T("Could not reach GitHub to check for updates.")); break;
-            case State::Busy: Status(kIconWarn, kAmber, T("GitHub is busy right now: wait a few minutes and try again.")); break;
-            case State::UpToDate: Status(kIconCheck, kGreen, F("Up to date ({})", {updater_.own})); break;
+            case State::Off: status(kIconCheck, kMuted, T("Update checks are off.")); break;
+            case State::Developer: status(kIconCheck, kMuted, T("Development build: no update checks.")); break;
+            case State::Checking: status(kIconGlobe, kMuted, T("Checking for updates...")); break;
+            case State::Unreachable: status(kIconWarn, kAmber, T("Could not reach GitHub to check for updates.")); break;
+            case State::Busy: status(kIconWarn, kAmber, T("GitHub is busy right now: wait a few minutes and try again.")); break;
+            case State::UpToDate: status(kIconCheck, kGreen, F("Up to date ({})", {updater_.own})); break;
             case State::Available:
-                Status(kIconWarn, kAmber, F("Update available: {} (you have {})", {r.tag + (r.date.empty() ? "" : ", " + r.date), updater_.own}));
+                status(kIconWarn, kAmber, F("Update available: {} (you have {})", {r.tag + (r.date.empty() ? "" : ", " + r.date), updater_.own}));
                 break;
             case State::Downloading:
                 Progress(updater_.progress, {S(420), S(30)}, F("Downloading {}...", {r.asset}).c_str());
                 break;
             case State::Installing: Progress(updater_.progress, {S(420), S(30)}, T("Unpacking and installing...")); break;
-            case State::Restart: Status(kIconCheck, kGreen, T("Restarting the launcher...")); break;
+            case State::Restart: status(kIconCheck, kGreen, T("Restarting the launcher...")); break;
             case State::Failed:
-                Status(kIconWarn, kRed, updater_.game_open ? T("Close the game before updating.")
+                status(kIconWarn, kRed, updater_.game_open ? T("Close the game before updating.")
                                             : F("The update failed (error {}): check the connection and try again.", {updater_.error}));
                 break;
             default: break;
         }
-        // the buttons at the row's right: the update, and its notes on GitHub
-        if (st == State::Available || st == State::Failed) {
-            const char* update = T("Update");
-            const char* notes = T("Release notes");
-            float bw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, update).x + S(40) + row * 0.6f;
-            float nw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, notes).x + S(40) + row * 0.6f;
+        // the buttons at the card's right: the update, and its notes on GitHub
+        if (buttons) {
+            float by = beside ? y : bottom + S(4);  // their row's top
             ImGui::SameLine();
-            ImGui::SetCursorPos({ImGui::GetContentRegionMax().x - bw - nw - S(10), y});
+            ImGui::SetCursorPos({left, by});
             if (Button(notes, {nw, row}, Kind::Secondary) && !r.page.empty()) Open(Wide(r.page));
+            g_marks.Mark("update.notes");
             ImGui::SameLine(0, S(10));
-            ImGui::SetCursorPosY(y);
+            ImGui::SetCursorPosY(by);
             ImGui::BeginDisabled(import_.running || prepare_.running);
             if (Button(update, {bw, row}, Kind::Primary)) {
                 if (st == State::Failed) updater_.state = State::Available;
                 updater_.Apply();
             }
+            g_marks.Mark("update.apply");
             ImGui::EndDisabled();
-            ImGui::SetCursorPosY(y + row);
-            ControlNote(kMuted, T("Your saves, settings and textures stay as they are. The game builds its code again on its next start."));
+            const char* note = T("Your saves, settings and textures stay as they are. The game builds its code again on its next start.");
+            if (beside) {
+                ImGui::SetCursorPosY(bottom);
+                ControlNote(kMuted, note);
+                g_marks.Mark("update.note");
+            } else {
+                // the note at the buttons' left, ended before them, its lines' middle at theirs
+                float end = left - S(18);
+                float h = g_small->CalcTextSizeA(g_small->FontSize, FLT_MAX, end - card_left, note).y;
+                ImGui::SetCursorPos({card_left, by + (std::max)(0.0f, (row - h) * 0.5f)});
+                ImGui::PushFont(g_small);
+                ImGui::PushStyleColor(ImGuiCol_Text, kMuted);
+                ImGui::PushTextWrapPos(end);
+                ImGui::TextUnformatted(note);
+                g_marks.Mark("update.note");
+                ImGui::PopTextWrapPos();
+                ImGui::PopStyleColor();
+                ImGui::PopFont();
+                float note_end = ImGui::GetItemRectMax().y - ImGui::GetWindowPos().y + ImGui::GetScrollY();
+                ImGui::SetCursorPosY((std::max)(by + row, note_end));
+            }
         } else {
-            ImGui::SetCursorPosY(y + row);
+            ImGui::SetCursorPosY(bottom);
         }
         ImGui::Dummy({0, 0});
         EndCard();
@@ -3833,20 +3929,23 @@ private:
         ImGui::SameLine(0, S(26));
         ImGui::SetCursorPosY(mid);
         std::string pictures = words::Pictures(files_.pictures);
-        if (!files_.pictures) Status(kIconWarn, kMuted, T("None in the textures folder (optional)"));
-        else if (settings_.texture_pack) Status(kIconCheck, kGreen, F("{} found, in use", {pictures}));
-        else Status(kIconCheck, kMuted, F("{} found, off: the game's own textures", {pictures}));
+        const char* open = T("Open textures folder");
+        float bw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, open).x + S(40) + row * 0.6f;
+        // the words end before the switch or the button at the row's right
+        float pack_end = ImGui::GetContentRegionMax().x - (files_.pictures ? S(46) : bw) - S(18), pack_bottom;
+        if (!files_.pictures) pack_bottom = RowStatus(kIconWarn, kMuted, T("None in the textures folder (optional)"), y, row, pack_end);
+        else if (settings_.texture_pack) pack_bottom = RowStatus(kIconCheck, kGreen, F("{} found, in use", {pictures}), y, row, pack_end);
+        else pack_bottom = RowStatus(kIconCheck, kMuted, F("{} found, off: the game's own textures", {pictures}), y, row, pack_end);
         ImGui::SameLine();
         if (files_.pictures) {
             ImGui::SetCursorPos({ImGui::GetContentRegionMax().x - S(46), y + (row - S(22)) * 0.5f});
             Toggle("homepack", settings_.texture_pack);
         } else {
-            const char* open = T("Open textures folder");
-            float bw = g_italic->CalcTextSizeA(g_italic->FontSize, FLT_MAX, 0, open).x + S(40) + row * 0.6f;
             ImGui::SetCursorPos({ImGui::GetContentRegionMax().x - bw, y});
             if (Button(open, {bw, row}, Kind::Secondary)) OpenTextures();
+            g_marks.Mark("pack.open");
         }
-        ImGui::SetCursorPosY(y + row);
+        ImGui::SetCursorPosY(pack_bottom);
         ImGui::Dummy({0, 0});
         EndCard();
 
@@ -4524,8 +4623,8 @@ private:
         BeginCard("mouse");
         BeginSetting(T("Mouse camera"), T("The mouse turns the camera, held in the game's window and hidden while you play, "
                                           "and its buttons press what the keyboard's list below gives them: at first the "
-                                          "left attacks, the right guards and the middle locks on. The settings menu has "
-                                          "the pointer back."));
+                                          "left attacks, the right guards and the middle locks on; the wheel changes the "
+                                          "enemy locked on. The settings menu has the pointer back."));
         ToggleRight("mousecam", settings_.mouse_camera);
         EndSetting();
         BeginSetting(T("Mouse sensitivity"), T("How far the camera turns for a move of the mouse, from 10% to 500% of its "

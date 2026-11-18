@@ -25,6 +25,8 @@ and the game on a virtual X display of their own), with each disc linked into it
     button from the action that had it; Reset to defaults
   - a fan translation in mods (a catalog of no texts, as PTBR-PS2): listed on the Game page, chosen, its dub off
   - the HD texture pack's row: none in the textures folder, then three pictures found and in use, switched off
+  - the update row in every language (CV_UPDATE_SHOW: a release on offer, and its update failed): the words end
+    before the Release notes and Update buttons and wrap under themselves, the note under both
   - the Game files page: each copy's verdict (the USA release's patched xiso, the European one, another release's
     with --other, a file that is no Xbox disc)
   - no graphics that run the game (CV_NO_D3D12=1): the home page says so
@@ -692,6 +694,51 @@ def main():
         f.unlink()
     set_settings(pkg, texture_pack=True)
     results.append(result("the HD texture pack's row: none, three found and in use, switched off", errors))
+
+    # the update row in every language: its words end before its buttons, the note under both
+    errors = []
+
+    def cross(a, b):
+        return min(a[2], b[2]) > max(a[0], b[0]) and min(a[3], b[3]) > max(a[1], b[1])
+
+    for code in ("en", "de", "es", "fr", "it", "pt-BR", "ru"):
+        set_settings(pkg, launcher_language=code)
+        for show, mark, name in (("9.99.0", "9.99.0", "available"), ("9.99.0,failed", "12007", "failed")):
+            la = Launcher(pkg, env, out, more_env={"CV_UPDATE_SHOW": show})
+
+            def row():
+                c = la.read().get("controls", {})
+                words = [v for k, v in c.items() if k.startswith("status:") and mark in k]
+                parts = [c.get("update.notes"), c.get("update.apply"), c.get("update.note")]
+                return (words[0], *parts) if words and all(parts) else None
+
+            got = wait(row, 8)
+            if not got:
+                errors.append(f"{code}, {name}: the update row is not there ({la.statuses()})")
+            else:
+                words, notes, apply, note = got
+                if cross(words, notes) or cross(words, apply):
+                    errors.append(f"{code}, {name}: the words {words} run into the buttons {notes} {apply}")
+                if words[3] - words[1] > 44:
+                    errors.append(f"{code}, {name}: the words {words} are broken into more than two lines")
+                if cross(note, words) or cross(note, notes) or cross(note, apply):
+                    errors.append(f"{code}, {name}: the note {note} is over the row ({words}, {notes}, {apply})")
+                if notes[2] > apply[0] or apply[1] != notes[1]:
+                    errors.append(f"{code}, {name}: the buttons are not side by side ({notes}, {apply})")
+            # the pack's row above it: its words before its button
+            c = la.read().get("controls", {})
+            button = c.get("pack.open")  # no pictures in the textures folder: Open textures folder
+            pack = [v for k, v in c.items() if k.startswith("status:") and button and v[1] < button[3] and v[3] > button[1]]
+            if not pack:
+                errors.append(f"{code}, {name}: the pack's row is not there")
+            elif cross(pack[0], button) or pack[0][2] > button[0]:
+                errors.append(f"{code}: the pack row's words {pack[0]} run into its button {button}")
+            if not la.shot(f"update-{code}" + ("" if name == "available" else "-failed")):
+                errors.append(f"{code}: no picture of the update row")
+            la.close()
+    set_settings(pkg, launcher_language="en")
+    results.append(result("the update row in every language: its words end before its buttons, on offer and failed "
+                          "(update-<language>.png)", errors))
 
     # the Game files page's verdicts
     errors = []
